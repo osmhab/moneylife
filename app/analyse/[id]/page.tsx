@@ -111,8 +111,9 @@ async function getLatestLppForClient(id: string, lppRefs?: string[]): Promise<Lp
   return lpps[0];
 }
 
-export default async function AnalysePage({ params }: { params: { id: string } }) {
-  const id = params.id;
+type Props = { params: Promise<{ id: string }> };
+export default async function AnalysePage({ params }: Props) {
+  const { id } = await params;
   const analysis = await getAnalysis(id);
   if (!analysis) {
     return (
