@@ -12,10 +12,13 @@ import { v4 as uuidv4 } from "uuid";
 import { aiExtractLpp } from "@/lib/aiExtract";
 import type { Line as LayoutLine } from "@/lib/layoutTypes";
 
+// 🔥 AVS/AI — Échelle 44 (2025)
+import { computeAvsAiMonthly } from "@/lib/avsAI";
+
 /* ===========================
    Version / Logs
    =========================== */
-const PATCH_VERSION = "2025-09-15-logs-v4-lpp-extra";
+const PATCH_VERSION = "2025-09-15-logs-v4-lpp-extra+avs-ai-v1";
 
 /* ===========================
    Constantes
@@ -88,7 +91,6 @@ async function ocrExtractTextForFile(
   const destPrefix = `tmp/ocr/${uuidv4()}/`;
   const gcsDestinationUri = `gs://${bucketName}/${destPrefix}`;
 
-  // Lance l'opération longue
   const [operation] = await visionClient.asyncBatchAnnotateFiles({
     requests: [
       {
@@ -104,7 +106,6 @@ async function ocrExtractTextForFile(
     throw e;
   });
 
-  // Lire les sorties
   let outs: any[] = [];
   for (let i = 0; i < 60; i++) {
     const [files] = await bucket.getFiles({ prefix: destPrefix });
@@ -140,7 +141,6 @@ async function ocrExtractTextForFile(
   (f as any).__pageTexts = pageTexts;
   (f as any).__responses = allResponses;
 
-  // Nettoyage
   try {
     await Promise.all(outs.map((o) => o.delete()));
     await bucket.deleteFiles({ prefix: destPrefix });
@@ -294,7 +294,6 @@ async function extractOfferWithOpenAI(rawText: string, openaiKey?: string) {
       body: JSON.stringify(bodyPrimary),
     });
 
-    // Fallback si 400 lié au format (json_schema/verbosity/temperature non supportés)
     if (!res.ok) {
       const firstErr = await res.text().catch(() => "");
       if (
@@ -376,6 +375,20 @@ export async function POST(req: Request) {
     const createdOfferIds: string[] = [];
     const createdLppIds: string[] = [];
     const textsForAggregate: Array<{ filename: string; path: string; docType: "OFFER" | "LPP_CERT" }> = [];
+
+    // ✅ on gardera le dernier AVS/AI calculé ici (si LPP trouvé)
+    let latestAvsBlock:
+      | {
+          year: number;
+          coeff: number;
+          revenuBase: number;
+          oldAge65: number;
+          invalidity: number;
+          widowWidower: number;
+          orphan: number;
+          child: number;
+        }
+      | undefined;
 
     for (const f of files) {
       const filename = filenameOf(f.name);
@@ -484,6 +497,54 @@ export async function POST(req: Request) {
           createdLppIds.push(ref.id);
           textsForAggregate.push({ filename, path: f.name, docType: "LPP_CERT" });
 
+          /* ===========================
+             🔥 AVS/AI — calcul mensuel (Échelle 44, 2025)
+             =========================== */
+          try {
+            // 1) récupérer revenuAnnuel & coeff
+            let revenuAnnuel: number | null = null;
+            let coeff: 1 | 0.75 | 0.5 | 0.25 = 1;
+
+            // clients/{token}
+            const cSnap = await db.collection("clients").doc(clientToken).get();
+            const c = cSnap.exists ? (cSnap.data() as any) : null;
+            if (Number.isFinite(c?.revenuAnnuel)) revenuAnnuel = c.revenuAnnuel;
+            if ([1, 0.75, 0.5, 0.25].includes(c?.coeffCarriere)) coeff = c.coeffCarriere;
+
+            // analyses/{token}.meta (fallback)
+            const aSnap = await db.collection("analyses").doc(clientToken).get();
+            if (aSnap.exists) {
+              const a = aSnap.data() as any;
+              if (!Number.isFinite(revenuAnnuel) && Number.isFinite(a?.meta?.revenuAnnuel)) {
+                revenuAnnuel = a.meta.revenuAnnuel;
+              }
+              if ([1, 0.75, 0.5, 0.25].includes(a?.meta?.coeffCarriere)) {
+                coeff = a.meta.coeffCarriere;
+              }
+            }
+
+            // LPP (fallback)
+            if (!Number.isFinite(revenuAnnuel) && Number.isFinite(ai?.salaireDeterminant)) {
+              revenuAnnuel = ai.salaireDeterminant!;
+            }
+            if (!Number.isFinite(revenuAnnuel)) revenuAnnuel = 60000;
+
+            const avs = await computeAvsAiMonthly(revenuAnnuel!, { year: 2025, coeffCarriere: coeff });
+            latestAvsBlock = {
+              year: 2025,
+              coeff: avs.coeff,
+              revenuBase: avs.baseIncomeMatched,
+              oldAge65: avs.oldAge65,
+              invalidity: avs.invalidity,
+              widowWidower: avs.widowWidower,
+              orphan: avs.orphan,
+              child: avs.child,
+            };
+            console.log("[parse:file] AVS/AI OK:", filename, latestAvsBlock);
+          } catch (e: any) {
+            console.warn("[parse:file] AVS/AI computation failed:", filename, e?.message || e);
+          }
+
         } else {
           // OFFRE 3a
           console.log("[parse:file] OFFER → IA start:", filename);
@@ -524,26 +585,28 @@ export async function POST(req: Request) {
     // Agrégat analyses/{clientToken}
     try {
       const aggRef = db.collection("analyses").doc(clientToken);
-      await aggRef.set(
-        {
-          clientToken,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          prefix,
-          status: "PARSED",
-          files: textsForAggregate.map((t) => ({ filename: t.filename, path: t.path })),
-          offersParsedRefs: createdOfferIds,
-          lppParsedRefs: createdLppIds,
-          meta: {
-            note: "OCR done; structured extraction attempted; ready for UI /analyse",
-            docTypeDetected: textsForAggregate.map((t) => t.docType),
-            version: PATCH_VERSION,
-          },
+      const payload: any = {
+        clientToken,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        prefix,
+        status: "PARSED",
+        files: textsForAggregate.map((t) => ({ filename: t.filename, path: t.path })),
+        offersParsedRefs: createdOfferIds,
+        lppParsedRefs: createdLppIds,
+        meta: {
+          note: "OCR done; structured extraction attempted; ready for UI /analyse",
+          docTypeDetected: textsForAggregate.map((t) => t.docType),
+          version: PATCH_VERSION,
         },
-        { merge: true }
-      );
+      };
+      // 🔥 merge AVS/AI si on l’a calculé
+      if (latestAvsBlock) payload.avsAi = latestAvsBlock;
+
+      await aggRef.set(payload, { merge: true });
       console.log("[parse] aggregate saved: analyses/", clientToken, {
         offers: createdOfferIds.length,
-        lpp: createdLppIds.length
+        lpp: createdLppIds.length,
+        avsAi: !!latestAvsBlock,
       });
     } catch (e) {
       console.error("Aggregate write error:", e);
@@ -558,6 +621,7 @@ export async function POST(req: Request) {
       createdLpp: createdLppIds.length,
       offerIds: createdOfferIds,
       lppIds: createdLppIds,
+      avsAiSaved: !!latestAvsBlock,
     });
   } catch (e: any) {
     console.error(e);
