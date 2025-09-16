@@ -1,103 +1,179 @@
-import Image from "next/image";
+// app/page.tsx
+import Link from "next/link";
 
-export default function Home() {
+export const viewport = { themeColor: "#ffffff" };
+// (et retire themeColor de export const metadata)
+
+export const dynamic = "force-static";
+export const metadata = {
+  title: "MoneyLife.ch — 3e pilier 3a simple et rapide",
+  description:
+    "Scanne tes documents LPP, compare des offres 3a et choisis en quelques clics. Palette #0030A8 / #4fd1c5 / #F59E0B.",
+  robots: { index: true, follow: true },
+};
+
+export default function LandingPage() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main className="min-h-[100dvh] bg-white">
+      {/* HERO */}
+      <section className="relative overflow-hidden">
+        <div className="mx-auto max-w-6xl px-6 pt-16 pb-14 sm:pt-20 sm:pb-20">
+          <div className="flex flex-col gap-8 sm:gap-10 lg:flex-row lg:items-center">
+            <div className="flex-1">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs">
+                <span className="h-2 w-2 rounded-full" style={{ background: "#4fd1c5" }} />
+                Nouveau : parcours 3a en 3 minutes
+              </div>
+              <h1 className="text-3xl font-semibold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
+                Ton <span className="text-[#0030A8]">3e pilier (3a)</span>, sans prise de tête.
+              </h1>
+              <p className="mt-4 max-w-xl text-sm leading-6 text-gray-600 sm:text-base">
+                Scanne tes certificats LPP, laisse l’IA détecter tes couvertures, reçois des
+                <b> offres partenaires</b> et <b>choisis & signe</b> directement avec l’assureur.
+              </p>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <Link
+                  href="/scan"
+                  className="rounded-2xl bg-[#0030A8] px-5 py-3 text-sm font-medium text-white hover:opacity-95"
+                >
+                  Commencer maintenant
+                </Link>
+                <Link
+                  href="/configure/placeholder/personal"
+                  className="rounded-2xl border px-5 py-3 text-sm hover:bg-gray-50"
+                >
+                  Je préfère configurer sans scan
+                </Link>
+                <span className="text-xs text-gray-500">
+                  Palette : <code>#0030A8</code> / <code>#4fd1c5</code> / <code>#F59E0B</code>
+                </span>
+              </div>
+
+              <div className="mt-6 flex items-center gap-4 text-xs text-gray-500">
+                <div className="inline-flex items-center gap-2">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "#4fd1c5" }} />
+                  Lien d’accès sécurisé (sans mot de passe)
+                </div>
+                <div className="inline-flex items-center gap-2">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-gray-200" />
+                  OCR Google & IA OpenAI
+                </div>
+              </div>
+            </div>
+
+            {/* Card résumé process */}
+            <div className="flex-1">
+              <div className="rounded-3xl border p-5 shadow-sm sm:p-6">
+                <h2 className="mb-4 text-base font-medium">Comment ça marche</h2>
+                <ol className="space-y-3 text-sm text-gray-700">
+                  <li className="flex gap-3">
+                    <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#0030A8] text-[11px] font-semibold text-white">
+                      1
+                    </span>
+                    <div>
+                      <b>Scan LPP</b> — dépose tes PDF/images. L’IA extrait tes couvertures
+                      (vieillesse, invalidité, décès) et calcule tes <b>gaps</b>.
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#0030A8] text-[11px] font-semibold text-white">
+                      2
+                    </span>
+                    <div>
+                      <b>Configure ton 3a</b> — presets (Fiscalité, Équilibré, Protection famille),
+                      sliders et sauvegarde auto.
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#0030A8] text-[11px] font-semibold text-white">
+                      3
+                    </span>
+                    <div>
+                      <b>Reçois des offres</b> — compare primes, garanties, participation & frais,
+                      puis <b style={{ color: "#0f766e" }}>Choisir & signer</b>.
+                    </div>
+                  </li>
+                </ol>
+
+                <div className="mt-5 grid grid-cols-3 gap-3 text-center text-xs">
+                  <div className="rounded-2xl border p-3">
+                    <div className="text-[11px] text-gray-500">Cible AI</div>
+                    <div className="text-base font-semibold">90%</div>
+                  </div>
+                  <div className="rounded-2xl border p-3">
+                    <div className="text-[11px] text-gray-500">Cible Décès</div>
+                    <div className="text-base font-semibold">80%</div>
+                  </div>
+                  <div className="rounded-2xl border p-3">
+                    <div className="text-[11px] text-gray-500">Délais</div>
+                    <div className="text-base font-semibold">jusqu’à 48h</div>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-2xl border-l-4 p-3 text-xs"
+                  style={{ borderLeftColor: "#F59E0B", background: "#FFF7ED" }}>
+                  Astuce : tu peux <b>bypasser le scan</b> et configurer directement, puis saisir tes
+                  infos perso en 60 secondes.
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+
+        {/* fond dégradé subtil */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-24 right-[-10%] h-64 w-64 rounded-full blur-3xl opacity-20"
+          style={{ background: "#4fd1c5" }}
+        />
+      </section>
+
+      {/* TRUST / BENEFITS */}
+      <section className="mx-auto max-w-6xl px-6 pb-14 sm:pb-20">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Benefit
+            title="Simple"
+            text="Une question par écran, sauvegarde auto et accès par lien sécurisé."
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
+          <Benefit
+            title="Rapide"
+            text="Envoi aux partenaires en 1 clic. Offres reçues et comparées en un seul endroit."
           />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
+          <Benefit
+            title="Transparence"
+            text="Primes, garanties, participation, frais & rendement affichés clairement."
           />
-          Go to nextjs.org →
-        </a>
+        </div>
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <Link
+            href="/scan"
+            className="rounded-2xl bg-[#0030A8] px-5 py-3 text-sm font-medium text-white hover:opacity-95"
+          >
+            Démarrer le scan
+          </Link>
+          <Link
+            href="/configure/placeholder/personal"
+            className="rounded-2xl border px-5 py-3 text-sm hover:bg-gray-50"
+          >
+            Configurer sans scan
+          </Link>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className="border-t py-8 text-center text-xs text-gray-500">
+        © {new Date().getFullYear()} MoneyLife.ch by CreditX — 3e pilier 3a
       </footer>
+    </main>
+  );
+}
+
+function Benefit({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="rounded-3xl border p-5">
+      <div className="mb-2 text-base font-medium">{title}</div>
+      <div className="text-sm text-gray-600">{text}</div>
     </div>
   );
 }

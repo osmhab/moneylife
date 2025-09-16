@@ -1,9 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 @import "tailwindcss";
 
+
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light; /* évite que le navigateur force du dark */
 }
+html, body {
+  background-color: #fff;
+  color: #0f172a; /* slate-900 */
+}
+
 
 @theme inline {
   --color-background: var(--background);
