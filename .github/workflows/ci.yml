@@ -17,8 +17,14 @@ jobs:
           corepack enable
           corepack prepare pnpm@latest --activate
           pnpm --version
+
+
+      - name: Approve native build scripts (sharp, oxide, etc.)
+        run: pnpm approve-builds -y
+
       - name: Install deps (frozen)
         run: pnpm install --frozen-lockfile
+
       - name: Lint
         run: if pnpm run | grep -q "^ *lint"; then pnpm run lint; else echo "no lint"; fi
       - name: Typecheck
