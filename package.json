@@ -6,6 +6,8 @@
     "dev": "kill -9 $(lsof -ti:3020) 2>/dev/null || true && next dev -p 3020",
     "seed:avs": "tsx scripts/seedAvsAi2025.ts",
     "seed:avs-survivants": "tsx scripts/seedAvsSurvivants2025.ts",
+    "seed:lpp": "tsx scripts/seedLpp2025.ts",
+    "seed:laa": "tsx scripts/seedLaa2025.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -15,6 +17,7 @@
     "dotenv": "^17.2.2",
     "firebase": "^12.2.1",
     "firebase-admin": "^13.5.0",
+    "framer-motion": "^12.23.14",
     "googleapis": "^159.0.0",
     "next": "15.5.3",
     "nodemailer": "^7.0.6",
