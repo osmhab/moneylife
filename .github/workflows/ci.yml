@@ -1,66 +1,27 @@
+# .github/workflows/ci.yml
 name: CI
-
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
+  push: { branches: [ main ] }
+  pull_request: { branches: [ main ] }
 jobs:
-  lint:
-    name: Lint & Typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install deps
-        run: npm ci
-
-      - name: ESLint
-        run: |
-          if npm run | grep -q "^ *lint"; then
-            npm run lint
-          else
-            echo "No lint script found, running eslint directly if present"
-            npx --yes eslint . || true
-          fi
-
-      - name: Typecheck (tsc --noEmit)
-        run: |
-          if npm run | grep -q "^ *typecheck"; then
-            npm run typecheck
-          else
-            npx --yes tsc --noEmit
-          fi
-
   build:
-    name: Build
     runs-on: ubuntu-latest
-    needs: lint
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-
-      - name: Install deps
-        run: npm ci
-
-      - name: Build
+          cache: 'pnpm'
+      - name: Enable Corepack & activate pnpm
         run: |
-          if npm run | grep -q "^ *build"; then
-            npm run build
-          else
-            npx --yes next build
-          fi
+          corepack enable
+          corepack prepare pnpm@latest --activate
+          pnpm --version
+      - name: Install deps (frozen)
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: if pnpm run | grep -q "^ *lint"; then pnpm run lint; else echo "no lint"; fi
+      - name: Typecheck
+        run: if pnpm run | grep -q "^ *typecheck"; then pnpm run typecheck; else pnpm exec tsc --noEmit; fi
+      - name: Build
+        run: if pnpm run | grep -q "^ *build"; then pnpm run build; else pnpm exec next build; fi
