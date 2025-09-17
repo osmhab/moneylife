@@ -14,30 +14,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node (with pnpm cache)
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
-      - name: Install deps
-        run: npm ci
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # utilise pnpm v10 pour la commande "approve-builds"
+          version: 10
+          run_install: false
+
+      - name: Approve native build scripts
+        run: pnpm approve-builds -y
+
+      - name: Install deps (frozen)
+        run: pnpm install --frozen-lockfile
 
       - name: ESLint
         run: |
-          if npm run | grep -q "^ *lint"; then
-            npm run lint
+          if pnpm run | grep -q "^ *lint"; then
+            pnpm run lint
           else
-            echo "No lint script found, running eslint directly if present"
-            npx --yes eslint . || true
+            echo "No lint script"
           fi
 
       - name: Typecheck (tsc --noEmit)
         run: |
-          if npm run | grep -q "^ *typecheck"; then
-            npm run typecheck
+          if pnpm run | grep -q "^ *typecheck"; then
+            pnpm run typecheck
           else
-            npx --yes tsc --noEmit
+            pnpm exec tsc --noEmit
           fi
 
   build:
@@ -48,19 +57,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node (with pnpm cache)
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'
 
-      - name: Install deps
-        run: npm ci
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Approve native build scripts
+        run: pnpm approve-builds -y
+
+      - name: Install deps (frozen)
+        run: pnpm install --frozen-lockfile
 
       - name: Build
         run: |
-          if npm run | grep -q "^ *build"; then
-            npm run build
+          if pnpm run | grep -q "^ *build"; then
+            pnpm run build
           else
-            npx --yes next build
+            pnpm exec next build
           fi
