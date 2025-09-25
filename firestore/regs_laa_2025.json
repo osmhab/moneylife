@@ -1,0 +1,28 @@
+{
+  "year": 2025,
+  "currency": "CHF",
+  "laa": {
+    "insured_earnings_max": 148200,
+    "daily_allowance": {
+      "pct_of_insured_earnings": 80,
+      "start_from_day": 3
+    },
+    "disability": {
+      "pct_at_full_invalidity": 80,
+      "min_degree_for_pension": 10
+    },
+    "survivors": {
+      "spouse_pct": 40,
+      "orphan_pct": 15,
+      "double_orphan_pct": 25,
+      "family_cap_pct": 70,
+      "with_avs_ai_overall_cap_pct": 90
+    },
+    "coverage_rules": {
+      "non_occupational_covered_if_weekly_hours_gte": 8
+    },
+    "coordination": {
+      "invalidity_ai_laa_cap_pct": 90
+    }
+  }
+}

@@ -2,34 +2,47 @@
 // Usage: pnpm tsx scripts/seedAvsAi2025.ts
 // Prérequis: ADC configuré (gcloud auth application-default login)
 
-
 import { initializeApp, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import fs from 'node:fs';
 import path from 'node:path';
 
-
 initializeApp({ credential: applicationDefault() });
 const db = getFirestore();
 
-
 async function main() {
-const filePath = path.resolve(process.cwd(), 'firestore/regs_avs_ai_2025.json');
-const content = fs.readFileSync(filePath, 'utf8');
-const data = JSON.parse(content);
+  const filePath = path.resolve(process.cwd(), 'firestore/regs_avs_ai_2025.json');
+  const content = fs.readFileSync(filePath, 'utf8');
+  const data = JSON.parse(content);
 
+  if (!data || !Array.isArray(data.rows)) {
+    throw new Error('JSON invalide: champ "rows" manquant.');
+  }
 
-if (!data || !Array.isArray(data.rows)) {
-throw new Error('JSON invalide: champ "rows" manquant.');
+  // Validation basique sur les colonnes clés
+  for (const [i, row] of data.rows.entries()) {
+    if (typeof row.income !== 'number' || typeof row.oldAgeInvalidity !== 'number') {
+      throw new Error(`Ligne ${i} invalide: income ou oldAgeInvalidity manquant`);
+    }
+    // Colonnes attendues (nouveau schéma)
+    if (
+      row.oldAgeInvalidityForWidowWidower === undefined ||
+      row.widowWidowerSurvivor === undefined ||
+      row.supplementary30 === undefined ||
+      row.child40 === undefined ||
+      row.orphan60 === undefined
+    ) {
+      console.warn(
+        `⚠️ Ligne ${i} incomplète: certaines colonnes du barème manquent (elles seront quand même importées)`
+      );
+    }
+  }
+
+  await db.collection('regs_avs_ai').doc('2025').set(data, { merge: true });
+  console.log(`✅ Seed OK → regs_avs_ai/2025 (${data.rows.length} lignes)`);
 }
-
-
-await db.collection('regs_avs_ai').doc('2025').set(data, { merge: true });
-console.log('✅ Seed OK → regs_avs_ai/2025 (' + data.rows.length + ' lignes)');
-}
-
 
 main().catch((err) => {
-console.error('❌ Seed error:', err);
-process.exit(1);
+  console.error('❌ Seed error:', err);
+  process.exit(1);
 });
