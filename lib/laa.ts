@@ -49,45 +49,48 @@ export function computeAccidentInvalidityMonthly(inp: AccidentInvalidityInput, r
   };
 }
 
+/** v4.2 : plus de "double orphelin" en entrée.
+ *  On ne distingue plus simple/double côté UI ; on applique le cap famille (70%) puis la coordination 90%.
+ */
 export type AccidentSurvivorsInput = {
   annualSalaryAvs: number;
-  nOrphans: number;              // orphelins "simples" (15%)
-  nDoubleOrphans?: number;       // orphelins de père et mère (25%)
-  avsAiSurvivorsMonthlyTotal?: number; // total AVS/AI survivants connu
-  spouseHasRight: boolean;       // conditions LAA réalisées
+  nOrphans: number;                    // nombre d'enfants à charge
+  avsAiSurvivorsMonthlyTotal?: number; // total AVS/AI survivants connu (mensuel)
+  spouseHasRight: boolean;             // conditions LAA réalisées
 };
 export function computeAccidentSurvivorsMonthly(inp: AccidentSurvivorsInput, regs: RegsLaa) {
   const base = insuredEarnings(inp.annualSalaryAvs, regs);
   const laa = regs.laa.survivors;
-  // Nominaux LAA
+
+  // Nominaux LAA (conjoint + orphelins)
   let spouseAnnual = inp.spouseHasRight ? pct(base, laa.spouse_pct) : 0;
-  const orphanAnnual = inp.nOrphans * pct(base, laa.orphan_pct);
-  const doubleAnnual = (inp.nDoubleOrphans ?? 0) * pct(base, laa.double_orphan_pct);
-  let nominalTotal = spouseAnnual + orphanAnnual + doubleAnnual;
-  const famCap = pct(base, laa.family_cap_pct); // 70%
-  if (nominalTotal > famCap) {
-    const ratio = famCap / nominalTotal;
+  let orphansAnnual = Math.max(0, inp.nOrphans) * pct(base, laa.orphan_pct);
+
+  // Cap famille 70% sur la part LAA
+  const famCapAnnual = pct(base, laa.family_cap_pct);
+  let nominalTotalAnnual = spouseAnnual + orphansAnnual;
+  if (nominalTotalAnnual > famCapAnnual) {
+    const ratio = famCapAnnual / nominalTotalAnnual;
     spouseAnnual *= ratio;
-    // réparti proportionnellement entre catégories
-    const orphanAnnualAdj = orphanAnnual * ratio;
-    const doubleAnnualAdj = doubleAnnual * ratio;
-    nominalTotal = spouseAnnual + orphanAnnualAdj + doubleAnnualAdj;
+    orphansAnnual *= ratio;
+    nominalTotalAnnual = famCapAnnual;
   }
-  // Coordination avec AVS/AI survivants (rente complémentaire LAA)
+
+  // Coordination avec AVS/AI survivants (cap global 90% selon réglages survivants)
   const avsAnnual = (inp.avsAiSurvivorsMonthlyTotal ?? 0) * 12;
-  const overallCap = pct(base, laa.with_avs_ai_overall_cap_pct); // 90%
-  const complementAnnual = Math.max(0, overallCap - avsAnnual);
-  const laaPayAnnual = Math.min(nominalTotal, complementAnnual);
+  const overallCapAnnual = pct(base, laa.with_avs_ai_overall_cap_pct); // souvent 90%
+  const laaPayAnnual = Math.min(nominalTotalAnnual, Math.max(0, overallCapAnnual - avsAnnual));
 
   // Répartition pro rata des montants LAA payés (selon structure nominale)
-  const prorata = nominalTotal > 0 ? laaPayAnnual / nominalTotal : 0;
+  const prorata = nominalTotalAnnual > 0 ? laaPayAnnual / nominalTotalAnnual : 0;
+
   return {
     insuredAnnual: base,
     spouseMonthly: round((spouseAnnual * prorata) / 12),
-    orphansMonthlyTotal: round(((orphanAnnual + doubleAnnual) * prorata) / 12),
+    orphansMonthlyTotal: round((orphansAnnual * prorata) / 12),
     laaMonthlyTotal: round(laaPayAnnual / 12),
     avsMonthlyTotal: round(avsAnnual / 12),
-    overallCapMonthly: round(overallCap / 12)
+    overallCapMonthly: round(overallCapAnnual / 12)
   };
 }
 

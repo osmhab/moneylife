@@ -1,29 +1,32 @@
 // app/analyse/[id]/page.tsx
-import React from "react";
+import React, { Suspense } from "react";
 import Link from "next/link";
 import { db } from "@/lib/firebaseAdmin";
 import type * as admin from "firebase-admin";
-
+import AutosaveBridge from './_client/AutosaveBridge';
 
 import PrefillConfiguratorButton from "../_components/PrefillConfiguratorButton";
 import { computeAvsAiMonthly } from "@/lib/avsAI";
 import AvsAiCard from "../_components/AvsAiCard";
-import AnalysisGapsPanel from "../_components/AnalysisGapsPanel";
+import GapsAndCardsClient from "../_components/GapsAndCardsClient";
 
-
-// LPP helpers & UI
+// LPP helpers
 import { computeLppAnalysis, type SurvivorContext } from "@/lib/lpp";
-import LppCard from "../_components/LppCard";
 
-// LAA (accident) helpers & UI
+// LAA (accident) helpers
 import {
   loadRegsLaa,
   computeAccidentDailyAllowance,
   computeAccidentInvalidityMonthly,
   computeAccidentSurvivorsMonthly,
 } from "@/lib/laa";
-import LaaCard from "../_components/LaaCard";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0; // pas de SSG/ISR
+
+
+
+const SHOW_INFO_CARDS = false;
 
 /* =========================
  * Types Firestore (LPP parsed & Analyse)
@@ -210,13 +213,14 @@ function computeAge(dateStr?: string | null): number | undefined {
  * ========================= */
 type Props = { params: Promise<{ id: string }> };
 
+
 export default async function AnalysePage({ params }: Props) {
   const { id } = await params;
 
   const analysis = await getAnalysis(id);
   if (!analysis) {
     return (
-      <main className="mx-auto max-w-4xl p-6">
+      <main className="w-full space-y-8 px-4 md:px-6">
         <h1 className="mb-4 text-2xl font-semibold">Analyse introuvable</h1>
         <p className="text-sm text-gray-600">
           Aucun document d’analyse trouvé pour l’identifiant{" "}
@@ -255,7 +259,7 @@ export default async function AnalysePage({ params }: Props) {
     analysis?.meta?.tauxOccupation ??
     1;
 
-  // Rente LPP de référence mensuelle (pour survivants) — priorité à invalidité/AVS pro si dispo
+  // Rente LPP de référence mensuelle (pour survivants)
   const referenceMonthlyPension: number =
     toMonthly(lpp?.renteInvaliditeAnnuelle) ??
     toMonthly(lpp?.renteRetraite65Annuelle) ??
@@ -323,7 +327,6 @@ export default async function AnalysePage({ params }: Props) {
       annualSalaryAvs: revenuAnnuel,
       spouseHasRight: spouseHasRightAccident,
       nOrphans: nbEnfants,
-      nDoubleOrphans: analysis?.meta?.nDoubleOrphans ?? 0,
       avsAiSurvivorsMonthlyTotal: avsSurvivorsMonthlyTotal,
     },
     laaRegs
@@ -332,9 +335,11 @@ export default async function AnalysePage({ params }: Props) {
   // Valeurs certificat converties en mensuel si disponibles
   const certWidowMonthly = toMonthly(lpp?.renteConjointAnnuelle);
   const certOrphanMonthly = toMonthly(lpp?.renteOrphelinAnnuelle);
+  const clientDocPath = analysis?.clientToken ? `clients/${analysis.clientToken}` : "";
+
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-6">
+    <main className="w-full space-y-8 px-2 sm:px-4 lg:px-6">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
@@ -352,81 +357,119 @@ export default async function AnalysePage({ params }: Props) {
         </div>
       </header>
 
-      {/* Statut */}
-      <section className="rounded-2xl border bg-white p-3 shadow-sm md:p-4">
-        <p className="text-sm text-gray-600">
-          Statut:{" "}
-          <span className="font-medium">
-            {analysis.status || "PARSED"}
-          </span>{" "}
-          {!!analysis.meta?.version && (
-            <span className="ml-2 text-gray-500">• {analysis.meta.version}</span>
-          )}
-        </p>
-      </section>
+
 
       {/* Bloc AVS/AI */}
-      <section className="rounded-2xl border bg-white p-4 shadow-sm md:p-6">
-        <h2 className="mb-4 text-xl font-semibold">1er pilier (AVS/AI)</h2>
-        <AvsAiCard
-          year={2025}
-          oldAge65={avs.oldAge65}
-          invalidity={avs.invalidity}
-          widowWidower={avs.widowWidower}
-          orphan={avs.orphan}
-          child={avs.child}
-          matchedIncome={avs.baseIncomeMatched}
-          coeff={avs.coeff}
-          forWidowWidower120={avs.forWidowWidower120}
-          supplementary30={avs.supplementary30}
-        />
-      </section>
+      {SHOW_INFO_CARDS && (
+  <section className="rounded-2xl border bg-white p-4 shadow-sm md:p-6">
+    <h2 className="mb-4 text-xl font-semibold">1er pilier (AVS/AI)</h2>
+    <AvsAiCard
+      year={2025}
+      oldAge65={avs.oldAge65}
+      invalidity={avs.invalidity}
+      widowWidower={avs.widowWidower}
+      orphan={avs.orphan}
+      child={avs.child}
+      matchedIncome={avs.baseIncomeMatched}
+      coeff={avs.coeff}
+      forWidowWidower120={avs.forWidowWidower120}
+      supplementary30={avs.supplementary30}
+    />
+  </section>
+)}
 
-      {/* Bloc LPP (calculé) */}
-      <section className="rounded-2xl border bg-white p-4 shadow-sm md:p-6">
-        <h2 className="mb-4 text-xl font-semibold">2e pilier (LPP/BVG)</h2>
-        <LppCard
-          year={lppRes.year}
-          currency={lppRes.currency}
-          coordinatedSalary={lppRes.coordinatedSalary}
-          savingsCredit={lppRes.savingsCredit}
-          survivor={lppRes.survivor}
-          meta={lppRes.meta}
-          certWidowWidowerMonthly={certWidowMonthly}
-          certOrphanMonthly={certOrphanMonthly}
-          certDeathCapital={typeof lpp?.capitalDeces === "number" ? lpp!.capitalDeces! : undefined}
-        />
-      </section>
 
-      {/* Bloc Accident (LAA) */}
-      <section className="rounded-2xl border bg-white p-4 shadow-sm md:p-6">
-        <h2 className="mb-4 text-xl font-semibold">Accident (LAA/UVG)</h2>
-        <LaaCard
-          year={2025}
-          insuredAnnual={invAcc.insuredAnnual}
-          daily={{ amountPerDay: ij.dailyAllowance, startsFromDay: ij.startsFromDay }}
-          invalidity={{
+      {/* Bloc interactif (Lacunes + LPP + LAA synchronisés) */}
+      <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Chargement…</div>}>
+      <GapsAndCardsClient
+        key={id}
+        clientDocPath={clientDocPath} 
+        annualIncome={revenuAnnuel}
+        avs={{
+          invalidityMonthly: avs.invalidity,
+          widowMonthly: avs.widowWidower,
+          childMonthly: avs.child,
+          oldAgeMonthly: avs.oldAge65,
+        }}
+        lpp={{
+          invalidityMonthly:
+            typeof lpp?.renteInvaliditeAnnuelle === "number"
+              ? Math.round(lpp.renteInvaliditeAnnuelle / 12)
+              : referenceMonthlyPension,
+          invalidityChildMonthly:
+            typeof lpp?.renteEnfantInvaliditeAnnuelle === "number"
+              ? Math.round(lpp.renteEnfantInvaliditeAnnuelle / 12)
+              : undefined,
+          widowMonthly: certWidowMonthly ?? lppRes.survivor.amounts.widowWidowerMonthly,
+          orphanMonthly: certOrphanMonthly ?? lppRes.survivor.amounts.orphanMonthly,
+          retirementAnnualFromCert: lpp?.renteRetraite65Annuelle ?? undefined,
+          capitalAt65FromCert: lpp?.capitalRetraite65 ?? undefined,
+          minConversionRatePct: lppRes.meta.convMinPct,
+        }}
+        
+        survivorDefault={{
+          maritalStatus: survivorCtx.maritalStatus,
+          hasChild: !!survivorCtx.hasChild,
+          ageAtWidowhood: survivorCtx.ageAtWidowhood,
+        }}
+        laaParams={
+          laaRegs?.laa
+            ? {
+                insured_earnings_max: laaRegs.laa.insured_earnings_max,
+                disabilityPctFull: laaRegs.laa.disability.pct_at_full_invalidity,
+                overallCapPct: laaRegs.laa.coordination.invalidity_ai_laa_cap_pct,
+                spousePct: laaRegs.laa.survivors.spouse_pct,
+                orphanPct: laaRegs.laa.survivors.orphan_pct,
+                familyCapPct: laaRegs.laa.survivors.family_cap_pct,
+              }
+            : undefined
+        }
+        initialTargets={{ invalidityPctTarget: 90, deathPctTarget: 80, retirementPctTarget: 80 }}
+        initialCtx={{
+          eventInvalidity: "maladie",
+          eventDeath: "maladie",
+          invalidityDegreePct: 100,
+          childrenCount: analysis?.meta?.nbEnfants ?? 0,
+          weeklyHours: analysis?.meta?.weeklyHours ?? undefined,
+        }}
+        lppCard={{
+          year: lppRes.year,
+          currency: lppRes.currency,
+          coordinatedSalary: lppRes.coordinatedSalary,
+          savingsCredit: lppRes.savingsCredit,
+          survivor: lppRes.survivor,
+          meta: lppRes.meta,
+          certWidowWidowerMonthly: certWidowMonthly,
+          certOrphanMonthly: certOrphanMonthly,
+          certDeathCapital: typeof lpp?.capitalDeces === "number" ? lpp.capitalDeces : undefined,
+        }}
+        laaCard={{
+          year: 2025,
+          insuredAnnual: invAcc.insuredAnnual,
+          daily: { amountPerDay: ij.dailyAllowance, startsFromDay: ij.startsFromDay },
+          invalidity: {
             degreePct: degreeInvalidityPct,
             nominalMonthly: invAcc.nominalMonthly,
             coordinatedMonthly: invAcc.coordinatedMonthly,
             aiMonthly: invAcc.aiMonthly,
             totalMonthly: invAcc.totalMonthly,
             capMonthly: invAcc.capMonthly,
-          }}
-          survivors={{
+          },
+          survivors: {
             laaMonthlyTotal: survAcc.laaMonthlyTotal,
             avsMonthlyTotal: survAcc.avsMonthlyTotal,
             overallCapMonthly: survAcc.overallCapMonthly,
             spouseMonthly: survAcc.spouseMonthly,
             orphansMonthlyTotal: survAcc.orphansMonthlyTotal,
-          }}
-          meta={{
+          },
+          meta: {
             weeklyHours: analysis.meta?.weeklyHours,
             nonOccupationalCovered: (analysis.meta?.weeklyHours ?? 0) >= 8,
-            accidentKind: analysis.meta?.accidentKind, // 'occupational' | 'non_occupational'
-          }}
-        />
-      </section>
+            accidentKind: analysis.meta?.accidentKind,
+          },
+        }}
+      />
+      </Suspense>
 
       {/* Bloc Certificat LPP — détails extraits */}
       <section className="rounded-2xl border bg-white p-4 shadow-sm md:p-6">
@@ -554,51 +597,6 @@ export default async function AnalysePage({ params }: Props) {
         )}
       </section>
 
-      {/* Lacunes — aperçu interactif */}
-<section className="rounded-2xl border bg-white p-4 shadow-sm md:p-6">
-  <h2 className="mb-4 text-xl font-semibold">Lacunes (aperçu interactif)</h2>
-  <AnalysisGapsPanel
-    annualIncome={revenuAnnuel}
-    avs={{
-      invalidityMonthly: avs.invalidity,
-      widowMonthly: avs.widowWidower,
-      childMonthly: avs.child,
-      oldAgeMonthly: avs.oldAge65,
-    }}
-    lpp={{
-      invalidityMonthly: (typeof lpp?.renteInvaliditeAnnuelle === 'number') ? Math.round(lpp!.renteInvaliditeAnnuelle! / 12) : referenceMonthlyPension,
-      widowMonthly: certWidowMonthly ?? lppRes.survivor.amounts.widowWidowerMonthly,
-      orphanMonthly: certOrphanMonthly ?? lppRes.survivor.amounts.orphanMonthly,
-      retirementAnnualFromCert: lpp?.renteRetraite65Annuelle ?? undefined,
-      capitalAt65FromCert: lpp?.capitalRetraite65 ?? undefined,
-      minConversionRatePct: lppRes.meta.convMinPct,
-    }}
-    survivorDefault={{
-      maritalStatus: survivorCtx.maritalStatus,
-      hasChild: !!survivorCtx.hasChild,
-      ageAtWidowhood: survivorCtx.ageAtWidowhood,
-    }}
-    laaParams={laaRegs?.laa ? {
-      insured_earnings_max: laaRegs.laa.insured_earnings_max,
-      disabilityPctFull: laaRegs.laa.disability.pct_at_full_invalidity,
-      overallCapPct: laaRegs.laa.coordination.invalidity_ai_laa_cap_pct,
-      spousePct: laaRegs.laa.survivors.spouse_pct,
-      orphanPct: laaRegs.laa.survivors.orphan_pct,
-      doubleOrphanPct: laaRegs.laa.survivors.double_orphan_pct,
-      familyCapPct: laaRegs.laa.survivors.family_cap_pct,
-    } : undefined}
-    initialTargets={{ invalidityPctTarget: 90, deathPctTarget: 80, retirementPctTarget: 80 }}
-    initialCtx={{
-      eventInvalidity: 'maladie',
-      eventDeath: 'maladie',
-      invalidityDegreePct: 100,
-      childrenCount: analysis?.meta?.nbEnfants ?? 0,
-      weeklyHours: analysis?.meta?.weeklyHours ?? undefined,
-    }}
-  />
-</section>
-
-
       {/* Fichiers traités */}
       <section className="rounded-2xl border bg-white p-4 shadow-sm md:p-6">
         <h3 className="mb-2 font-medium">Fichiers analysés</h3>
@@ -629,3 +627,4 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
     </div>
   );
 }
+

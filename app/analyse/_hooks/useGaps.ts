@@ -14,23 +14,26 @@ import {
 export type EventKind = 'maladie' | 'accident';
 
 export type AvsInputs = {
-  invalidityMonthly: number;   // rente AI mensuelle (AVS/AI)
-  widowMonthly: number;        // veuf/veuve 80% (mensuel)
-  childMonthly: number;        // enfant 40% (mensuel, par enfant)
-  oldAgeMonthly?: number;      // AVS vieillesse (mensuel)
+  invalidityMonthly: number;          // rente AI (adulte)
+  invalidityChildMonthly?: number;    // rente enfant d’invalide (par enfant) — optionnel
+  widowMonthly: number;               // veuf/veuve 80% (mensuel)
+  childMonthly: number;               // enfant 40% (mensuel, par enfant)
+  oldAgeMonthly?: number;             // AVS vieillesse (mensuel)
 };
 
 export type LppInputs = {
   // Invalidité / Survivants (mensuels) — prioriser les valeurs du certificat
-  invalidityMonthly?: number;  // si connu (certificat) sinon minima calculés côté serveur
-  widowMonthly?: number;       // si connu (certificat/minima)
-  orphanMonthly?: number;      // si connu (certificat/minima, par enfant)
+  invalidityMonthly?: number;         // inval. LPP (adulte)
+  invalidityChildMonthly?: number;    // enfant d’invalide LPP (par enfant) — nouveau
+  widowMonthly?: number;              // survivants LPP (conjoint)
+  orphanMonthly?: number;             // survivants LPP (par enfant)
 
   // Retraite (certificat)
-  retirementAnnualFromCert?: number; // rente LPP à 65 ans (an)
-  capitalAt65FromCert?: number;      // capital à 65 ans
-  minConversionRatePct?: number;     // ex. 6.8 (part obligatoire)
+  retirementAnnualFromCert?: number;
+  capitalAt65FromCert?: number;
+  minConversionRatePct?: number;
 };
+
 
 export type LaaParams = {
   insured_earnings_max: number;       // 148200
@@ -38,7 +41,6 @@ export type LaaParams = {
   overallCapPct: number;              // 90 (cap AI+LAA)
   spousePct: number;                  // 40
   orphanPct: number;                  // 15
-  doubleOrphanPct: number;            // 25
   familyCapPct: number;               // 70
 };
 
@@ -53,6 +55,8 @@ export type SurvivorContextLite = {
     | 'concubinage';
   hasChild: boolean;
   ageAtWidowhood?: number;
+  marriedSince5y?: boolean;
+  // NB: le sexe est géré ailleurs (Paramètres rapides / configs.sexe), pas besoin ici.
 };
 
 export type GapsCtx = {
@@ -60,7 +64,7 @@ export type GapsCtx = {
   eventDeath: EventKind;            // maladie | accident
   invalidityDegreePct: number;      // 40..100
   childrenCount: number;            // nb d’enfants concernés
-  doubleOrphans?: number;           // nb d’orphelins de père et mère (accident)
+  // doubleOrphans: SUPPRIMÉ (v4.2)
   weeklyHours?: number;             // AANP si >= 8h/sem (info UI)
   survivor: SurvivorContextLite;    // statut familial
 };
@@ -107,7 +111,6 @@ const DEFAULT_LAA: LaaParams = {
   overallCapPct: 90,
   spousePct: 40,
   orphanPct: 15,
-  doubleOrphanPct: 25,
   familyCapPct: 70,
 };
 
@@ -139,12 +142,13 @@ function laaInvalidityMonthly(
   };
 }
 
-/** Survivants accident (LAA) — complément jusqu’à 90% après AVS/AI, avec cap famille 70% sur la part LAA */
+/** Survivants accident (LAA) — complément jusqu’à 90% après AVS/AI, cap famille 70% sur la part LAA
+ *  v4.2 : paramètre "double orphelins" supprimé. On ne distingue plus simple/double orphelin côté UI.
+ */
 function laaSurvivorsMonthly(
   annualIncome: number,
   spouseHasRight: boolean,
   nOrphans: number,
-  nDoubleOrphans: number,
   avsAiSurvivorsMonthlyTotal: number,
   laa: LaaParams
 ) {
@@ -152,17 +156,14 @@ function laaSurvivorsMonthly(
 
   // Nominaux LAA
   let spouseAnnual = spouseHasRight ? pct(insured, laa.spousePct) : 0;
-  const orphansSimple = Math.max(0, nOrphans - nDoubleOrphans);
-  const orphanAnnual = orphansSimple * pct(insured, laa.orphanPct);
-  const doubleAnnual = nDoubleOrphans * pct(insured, laa.doubleOrphanPct);
+  const orphanAnnual = Math.max(0, nOrphans) * pct(insured, laa.orphanPct);
 
-  let nominalTotal = spouseAnnual + orphanAnnual + doubleAnnual;
+  let nominalTotal = spouseAnnual + orphanAnnual;
   const famCap = pct(insured, laa.familyCapPct); // 70%
-  let ratio = 1;
   if (nominalTotal > famCap) {
-    ratio = famCap / nominalTotal;
+    const ratio = famCap / nominalTotal;
     spouseAnnual *= ratio;
-    nominalTotal = famCap; // (orphan+double) ajustés via ratio aussi
+    nominalTotal = famCap; // orphelins ajustés via le ratio implicite
   }
 
   // Coordination avec AVS/AI survivants
@@ -177,18 +178,28 @@ function laaSurvivorsMonthly(
     laaMonthlyTotal: round(laaPayAnnual / 12),
     avsMonthlyTotal: round(avsAnnual / 12),
     overallCapMonthly: round(overallCap / 12),
-    // NB: si tu veux détailler orphelins: ((orphanAnnual+doubleAnnual)*prorata)/12
   };
 }
 
 /** Spouse right basic heuristic (LPP/LAA minimum rules) */
+// ... plus bas dans le fichier
 function spouseHasRightBasic(survivor: SurvivorContextLite) {
   const marriedOrReg =
     survivor.maritalStatus === 'marie' ||
     survivor.maritalStatus === 'mariee' ||
     survivor.maritalStatus === 'partenariat_enregistre';
-  return marriedOrReg && (survivor.hasChild || (survivor.ageAtWidowhood ?? 45) >= 45);
+
+  // ✅ AVS survivants :
+  // - Si enfant(s) à charge → droit ok
+  // - Sinon, exiger âge au veuvage ≥ 45 ET mariage ≥ 5 ans
+  if (!marriedOrReg) return false;
+  if (survivor.hasChild) return true;
+
+  const ageOk = (survivor.ageAtWidowhood ?? 45) >= 45;
+  const yearsOk = survivor.marriedSince5y === true;
+  return ageOk && yearsOk;
 }
+
 
 // ===== Hook principal =====
 
@@ -220,29 +231,50 @@ export function useGaps(params: {
       retirement: tgt.retirement,
     };
 
+    const children = Math.max(0, ctx.childrenCount);
+    const aiChildMonthly = Math.max(
+      0,
+      // défaut raisonnable AVS : 40% de la rente AI adulte si non fourni
+      avs.invalidityChildMonthly ?? Math.round((avs.invalidityMonthly ?? 0) * 0.4)
+    );
+    const lppChildMonthly = Math.max(0, lpp.invalidityChildMonthly ?? 0);
+
+
     // 2) Invalidité — MALADIE
     const invMaladieCovered =
-      Math.max(0, avs.invalidityMonthly) +
-      Math.max(0, lpp.invalidityMonthly ?? 0) +
-      Math.max(0, thirdPillar?.invalidityMonthly ?? 0);
+
+    Math.max(0, avs.invalidityMonthly) +
+    children * aiChildMonthly +
+    Math.max(0, lpp.invalidityMonthly ?? 0) +
+    children * lppChildMonthly +
+    Math.max(0, thirdPillar?.invalidityMonthly ?? 0);
+  
 
     const invMaladie: GapStack = {
       target: targetsMonthly.invalidity,
       segments: [
         { label: 'AVS/AI', value: Math.max(0, avs.invalidityMonthly), source: 'AVS' },
+        ...(children > 0 ? [{ label: 'AVS enfant invalide', value: children * aiChildMonthly, source: 'AVS' } as GapSegment] : []),
         { label: 'LPP', value: Math.max(0, lpp.invalidityMonthly ?? 0), source: 'LPP' },
+        ...(children > 0 && lppChildMonthly > 0
+          ? [{ label: 'LPP enfant invalide', value: children * lppChildMonthly, source: 'LPP' } as GapSegment]
+          : []),
         ...(thirdPillar?.invalidityMonthly
           ? [{ label: '3e pilier', value: thirdPillar.invalidityMonthly, source: 'P3' } as GapSegment]
           : []),
       ],
+      
       covered: Math.min(targetsMonthly.invalidity, invMaladieCovered),
       gap: Math.max(0, targetsMonthly.invalidity - invMaladieCovered),
     };
 
     // 3) Invalidité — ACCIDENT (coordination AI + LAA ≤ 90%)
+    const aiMonthlyTotalForAccident = Math.max(0, avs.invalidityMonthly) + children * aiChildMonthly;
+
+
     const laaInv = laaInvalidityMonthly(
       annualIncome,
-      avs.invalidityMonthly,
+      aiMonthlyTotalForAccident,
       Math.max(40, Math.min(100, ctx.invalidityDegreePct ?? 100)),
       laaParams
     );
@@ -250,7 +282,7 @@ export function useGaps(params: {
     const invAccident: GapStack = {
       target: laaInv.capMonthly, // cible = cap 90% du gain assuré (cohérent accident)
       segments: [
-        { label: 'AI (AVS/AI)', value: laaInv.aiMonthly, source: 'AVS' },
+        { label: 'AI (AVS/AI + enfants)', value: laaInv.aiMonthly, source: 'AVS' },
         { label: 'LAA (coord.)', value: laaInv.laaMonthly, source: 'LAA' },
         ...(thirdPillar?.invalidityMonthly
           ? [{ label: '3e pilier', value: thirdPillar.invalidityMonthly, source: 'P3' } as GapSegment]
@@ -288,12 +320,11 @@ export function useGaps(params: {
       gap: Math.max(0, targetsMonthly.death - decesMaladieCovered),
     };
 
-    // 5) Décès — ACCIDENT (ajoute le complément LAA coordonné)
+    // 5) Décès — ACCIDENT (ajoute le complément LAA coordonné) — v4.2 sans double orphelins
     const laaSurv = laaSurvivorsMonthly(
       annualIncome,
       spouseHasRightBasic(ctx.survivor),
       Math.max(0, ctx.childrenCount),
-      Math.max(0, ctx.doubleOrphans ?? 0),
       avsSurvivorsMonthlyTotal,
       laaParams
     );
