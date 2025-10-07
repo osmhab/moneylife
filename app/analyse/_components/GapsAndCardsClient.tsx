@@ -12,11 +12,29 @@ import type {
   SurvivorContextLite,
   EventKind,
 } from '../_hooks/useGaps';
+
+import { usePrestationsSync } from '@/app/analyse/_hooks/usePrestationsSync';
+
+// ✅ Extension locale — source de vérité pour l’UI
+type SurvivorExt = SurvivorContextLite & {
+  partnerDesignated?: boolean;
+  cohabitationYears?: number;
+};
+
+// ✅ GapsCtx étendu côté UI (state local)
+type GapsCtxExt = Omit<GapsCtx, 'survivor'> & {
+  survivor: SurvivorExt;
+};
+
+
+
 import { useGaps } from '../_hooks/useGaps';
 import { useQuickParamsSync } from "@/app/analyse/_hooks/useQuickParamsSync";
 import { useQuickParamsLoad } from "@/app/analyse/_hooks/useQuickParamsLoad";
+import { useParams } from "next/navigation";
 
-import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion';
+
+import { motion, useMotionValue, animate } from 'framer-motion';
 import { Loader2 } from "lucide-react";
 
 /* ===== shadcn/ui imports ===== */
@@ -38,7 +56,7 @@ import {
 } from '@/components/ui/drawer';
 import DonutWithText from './charts/DonutWithText';
 import { Segmented as UISegmented } from "@/components/ui/segmented";
-import { Activity, HeartPulse, Calendar, CalendarRange, Settings2, PlaneTakeoff, CircleDashed, HandCoins } from "lucide-react";
+import { Activity, HeartPulse, Settings2, PlaneTakeoff, CircleDashed, HandCoins } from "lucide-react";
 
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -57,6 +75,18 @@ import {
   AccordionContent,
 } from '@/components/ui/accordion';
 
+
+import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
+
+
+
+
+
+
+
+
 /* ========= Helpers format ========= */
 const fmtCHF = (n: number | undefined | null) => {
   const v = Math.round(Math.max(0, Number(n ?? 0)));
@@ -68,6 +98,45 @@ const fmtPct = (num: number | undefined | null) => {
 };
 const clamp = (n: number, min: number, max: number) =>
   Math.max(min, Math.min(max, Math.round(n)));
+
+// --- enfants: dates ISO + sanitizer (UI) ---
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const FR_DATE_RE = /^\d{2}\/\d{2}\/\d{4}$/;
+
+function isValidDate(y: number, m: number, d: number) {
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+
+function isoToFR(iso?: string): string {
+  if (!iso || !ISO_DATE_RE.test(iso)) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function frToISO(fr?: string): string {
+  if (!fr) return '';
+  const digits = fr.replace(/\D/g, '');
+  if (digits.length !== 8) return '';
+  const dd = Number(digits.slice(0, 2));
+  const mm = Number(digits.slice(2, 4));
+  const yyyy = Number(digits.slice(4, 8));
+  if (!isValidDate(yyyy, mm, dd)) return '';
+  const now = new Date();
+  const dt = new Date(yyyy, mm - 1, dd);
+  if (yyyy < 1900 || dt > now) return '';
+  return `${String(yyyy).padStart(4, '0')}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+}
+
+const sanitizeBirthdatesUI = (v: unknown): string[] | undefined => {
+  if (!Array.isArray(v)) return undefined;
+  return v
+    .map((s) => (typeof s === 'string' ? s : ''))
+    .filter((s) => ISO_DATE_RE.test(s))
+    .slice(0, 20);
+};
+const todayISO = new Date().toISOString().slice(0, 10);
+
 
 function cn(...cls: Array<string | undefined | null | false>) {
   return cls.filter(Boolean).join(' ');
@@ -363,6 +432,8 @@ function isMarriedOrReg(s: SurvivorContextLite) {
   );
 }
 
+
+
 function QuickParamsCard({
   sex,
   onSexChange,
@@ -370,6 +441,8 @@ function QuickParamsCard({
   onSurvivorChange,
   childrenCount,
   onChildrenChange,
+  childrenBirthdates,
+  onChildBirthdateChange,
   targetsPct,
   onTargetsChange,
   unit,
@@ -378,6 +451,17 @@ function QuickParamsCard({
   onWeeklyHoursChange,
   scenario,
   onScenarioChange,
+
+  /* ===== Nouveaux champs passés en props ===== */
+  startWorkYearCH,
+  onStartWorkYearChange,
+  missingYearsMode,
+  onMissingYearsModeChange,
+  missingYears,
+  onMissingYearsChange,
+  caregiving,
+  onCaregivingChange,
+
   className,
   compact,
   isSaving,
@@ -385,10 +469,12 @@ function QuickParamsCard({
 }: {
   sex?: 'F' | 'M';
   onSexChange: (s: 'F' | 'M' | undefined) => void;
-  survivor: SurvivorContextLite;
-  onSurvivorChange: (s: SurvivorContextLite) => void;
+  survivor: SurvivorExt;
+  onSurvivorChange: (s: SurvivorExt) => void;
   childrenCount: number;
   onChildrenChange: (n: number) => void;
+  childrenBirthdates?: string[];
+  onChildBirthdateChange: (index: number, iso: string) => void;
   targetsPct: TargetsDisplay;
   onTargetsChange: (t: TargetsDisplay) => void;
   unit: AmountUnit;
@@ -397,14 +483,93 @@ function QuickParamsCard({
   onWeeklyHoursChange: (wh?: number) => void;
   scenario: EventKind;
   onScenarioChange: (val: EventKind) => void;
+
+  /* ===== Typage des nouveaux champs ===== */
+  startWorkYearCH?: number;
+  onStartWorkYearChange: (n?: number) => void;
+  missingYearsMode: 'none' | 'some';
+  onMissingYearsModeChange: (m: 'none' | 'some') => void;
+  missingYears: number[];
+  onMissingYearsChange: (arr: number[]) => void;
+  caregiving: { hasCare: boolean; years: number[] };
+  onCaregivingChange: (c: { hasCare: boolean; years: number[] }) => void;
+
   className?: string;
   compact?: boolean;
   isSaving?: boolean;
   lastSavedAt?: Date | null;
 }) {
-  const marriedOrReg = isMarriedOrReg(survivor);
 
-  function ParamsFields() {
+
+const s = survivor;
+
+  
+const marriedOrReg = isMarriedOrReg(survivor);
+
+
+
+// (optionnel) si tu gardais birthYearsDraft, tu peux supprimer l'ancien state/effets
+
+// === Drawer contrôlé + commit des dates UNIQUEMENT à la fermeture ===
+const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+
+// Refs non-contrôlées pour les inputs "date JJ/MM/AAAA"
+const dateRefs = React.useRef<Array<HTMLInputElement | null>>([]);
+const setDateRef = (i: number) => (el: HTMLInputElement | null) => {
+  dateRefs.current[i] = el;
+};
+
+
+
+const commitChildDates = React.useCallback(() => {
+  const nn = Math.max(0, childrenCount ?? 0);
+  for (let i = 0; i < nn; i++) {
+    const fr = (dateRefs.current[i]?.value ?? '').trim();
+    const iso = frToISO(fr); // '' si invalide/incomplet
+    onChildBirthdateChange(i, iso);
+  }
+}, [childrenCount, onChildBirthdateChange]);
+
+
+
+
+
+
+
+
+
+
+
+    // Zone de scroll du Drawer + util pour amener un input en vue
+  const drawerScrollRef = React.useRef<HTMLDivElement | null>(null);
+
+  const ensureVisible = React.useCallback((el: HTMLElement | null) => {
+    if (!el || !drawerScrollRef.current) return;
+    const container = drawerScrollRef.current;
+
+    const crect = container.getBoundingClientRect();
+    const erect = el.getBoundingClientRect();
+
+    // marge visuelle sous l’entête du drawer
+    const margin = 12;
+
+    // si au-dessus de la zone visible → scroll jusqu’en haut (avec marge)
+    if (erect.top < crect.top + margin) {
+      const delta = erect.top - crect.top - margin;
+      container.scrollBy({ top: delta, behavior: 'smooth' });
+      return;
+    }
+
+    // si en-dessous de la zone visible → scroll pour dégager le bas (avec marge)
+    if (erect.bottom > crect.bottom - margin) {
+      const delta = erect.bottom - crect.bottom + margin;
+      container.scrollBy({ top: delta, behavior: 'smooth' });
+    }
+  }, []);
+
+
+  function renderParamsFields() {
+
     return (
       <div className="space-y-8">
         {/* SECTION 1 — Identité */}
@@ -445,6 +610,47 @@ function QuickParamsCard({
             />
           </Field>
 
+
+
+          {/* Concubin — paramètres LPP partenaire */}
+{s.maritalStatus === 'concubinage' && (
+  <>
+    <Field label="Partenaire désigné (clause déposée)">
+      <Switch
+        checked={Boolean(s.partnerDesignated)}
+        onCheckedChange={(checked) =>
+          onSurvivorChange({
+            ...s,
+            partnerDesignated: checked,
+            cohabitationYears: checked ? (s.cohabitationYears ?? 5) : 0,
+          })
+        }
+        />
+    </Field>
+
+    <Field label="Années de vie commune">
+      <input
+        type="number"
+        min={0}
+        className="w-full rounded-lg border px-3 py-1.5 text-sm disabled:opacity-60"
+        value={Number(s.cohabitationYears ?? 0)}
+        onChange={(e) =>
+          onSurvivorChange({
+            ...s,
+            cohabitationYears: Math.max(0, Number(e.target.value || 0)),
+          })
+        }
+        disabled={!s.partnerDesignated}
+      />
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        Minimum 5 ans requis pour activer la rente partenaire LPP.
+      </p>
+    </Field>
+  </>
+)}
+
+
+
           <Field label="Marié(e) depuis plus de 5 ans ?">
             <div className="flex items-center gap-3 sm:col-span-2">
               <Switch
@@ -481,6 +687,8 @@ function QuickParamsCard({
                 value={childrenCount}
                 min={0}
                 onChange={(e) => onChildrenChange(Math.max(0, Number(e.target.value)))}
+                onFocus={(e) => setTimeout(() => ensureVisible(e.currentTarget), 60)}
+
               />
               <Button
                 type="button"
@@ -492,19 +700,187 @@ function QuickParamsCard({
               </Button>
             </div>
           </Field>
+{/* DATE DE NAISSANCE (JJ/MM/AAAA, non-contrôlé) */}
+{(childrenCount ?? 0) > 0 && (
+  <div className="sm:col-span-2 space-y-3" data-vaul-no-drag>
+    <div className="text-xs text-muted-foreground">Date de naissance des enfant(s) (JJ/MM/AAAA)</div>
+
+    <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+      {Array.from({ length: Math.max(0, childrenCount) }).map((_, i) => (
+  <Field key={i} label={`Enfant ${i + 1}`}>
+    <input
+  type="text"
+  inputMode="numeric"
+  enterKeyHint="done"
+  autoComplete="off"
+  autoCorrect="off"
+  autoCapitalize="off"
+  spellCheck={false}
+  placeholder="JJ/MM/AAAA"
+  defaultValue={isoToFR(childrenBirthdates?.[i])}  // NON-contrôlé : seed depuis ISO
+  ref={setDateRef(i)}
+  onInput={(e) => {
+    // masque JJ/MM/AAAA (garde 0-9 + insère '/'), sans setState → pas de re-render
+    const el = e.currentTarget;
+    const start = el.selectionStart ?? el.value.length;
+
+    let digits = el.value.replace(/\D/g, '').slice(0, 8);
+    let masked = digits;
+    if (digits.length >= 5) masked = digits.replace(/^(\d{2})(\d{2})(\d{0,4}).*$/, '$1/$2/$3');
+    else if (digits.length >= 3) masked = digits.replace(/^(\d{2})(\d{0,2}).*$/, '$1/$2');
+
+    // met à jour la valeur DOM directement (pas de state)
+    el.value = masked;
+
+    // caret à la fin (comportement naturel pour un masque)
+    const pos = masked.length;
+    try { el.setSelectionRange(pos, pos); } catch {}
+  }}
+  onPaste={(e) => {
+    e.preventDefault();
+    const el = e.currentTarget;
+    const text = (e.clipboardData?.getData('text') ?? '').replace(/\D/g, '').slice(0, 8);
+    let masked = text;
+    if (text.length >= 5) masked = text.replace(/^(\d{2})(\d{2})(\d{0,4}).*$/, '$1/$2/$3');
+    else if (text.length >= 3) masked = text.replace(/^(\d{2})(\d{0,2}).*$/, '$1/$2');
+    el.value = masked;
+    const pos = masked.length;
+    try { el.setSelectionRange(pos, pos); } catch {}
+  }}
+  onKeyDown={(e) => {
+    if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); // ferme le clavier mobile
+  }}
+  onFocus={(e) => setTimeout(() => ensureVisible?.(e.currentTarget), 60)}
+  className="h-10 w-full rounded-lg border bg-background shadow-sm px-3 text-sm
+             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30
+             focus-visible:ring-offset-2 ring-offset-background"
+/>
+
+
+  </Field>
+))}
+
+    </div>
+
+    <p className="text-[11px] text-muted-foreground">
+      Saisissez JJ/MM/AAAA. La date sera enregistrée (format ISO) à la fermeture du panneau.
+    </p>
+  </div>
+)}
+
+
+
+
 
           <Field label="Travaille ≥ 8h/sem ?">
             <Switch
-              checked={Boolean(weeklyHours && weeklyHours >= 8)}
+              checked={Number(weeklyHours ?? 0) >= 8}
               onCheckedChange={(checked) => onWeeklyHoursChange(checked ? 9 : 0)}
             />
+
+          </Field>
+                </div>
+
+        {/* SECTION 3 — Carrière AVS */}
+        <div className="grid gap-6 sm:grid-cols-2">
+          {/* Début activité lucrative en Suisse (année) */}
+          <Field label="Début activité lucrative en Suisse (année)">
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="ex. 2010"
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              value={typeof startWorkYearCH === 'number' ? startWorkYearCH : ''}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  onStartWorkYearChange(Number.isFinite(n) ? n : undefined);
+                }}
+              onFocus={(e) => setTimeout(() => ensureVisible(e.currentTarget), 60)}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Si vous ne savez pas : nous estimerons par défaut année de naissance + 21.
+            </p>
+          </Field>
+
+          {/* Années sans cotisations (simple) */}
+          <Field label="Années sans cotisations AVS ?">
+            <Select
+              value={missingYearsMode}
+              onChange={(v) => onMissingYearsModeChange((v as 'none' | 'some') ?? 'none')}
+              options={[
+                { label: 'Aucune', value: 'none' },
+                { label: 'Oui (à préciser)', value: 'some' },
+              ]}
+            />
+            {missingYearsMode === 'some' && (
+              <div className="mt-2">
+                <input
+                  type="text"
+                  placeholder="Saisir les années séparées par des virgules, ex: 2012,2013"
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  value={missingYears.join(',')}
+                  onChange={(e) => {
+                    const arr = e.target.value
+                      .split(',')
+                      .map((s) => Number(s.trim()))
+                      .filter((y) => Number.isFinite(y));
+                    onMissingYearsChange(arr);
+                  }}
+                  onFocus={(e) => setTimeout(() => ensureVisible(e.currentTarget), 60)}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Laissez vide si vous ne voulez pas préciser maintenant.
+                </p>
+              </div>
+            )}
+          </Field>
+
+          {/* Tâches d’assistance */}
+          <Field label="Tâches d’assistance (soin d’un proche) ?">
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={caregiving.hasCare}
+                onCheckedChange={(checked) =>
+                  onCaregivingChange({ hasCare: Boolean(checked), years: caregiving.years })
+                }
+              />
+              <span className="text-sm text-muted-foreground">
+                Cochez si vous avez soigné un proche dépendant.
+              </span>
+            </div>
+            {caregiving.hasCare && (
+              <div className="mt-2">
+                <input
+                  type="text"
+                  placeholder="Années séparées par virgules, ex: 2018,2019"
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  value={caregiving.years.join(',')}
+                  onChange={(e) => {
+                    const arr = e.target.value
+                      .split(',')
+                      .map((s) => Number(s.trim()))
+                      .filter((y) => Number.isFinite(y));
+                    onCaregivingChange({ hasCare: true, years: arr });
+                  }}
+
+                  onFocus={(e) => setTimeout(() => ensureVisible(e.currentTarget), 60)}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Optionnel — vous pouvez préciser plus tard.
+                </p>
+              </div>
+            )}
           </Field>
         </div>
 
         <div className="h-px bg-border" />
       </div>
+
     );
   }
+
+
+
 
   // MODE COMPACT : barre + Sheet pour les détails
   if (compact) {
@@ -512,7 +888,17 @@ function QuickParamsCard({
       <Card className={cn('shadow-none border border-muted/40 bg-muted/10', className)}>
         <CardHeader className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-center gap-2">
-            <Drawer>
+            <Drawer
+  open={isDrawerOpen}
+  onOpenChange={(open) => {
+    if (!open) {
+      // Commit groupé des dates à la fermeture
+      commitChildDates();
+    }
+    setIsDrawerOpen(open);
+  }}
+>
+
               <DrawerTrigger asChild>
                 <Button
                   variant="ghost"
@@ -524,19 +910,30 @@ function QuickParamsCard({
                   <Settings2 className="h-4 w-4" />
                 </Button>
               </DrawerTrigger>
-              <DrawerContent className="p-6">
-                <DrawerHeader>
-                  <DrawerTitle>Paramètres avancés</DrawerTitle>
-                </DrawerHeader>
-                <div className="py-2">
-                  <ParamsFields />
-                </div>
-                <DrawerFooter>
-                  <DrawerClose asChild>
-                    <Button variant="outline">Fermer</Button>
-                  </DrawerClose>
-                </DrawerFooter>
-              </DrawerContent>
+              <DrawerContent className="p-0">
+  <DrawerHeader className="px-6 pt-6">
+    <DrawerTitle>Paramètres avancés</DrawerTitle>
+  </DrawerHeader>
+
+  {/* zone scrollable dans le drawer */}
+  <div
+    ref={drawerScrollRef}
+    className="px-6 pb-2 max-h-[75vh] overflow-y-auto overscroll-contain"
+    data-vaul-no-drag
+    >
+    {renderParamsFields()}
+
+
+  </div>
+
+  <DrawerFooter className="px-6 pb-6">
+    <DrawerClose asChild>
+      <Button variant="outline">Fermer</Button>
+    </DrawerClose>
+  </DrawerFooter>
+</DrawerContent>
+
+
             </Drawer>
 
             <div>
@@ -590,13 +987,13 @@ function QuickParamsCard({
                 items={[
                   {
                     value: "monthly",
-                    label: "CHF/mois",
-                    icon: <Calendar className="h-4 w-4" />,
+                    label: "/mois",
+                    icon: <HandCoins className="h-4 w-4" />,
                   },
                   {
                     value: "annual",
-                    label: "CHF/an",
-                    icon: <CalendarRange className="h-4 w-4" />,
+                    label: "/an",
+                    icon: <HandCoins className="h-4 w-4" />,
                   },
                 ]}
                 className="w-full lg:w-auto bg-muted/40 p-0.5 border-transparent shadow-none"
@@ -644,7 +1041,7 @@ function QuickParamsCard({
           <AccordionItem value="open" className="border-b-0">
             <AccordionTrigger className="text-sm">Afficher / masquer les paramètres</AccordionTrigger>
             <AccordionContent>
-              <ParamsFields />
+              {renderParamsFields()}
             </AccordionContent>
           </AccordionItem>
         </Accordion>
@@ -673,6 +1070,7 @@ type Props = {
 };
 
 export default function GapsAndCardsClient({
+  
   annualIncome,
   avs,
   lpp,
@@ -685,6 +1083,26 @@ export default function GapsAndCardsClient({
   clientDocPath,
   onParamsChange,
 }: Props) {
+
+ // Auth anonyme + uid en state (déclenche l'écriture sur clients/{uid})
+const [uid, setUid] = React.useState<string | null>(auth?.currentUser?.uid ?? null);
+
+React.useEffect(() => {
+  const unsub = onAuthStateChanged(auth, (u) => {
+    if (!u) {
+      signInAnonymously(auth).catch((e) =>
+        console.warn('[auth] anon sign-in failed', e)
+      );
+    }
+    setUid(u?.uid ?? null);
+  });
+  return () => unsub();
+}, []);
+
+
+
+  const { id } = useParams() as { id?: string };
+  const analysisId = id ?? ''; // string (évite 'undefined' dans l'URL)
   const [eventInvalidity, setEventInvalidity] = useState<EventKind>(
     initialCtx?.eventInvalidity ?? 'maladie'
   );
@@ -708,44 +1126,150 @@ export default function GapsAndCardsClient({
 
   const displayTargets = fromNeedTargets(currentTargets);
 
-  const [currentCtx, setCurrentCtx] = useState<GapsCtx>({
-    eventInvalidity,
-    eventDeath,
-    invalidityDegreePct: clamp(initialCtx?.invalidityDegreePct ?? 100, 40, 100),
-    childrenCount: initialCtx?.childrenCount ?? 0,
-    weeklyHours: initialCtx?.weeklyHours ?? undefined,
-    survivor: {
-      maritalStatus:
-        initialCtx?.survivor?.maritalStatus ?? survivorDefault.maritalStatus ?? 'celibataire',
-      hasChild: (initialCtx?.childrenCount ?? 0) > 0,
-      ageAtWidowhood: initialCtx?.survivor?.ageAtWidowhood ?? 45,
-      marriedSince5y: initialCtx?.survivor?.marriedSince5y ?? false,
-    },
-  });
+// 🟢 APRÈS
+const [currentCtx, setCurrentCtx] = useState<GapsCtxExt>({
+  eventInvalidity,
+  eventDeath,
+  invalidityDegreePct: clamp(initialCtx?.invalidityDegreePct ?? 100, 40, 100),
+  childrenCount: initialCtx?.childrenCount ?? 0,
+  childrenBirthdates: initialCtx?.childrenBirthdates,
+  weeklyHours: initialCtx?.weeklyHours ?? undefined,
+  birthDateISO: (initialCtx as any)?.birthDateISO,
+  survivor: {
+  maritalStatus:
+    initialCtx?.survivor?.maritalStatus ?? survivorDefault.maritalStatus ?? 'celibataire',
+
+  // hasChild : privilégie la vérité issue du serveur si fournie
+  hasChild:
+    initialCtx?.survivor?.hasChild ??
+    survivorDefault.hasChild ??
+    ((initialCtx?.childrenCount ?? 0) > 0),
+
+  // ✅ très important : NE PAS forcer 45 par défaut !
+  // On prend d'abord l'age du state, sinon celui envoyé par la page, sinon 0.
+  ageAtWidowhood: (() => {
+  const fromState  = initialCtx?.survivor?.ageAtWidowhood;
+  const fromServer = survivorDefault.ageAtWidowhood;
+  if (fromState === 45 && typeof fromServer === 'number' && fromServer > 0 && fromServer < 45) {
+    return fromServer; // priorité à l'âge réel si quickParams contient l'ancien 45
+  }
+  return (fromState ?? fromServer ?? 0);
+})(),
+
+
+  // même logique : on respecte la valeur serveur si dispo
+  marriedSince5y:
+  initialCtx?.survivor?.marriedSince5y ??
+  survivorDefault.marriedSince5y ??
+  false,
+
+
+  // champs étendus : on reprend côté serveur si le state est vide
+  partnerDesignated:
+    (initialCtx?.survivor as any)?.partnerDesignated ??
+    survivorDefault.partnerDesignated ??
+    undefined,
+
+  cohabitationYears:
+    (initialCtx?.survivor as any)?.cohabitationYears ??
+    survivorDefault.cohabitationYears ??
+    undefined,
+},
+
+});
+
   const [sexState, setSexState] = useState<'F' | 'M' | undefined>(sex);
+
+/* ===== Nouveaux paramètres carrière AVS (états locaux) ===== */
+const [startWorkYearCH, setStartWorkYearCH] = useState<number | undefined>(undefined);
+const [missingYearsMode, setMissingYearsMode] = useState<'none' | 'some'>('none');
+const [missingYears, setMissingYears] = useState<number[]>([]);
+const [caregiving, setCaregiving] = useState<{ hasCare: boolean; years: number[] }>({
+  hasCare: false,
+  years: [],
+});
+
+// 🔗 Chemin Firestore effectif (prop si fournie, sinon depuis localStorage)
+const [clientPath, setClientPath] = React.useState<string | undefined>(clientDocPath);
+
+React.useEffect(() => {
+  try {
+    if (clientDocPath) {
+      setClientPath(clientDocPath);
+      localStorage.setItem('ml_clientDocPath', clientDocPath);
+    } else {
+      const cachedPath = localStorage.getItem('ml_clientDocPath');
+      if (cachedPath) setClientPath(cachedPath);
+    }
+  } catch {}
+}, [clientDocPath]);
+
+
   const [qpReady, setQpReady] = React.useState(false);
 
   // === Keys locales (scopées par le token/analyse) ===
   const anonToken = React.useMemo(() => {
-    if (clientDocPath && clientDocPath.startsWith('clients/')) {
-      const parts = clientDocPath.split('/');
-      return parts[1] ?? null;
-    }
-    return null;
-  }, [clientDocPath]);
+    
+  if (clientPath && clientPath.startsWith('clients/')) {
+    const parts = clientPath.split('/');
+    return parts[1] ?? null;
+  }
+  return null;
+}, [clientPath]);
 
-  const storageKeyUnit = React.useMemo(
-    () => `ml_qp_unit_${anonToken ?? 'default'}`,
-    [anonToken]
-  );
-  const storageKeyScenario = React.useMemo(
-    () => `ml_qp_scenario_${anonToken ?? 'default'}`,
-    [anonToken]
-  );
-  const storageKeyQuick = React.useMemo(
-    () => `ml_qp_cache_${anonToken ?? 'default'}`,
-    [anonToken]
-  );
+
+const prestationsDocPath = uid ? `clients/${uid}` : '';
+
+
+// === DEV LOG: observe le doc TOKEN (clients/1kbNUA6EgwOBvTaucAMGSRUnGZv2) ===
+React.useEffect(() => {
+  if (process.env.NODE_ENV === 'production') return;
+  const tokenId = '1kbNUA6EgwOBvTaucAMGSRUnGZv2'; // NB: la collection est "clients" (pluriel)
+  const ref = doc(db, `clients/${tokenId}`);
+  const unsub = onSnapshot(ref, (snap) => {
+    const data = snap.data() ?? {};
+    console.group(`[DEV][TOKEN] clients/${tokenId}`);
+    console.log('quickParams ►', data.quickParams);
+    console.log('prestations ►', data.prestations);
+    console.groupEnd();
+  });
+  return () => unsub();
+}, []);
+
+
+// === DEV LOG: observe le doc UID (clients/{uid}) utilisé par prestations ===
+React.useEffect(() => {
+  if (process.env.NODE_ENV === 'production') return;
+  if (!uid) return;
+  const ref = doc(db, `clients/${uid}`);
+  const unsub = onSnapshot(ref, (snap) => {
+    const data = snap.data() ?? {};
+    console.group(`[DEV][UID] clients/${uid}`);
+    console.log('quickParams ►', data.quickParams);
+    console.log('prestations ►', data.prestations);
+    console.groupEnd();
+  });
+  return () => unsub();
+}, [uid]);
+
+
+
+
+
+
+
+// 🔒 Namespace stable basé sur l’analyse en cours
+const { id: analysisIdParam } = useParams() as { id?: string };
+const storageNS = React.useMemo(
+  () => (analysisIdParam ?? clientDocPath ?? anonToken ?? 'analysis'),
+  [analysisIdParam, clientDocPath, anonToken]
+);
+
+const storageKeyUnit     = React.useMemo(() => `ml_qp_unit_${storageNS}`, [storageNS]);
+const storageKeyScenario = React.useMemo(() => `ml_qp_scenario_${storageNS}`, [storageNS]);
+const storageKeyQuick    = React.useMemo(() => `ml_qp_cache_${storageNS}`, [storageNS]);
+
+
 
   // Charger les préférences locales au premier montage (unit/scenario)
   React.useEffect(() => {
@@ -781,6 +1305,8 @@ export default function GapsAndCardsClient({
         ...prev,
         weeklyHours: typeof cached?.weeklyHours === 'number' ? cached.weeklyHours : prev.weeklyHours,
         childrenCount: typeof cached?.childrenCount === 'number' ? cached.childrenCount : prev.childrenCount,
+        childrenBirthdates: sanitizeBirthdatesUI(cached?.childrenBirthdates) ?? prev.childrenBirthdates,
+
         survivor: {
           ...prev.survivor,
           maritalStatus: isMaritalStatus(normMarital(cached?.survivor?.maritalStatus))
@@ -789,8 +1315,16 @@ export default function GapsAndCardsClient({
           hasChild: typeof cached?.survivor?.hasChild === 'boolean' ? cached.survivor.hasChild : prev.survivor.hasChild,
           ageAtWidowhood: typeof cached?.survivor?.ageAtWidowhood === 'number' ? cached.survivor.ageAtWidowhood : prev.survivor.ageAtWidowhood,
           marriedSince5y: typeof cached?.survivor?.marriedSince5y === 'boolean' ? cached.survivor.marriedSince5y : prev.survivor.marriedSince5y,
-        },
-      }));
+          partnerDesignated:
+            typeof cached?.survivor?.partnerDesignated === 'boolean'
+              ? cached.survivor.partnerDesignated
+              : prev.survivor.partnerDesignated,
+          cohabitationYears:
+            typeof cached?.survivor?.cohabitationYears === 'number'
+              ? cached.survivor.cohabitationYears
+              : prev.survivor.cohabitationYears,
+                },
+              }));
 
       // Targets
       if (cached?.targets) {
@@ -802,6 +1336,30 @@ export default function GapsAndCardsClient({
           })
         );
       }
+
+            /* ===== Nouveaux paramètres carrière AVS (cache local) ===== */
+      if (typeof cached?.startWorkYearCH === 'number') {
+        setStartWorkYearCH(cached.startWorkYearCH);
+      }
+
+      setMissingYearsMode(
+        cached?.missingYearsMode === 'some' ? 'some' : 'none'
+      );
+
+      setMissingYears(
+        Array.isArray(cached?.missingYears)
+          ? cached.missingYears.filter((y: any) => Number.isFinite(y))
+          : []
+      );
+
+      setCaregiving({
+        hasCare: Boolean(cached?.caregiving?.hasCare),
+        years: Array.isArray(cached?.caregiving?.years)
+          ? cached.caregiving.years.filter((y: any) => Number.isFinite(y))
+          : [],
+      });
+
+
     } catch {}
     // pas de qpReady ici — Firestore fera foi et activera qpReady à la fin
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -826,68 +1384,141 @@ export default function GapsAndCardsClient({
     Math.max(min, Math.min(max, Math.round(Number(n ?? 0))));
 
   // charge 1x depuis Firestore et applique aux états locaux
-  useQuickParamsLoad({
-    clientDocPath,
-    apply: (qp) => {
-      if (!qp) return;
+useQuickParamsLoad({
+  clientDocPath: clientPath ?? clientDocPath, // ✅ chemin stable
+  apply: (qp) => {
+  if (!qp) return;
 
-      // Sexe
-      if (qp.sex === 'F' || qp.sex === 'M') {
-        setSexState(qp.sex);
-      }
+  // Sexe
+  if (qp.sex === 'F' || qp.sex === 'M') {
+    setSexState(qp.sex);
+  }
 
-      // Contexte (enfants, heures, survivant)
-      setCurrentCtx((prev) => ({
-        ...prev,
-        weeklyHours: typeof qp.weeklyHours === 'number' ? qp.weeklyHours : prev.weeklyHours,
-        childrenCount:
-          typeof qp.childrenCount === 'number' ? qp.childrenCount : prev.childrenCount,
-        survivor: {
-          ...prev.survivor,
-          maritalStatus: isMaritalStatus(qp.survivor?.maritalStatus)
-            ? (normMarital(qp.survivor!.maritalStatus) as SurvivorContextLite['maritalStatus'])
-            : prev.survivor.maritalStatus,
-          hasChild:
-            typeof qp.survivor?.hasChild === 'boolean'
-              ? qp.survivor!.hasChild
-              : prev.survivor.hasChild,
-          ageAtWidowhood:
-            typeof qp.survivor?.ageAtWidowhood === 'number'
-              ? qp.survivor!.ageAtWidowhood
-              : prev.survivor.ageAtWidowhood,
-          marriedSince5y:
-            typeof qp.survivor?.marriedSince5y === 'boolean'
-              ? qp.survivor!.marriedSince5y
-              : prev.survivor.marriedSince5y,
-        },
-      }));
+  // 🔧 IMPORTANT : typage local étendu du survivant de Firestore
+  const qpS = (qp.survivor ?? {}) as Partial<SurvivorExt>;
 
-      // Cibles %
-      if (qp.targets) {
-        setCurrentTargets(
-          toNeedTargets({
-            invalidity: clampPct(qp.targets.invalidity, 50, 90),
-            death: clampPct(qp.targets.death, 50, 100),
-            retirement: clampPct(qp.targets.retirement, 50, 100),
-          })
-        );
-      }
+  // Contexte (enfants, heures, survivant)
+  setCurrentCtx((prev) => ({
+    ...prev,
+    weeklyHours: typeof qp.weeklyHours === 'number' ? qp.weeklyHours : prev.weeklyHours,
+    childrenCount:
+      typeof qp.childrenCount === 'number' ? qp.childrenCount : prev.childrenCount,
+    childrenBirthdates: Array.isArray(qp.childrenBirthdates)
+      ? qp.childrenBirthdates
+      : prev.childrenBirthdates,
 
-      // Signal prêt pour la sync
-      setQpReady(true);
+    survivor: {
+      ...prev.survivor,
+
+      // ⚖️ Champs de base
+      maritalStatus: isMaritalStatus(qpS.maritalStatus)
+        ? (normMarital(qpS.maritalStatus!) as SurvivorContextLite['maritalStatus'])
+        : prev.survivor.maritalStatus,
+      hasChild:
+        typeof qpS.hasChild === 'boolean'
+          ? qpS.hasChild!
+          : prev.survivor.hasChild,
+      ageAtWidowhood:
+        typeof qpS.ageAtWidowhood === 'number'
+          ? qpS.ageAtWidowhood!
+          : prev.survivor.ageAtWidowhood,
+      marriedSince5y:
+  typeof qpS.marriedSince5y === 'boolean'
+    ? qpS.marriedSince5y
+    : prev.survivor.marriedSince5y,
+
+
+
+
+      // ✅ Champs étendus (TS ne râle plus car on lit via qpS: Partial<SurvivorExt>)
+      partnerDesignated:
+        typeof qpS.partnerDesignated === 'boolean'
+          ? qpS.partnerDesignated!
+          : prev.survivor.partnerDesignated,
+      cohabitationYears:
+        typeof qpS.cohabitationYears === 'number'
+          ? qpS.cohabitationYears!
+          : prev.survivor.cohabitationYears,
     },
+  }));
+
+  // Cibles %
+  if (qp.targets) {
+    setCurrentTargets(
+      toNeedTargets({
+        invalidity: clampPct(qp.targets.invalidity, 50, 90),
+        death: clampPct(qp.targets.death, 50, 100),
+        retirement: clampPct(qp.targets.retirement, 50, 100),
+      })
+    );
+  }
+
+/* ===== Nouveaux paramètres carrière AVS : hydratation (typé, NON destructif) ===== */
+const hasCareerKeys =
+  ('startWorkYearCH' in qp) ||
+  ('missingYearsMode' in qp) ||
+  ('missingYears' in qp) ||
+  ('caregiving' in qp);
+
+if (hasCareerKeys) {
+  if ('startWorkYearCH' in qp) {
+    setStartWorkYearCH(
+      typeof qp.startWorkYearCH === 'number' ? qp.startWorkYearCH : undefined
+    );
+  }
+  if ('missingYearsMode' in qp) {
+    setMissingYearsMode(qp.missingYearsMode === 'some' ? 'some' : 'none');
+  }
+  if ('missingYears' in qp) {
+    setMissingYears(
+      Array.isArray(qp.missingYears)
+        ? qp.missingYears.filter((y: any) => Number.isFinite(y))
+        : []
+    );
+  }
+  if ('caregiving' in qp) {
+    setCaregiving({
+      hasCare: Boolean(qp.caregiving?.hasCare),
+      years: Array.isArray(qp.caregiving?.years)
+        ? qp.caregiving.years.filter((y: any) => Number.isFinite(y))
+        : [],
+    });
+  }
+}
+  // Signal prêt pour la sync
+  setQpReady(true);
+},
+
+
   });
 
-  // ctx effectif
-  const ctx: GapsCtx = {
-    ...currentCtx,
-    eventInvalidity,
-    eventDeath,
-    survivor: { ...currentCtx.survivor, hasChild: (currentCtx.childrenCount ?? 0) > 0 },
-  };
+const ctx: GapsCtx = {
+  ...currentCtx,
+  eventInvalidity,
+  eventDeath,
+  survivor: {
+    ...currentCtx.survivor,
+    hasChild: (currentCtx.childrenCount ?? 0) > 0,
+  },
+  birthDateISO: currentCtx.birthDateISO, // ← expose la date au hook (projection 65)
+
+  // 🔹 Nouveaux paramètres carrière AVS → passés au hook
+  avsCareer: {
+    startWorkYearCH: typeof startWorkYearCH === 'number' ? startWorkYearCH : undefined,
+    missingYearsMode,
+    missingYears: missingYearsMode === 'some' ? missingYears : [],
+    caregiving: {
+      hasCare: caregiving.hasCare,
+      years: caregiving.hasCare ? caregiving.years : [],
+    },
+  },
+};
+
+
+
 
   // recalculs
-  const gaps = useGaps({
+    const gaps = useGaps({
     annualIncome,
     targets: currentTargets,
     avs,
@@ -896,6 +1527,29 @@ export default function GapsAndCardsClient({
     laaParams,
     thirdPillar,
   });
+
+  
+
+  
+
+   const { saving: prestSaving, error: prestError } = usePrestationsSync({
+  clientDocPath: prestationsDocPath,               // 🔒 écrit dans clients/{uid} si auth anonyme active
+  token: anonToken,
+  gaps,                                            // l’objet renvoyé par useGaps
+  unit: unit === 'annual' ? 'annual' : 'monthly',  // ton sélecteur /mois /an
+ enabled: qpReady && Boolean(prestationsDocPath), // évite d’écrire tant que le chemin n’est pas prêt
+  debounceMs: 800,
+});
+
+
+
+
+
+
+
+
+  console.log("GAPS >>>", gaps);
+
 
   /* Data par thème */
   const inv = gaps.invalidity.current;
@@ -912,15 +1566,33 @@ export default function GapsAndCardsClient({
 
   // Payload à sauvegarder (mappé sur Firestore)
   // ❌ on retire unit, eventInvalidity, eventDeath du payload persistant
-  const savePayload = {
+    const savePayload = {
     weeklyHours: ctx.weeklyHours,
     childrenCount: ctx.childrenCount,
+    childrenBirthdates: Array.isArray(ctx.childrenBirthdates) ? ctx.childrenBirthdates : undefined,
+
+
+    
+
+    /* ===== Carrière AVS : nouveaux champs ===== */
+    startWorkYearCH: typeof startWorkYearCH === 'number' ? startWorkYearCH : undefined,
+    missingYearsMode,
+    missingYears: missingYearsMode === 'some' ? missingYears : [],
+    caregiving: {
+      hasCare: caregiving.hasCare,
+      years: caregiving.hasCare ? caregiving.years : [],
+    },
+
     survivor: {
       maritalStatus: ctx.survivor.maritalStatus,
       hasChild: ctx.survivor.hasChild,
       ageAtWidowhood: ctx.survivor.ageAtWidowhood,
       marriedSince5y: ctx.survivor.marriedSince5y,
+      // ✅ lire depuis le state étendu
+      partnerDesignated: currentCtx.survivor.partnerDesignated,
+      cohabitationYears: currentCtx.survivor.cohabitationYears,
     },
+
     sex: sexState,
     targets: {
       invalidityPctTarget: displayTargets.invalidity,
@@ -929,13 +1601,15 @@ export default function GapsAndCardsClient({
     },
   } as const;
 
+
   const { isSaving, lastSavedAt } = useQuickParamsSync({
-    clientDocPath: clientDocPath ?? "",
-    token: anonToken,                 // permet le mode anonyme via API
-    payload: savePayload,
-    debounceMs: 700,
-    enabled: qpReady,
-  });
+  clientDocPath: clientPath ?? "",
+  token: anonToken,
+  payload: savePayload,
+  debounceMs: 700,
+  enabled: qpReady,
+});
+
 
   // Écrit le cache local à chaque enregistrement réussi
   React.useEffect(() => {
@@ -946,6 +1620,33 @@ export default function GapsAndCardsClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastSavedAt, storageKeyQuick]);
 
+// Écrit aussi le cache local IMMÉDIATEMENT quand les paramètres changent
+React.useEffect(() => {
+  if (!qpReady) return; // ⛔️ ne rien écrire tant qu'on n'a pas hydraté
+  try {
+    localStorage.setItem(storageKeyQuick, JSON.stringify(savePayload));
+  } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [
+  qpReady, // ✅ garde supplémentaire
+  // Nouveaux champs carrière
+  startWorkYearCH,
+  missingYearsMode,
+  JSON.stringify(missingYears),
+  JSON.stringify(caregiving),
+
+  // 🔁 Anciens champs qui “repartaient à défaut” entre pages
+  sexState,
+  currentCtx.survivor.maritalStatus,
+  currentCtx.survivor.marriedSince5y,
+  currentCtx.childrenCount,
+  JSON.stringify(currentCtx.childrenBirthdates),
+  currentCtx.weeklyHours,
+]);
+
+
+
+
   React.useEffect(() => {
     onParamsChange?.({
       targets: currentTargets,
@@ -953,6 +1654,27 @@ export default function GapsAndCardsClient({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(currentTargets), JSON.stringify(ctx)]);
+
+  // ⚠️ Attendre la première lecture Firestore pour afficher les paramètres
+if (!qpReady) {
+  return (
+    <motion.section className="w-full space-y-8">
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle>Paramètres rapides</CardTitle>
+          <CardDescription>Chargement…</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {/* petit placeholder minimal */}
+          <div className="h-6 w-48 rounded bg-muted/50 mb-3" />
+          <div className="h-6 w-64 rounded bg-muted/50 mb-3" />
+          <div className="h-6 w-56 rounded bg-muted/50" />
+        </CardContent>
+      </Card>
+    </motion.section>
+  );
+}
+
 
   return (
     <motion.section
@@ -969,45 +1691,72 @@ export default function GapsAndCardsClient({
         </p>
       </motion.div>
 
+      
+
       {/* Paramètres rapides — compact + Sheet */}
       <QuickParamsCard
-        compact
-        sex={sexState}
-        onSexChange={(s) => setSexState(s)}
-        survivor={ctx.survivor}
-        onSurvivorChange={(next) => setCurrentCtx((prev) => ({ ...prev, survivor: next }))}
-        childrenCount={ctx.childrenCount}
-        onChildrenChange={(n) => {
-          const nn = Math.max(0, n);
-          setCurrentCtx((prev) => ({
+      compact
+      sex={sexState}
+      onSexChange={(s) => setSexState(s)}
+      survivor={currentCtx.survivor}
+      onSurvivorChange={(next) => setCurrentCtx((prev) => ({ ...prev, survivor: next }))}
+      childrenCount={ctx.childrenCount}
+      onChildrenChange={(n) => {
+        const nn = Math.max(0, n);
+        setCurrentCtx((prev) => {
+          const next = (prev.childrenBirthdates ?? []).slice(0, nn);
+          while (next.length < nn) next.push('');
+          return {
             ...prev,
             childrenCount: nn,
+            childrenBirthdates: next,
             survivor: { ...prev.survivor, hasChild: nn > 0 },
-          }));
-        }}
-        targetsPct={fromNeedTargets(currentTargets)}
-        onTargetsChange={(t) => {
-          const nextDisplay: TargetsDisplay = {
-            invalidity: clamp(t.invalidity, 50, 90),
-            death: clamp(t.death, 50, 100),
-            retirement: clamp(t.retirement, 50, 100),
           };
-          setCurrentTargets(toNeedTargets(nextDisplay));
-        }}
-        unit={unit}
-        onUnitChange={setUnit}
-        weeklyHours={ctx.weeklyHours}
-        onWeeklyHoursChange={(wh) => setCurrentCtx((prev) => ({ ...prev, weeklyHours: wh }))}
-        scenario={globalScenario}
-        onScenarioChange={(m) => {
-          const mode: EventKind = m === 'accident' ? 'accident' : 'maladie';
-          setEventInvalidity(mode);
-          setEventDeath(mode);
-          setCurrentCtx((prev) => ({ ...prev, eventInvalidity: mode, eventDeath: mode }));
-        }}
-        isSaving={isSaving}
-        lastSavedAt={lastSavedAt}
-      />
+        });
+      }}
+      childrenBirthdates={ctx.childrenBirthdates}
+      onChildBirthdateChange={(index, iso) => {
+        setCurrentCtx((prev) => {
+          const arr = (prev.childrenBirthdates ?? []).slice();
+          arr[index] = ISO_DATE_RE.test(iso) ? iso : '';
+          return { ...prev, childrenBirthdates: arr };
+        });
+      }}
+      targetsPct={fromNeedTargets(currentTargets)}
+      onTargetsChange={(t) => {
+        const nextDisplay: TargetsDisplay = {
+          invalidity: clamp(t.invalidity, 50, 90),
+          death: clamp(t.death, 50, 100),
+          retirement: clamp(t.retirement, 50, 100),
+        };
+        setCurrentTargets(toNeedTargets(nextDisplay));
+      }}
+      unit={unit}
+      onUnitChange={setUnit}
+      weeklyHours={ctx.weeklyHours}
+      onWeeklyHoursChange={(wh) => setCurrentCtx((prev) => ({ ...prev, weeklyHours: wh }))}
+      scenario={globalScenario}
+      onScenarioChange={(m) => {
+        const mode: EventKind = m === 'accident' ? 'accident' : 'maladie';
+        setEventInvalidity(mode);
+        setEventDeath(mode);
+        setCurrentCtx((prev) => ({ ...prev, eventInvalidity: mode, eventDeath: mode }));
+      }}
+
+      /* ===== Nouvelles props ===== */
+      startWorkYearCH={startWorkYearCH}
+      onStartWorkYearChange={(n) => setStartWorkYearCH(n)}
+      missingYearsMode={missingYearsMode}
+      onMissingYearsModeChange={(m) => setMissingYearsMode(m)}
+      missingYears={missingYears}
+      onMissingYearsChange={(arr) => setMissingYears(arr)}
+      caregiving={caregiving}
+      onCaregivingChange={(c) => setCaregiving(c)}
+
+      isSaving={isSaving}
+      lastSavedAt={lastSavedAt}
+    />
+
 
       {/* Grille 3 cartes: Invalidité / Décès / Retraite */}
       <motion.div
@@ -1073,7 +1822,7 @@ export default function GapsAndCardsClient({
               />
               <Legend />
               <div className="flex justify-end">
-                <LinkButton href="/analyse/invalidite">Voir détails</LinkButton>
+                <Link href={analysisId ? `/analyse/${analysisId}/invalidite` : '#'}>Voir détails</Link>
               </div>
             </CardContent>
           </Card>
@@ -1136,7 +1885,7 @@ export default function GapsAndCardsClient({
               />
               <Legend />
               <div className="flex justify-end">
-                <LinkButton href="/analyse/deces">Voir détails</LinkButton>
+                <Link href={analysisId ? `/analyse/${analysisId}/deces` : '#'}>Voir détails</Link>
               </div>
             </CardContent>
           </Card>
@@ -1190,7 +1939,8 @@ export default function GapsAndCardsClient({
               />
               <Legend />
               <div className="flex justify-end">
-                <LinkButton href="/analyse/retraite">Voir détails</LinkButton>
+                <Link href={analysisId ? `/analyse/${analysisId}/retraite` : '#'}>Voir détails</Link>
+
               </div>
             </CardContent>
           </Card>

@@ -32,6 +32,11 @@ export default function ParametresRapides({ value, onChange }: Props) {
   const setTravaillePlusDe8h = (yes: boolean) =>
     updateCtx({ weeklyHours: yes ? 9 : 0 }); // 9 = >=8h, 0 = <8h
 
+  // Champs “carrière AVS” (stockés dans ctx en souplesse pour éviter les erreurs TS)
+const debutActiviteYear = (ctx as any)?.debutActiviteYear as number | undefined;
+const anneesSansCotisationList = ((ctx as any)?.anneesSansCotisationList as number[] | undefined) ?? [];
+
+
   return (
     <div className="rounded-2xl border p-4 shadow-sm bg-white">
       <div className="mb-3 text-sm font-semibold">Paramètres rapides</div>
@@ -69,6 +74,57 @@ export default function ParametresRapides({ value, onChange }: Props) {
 
       {/* Contexte famille / invalidité */}
       <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {/* Début activité lucrative (année) */}
+<NumberField
+  label="Début activité lucrative en Suisse (année)"
+  value={debutActiviteYear ?? 0}
+  min={1950}
+  onChange={(n) =>
+    updateCtx({ ...(ctx as any), debutActiviteYear: Number.isFinite(n) && n > 0 ? n : undefined } as any)
+  }
+/>
+
+{/* Années sans cotisation AVS (liste) */}
+<div>
+  <div className="mb-1 text-xs text-gray-600">Années sans cotisation AVS</div>
+  <div className="flex items-center gap-2">
+    <input
+      type="number"
+      inputMode="numeric"
+      min={1950}
+      max={new Date().getFullYear()}
+      className="h-9 w-32 rounded-lg border px-3 text-sm"
+      placeholder="ex. 2012"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          const v = Number((e.target as HTMLInputElement).value);
+          if (Number.isFinite(v)) {
+            const next = Array.from(new Set([...(anneesSansCotisationList ?? []), v])).sort();
+            updateCtx({ ...(ctx as any), anneesSansCotisationList: next } as any);
+            (e.target as HTMLInputElement).value = '';
+          }
+        }
+      }}
+    />
+    <div className="flex flex-wrap gap-1">
+      {(anneesSansCotisationList ?? []).map((y) => (
+        <button
+          key={y}
+          type="button"
+          className="rounded-full border px-2 py-0.5 text-xs hover:bg-gray-50"
+          onClick={() => {
+            const next = (anneesSansCotisationList ?? []).filter((k) => k !== y);
+            updateCtx({ ...(ctx as any), anneesSansCotisationList: next } as any);
+          }}
+          title="Cliquer pour retirer"
+        >
+          {y} ✕
+        </button>
+      ))}
+    </div>
+  </div>
+</div>
+
         <Select
           label="État civil"
           value={ctx.survivor.maritalStatus}
@@ -89,6 +145,33 @@ export default function ParametresRapides({ value, onChange }: Props) {
             })
           }
         />
+
+        {ctx.survivor.maritalStatus === 'concubinage' && (
+  <>
+    <YesNo
+      label="Partenaire désigné (clause déposée)"
+      value={Boolean((ctx.survivor as any)?.partnerDesignated)}
+      onChange={(yes) =>
+        updateCtx({
+          survivor: { ...(ctx.survivor as any), partnerDesignated: yes },
+          // si on décoche, on remet cohabitationYears à 0
+          ...(yes ? {} : { survivor: { ...(ctx.survivor as any), partnerDesignated: false, cohabitationYears: 0 } }),
+        } as any)
+      }
+    />
+    <NumberField
+      label="Années de vie commune"
+      value={Number((ctx.survivor as any)?.cohabitationYears ?? 0)}
+      onChange={(n) =>
+        updateCtx({
+          survivor: { ...(ctx.survivor as any), cohabitationYears: Math.max(0, n) },
+        } as any)
+      }
+    />
+    <div className="text-[11px] text-gray-500 -mt-1">Minimum 5 ans requis pour rente partenaire LPP.</div>
+  </>
+)}
+
 
         {/* SEXE — Nouveau toggle F/M (source provisoire : ctx.survivor.sexe) */}
         <SexeToggle

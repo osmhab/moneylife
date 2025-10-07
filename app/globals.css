@@ -115,3 +115,81 @@
   * { @apply border-border outline-ring/50; }
   body { @apply bg-background text-foreground; }
 }
+
+
+/* ===== Rainbow Flow (déjà en place) ===== */
+@keyframes ml-drift-1 {
+  0%,100% { transform: translate3d(-15%,-12%,0) scale(1); }
+  50%     { transform: translate3d(20%,15%,0) scale(1.25); }
+}
+@keyframes ml-drift-2 {
+  0%,100% { transform: translate3d(10%,-10%,0) scale(1); }
+  50%     { transform: translate3d(-22%,18%,0) scale(1.22); }
+}
+@keyframes ml-drift-3 {
+  0%,100% { transform: translate3d(-12%,12%,0) scale(1); }
+  50%     { transform: translate3d(18%,-20%,0) scale(1.28); }
+}
+
+
+.ml-anim-drift-1  { animation: ml-drift-1 4s ease-in-out infinite; }
+.ml-anim-drift-2  { animation: ml-drift-2 5s ease-in-out infinite; }
+.ml-anim-drift-3  { animation: ml-drift-3 6s ease-in-out infinite; }
+.ml-anim-drift-1d { animation: ml-drift-1 3s ease-in-out infinite; }
+.ml-anim-drift-2d { animation: ml-drift-2 4s ease-in-out infinite; }
+.ml-anim-drift-3d { animation: ml-drift-3 5s ease-in-out infinite; }
+
+/* ===== Blobs sway (verticale ample & irrégulière) ===== */
+@keyframes ml-blob-sway {
+  0%   { transform: translateY(calc(var(--ml-amp, 28px) * -0.9)); }
+  11%  { transform: translateY(calc(var(--ml-amp, 28px) *  0.6)); }
+  23%  { transform: translateY(calc(var(--ml-amp, 28px) * -0.2)); }
+  37%  { transform: translateY(calc(var(--ml-amp, 28px) *  1.0)); }
+  52%  { transform: translateY(calc(var(--ml-amp, 28px) * -0.7)); }
+  68%  { transform: translateY(calc(var(--ml-amp, 28px) *  0.5)); }
+  84%  { transform: translateY(calc(var(--ml-amp, 28px) * -1.0)); }
+  100% { transform: translateY(calc(var(--ml-amp, 28px) * -0.9)); }
+}
+
+@layer utilities {
+  .ml-blob-sway {
+    animation: ml-blob-sway var(--ml-sway, 8s) ease-in-out infinite;
+    animation-delay: var(--ml-delay, 0s);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ml-blob-sway { animation: none !important; }
+}
+
+
+
+
+/* ===== Waves — seamless (quad-tiling) + irregular sway ===== */
+
+/* 4 tuiles → on translate -25% pour boucler sans joint */
+@keyframes ml-loop-x-25 {
+  from { transform: translate3d(0,0,0); }
+  to   { transform: translate3d(-25%,0,0); }
+}
+
+/* Tangage vertical pseudo-aléatoire (une amplitude commune) */
+@keyframes ml-sway-irregular {
+  0%   { transform: translateY(calc(var(--ml-amp, 28px) * -0.9)); }
+  12%  { transform: translateY(calc(var(--ml-amp, 28px) *  0.5)); }
+  25%  { transform: translateY(calc(var(--ml-amp, 28px) * -0.3)); }
+  38%  { transform: translateY(calc(var(--ml-amp, 28px) *  1.0)); }
+  52%  { transform: translateY(calc(var(--ml-amp, 28px) * -0.7)); }
+  68%  { transform: translateY(calc(var(--ml-amp, 28px) *  0.4)); }
+  84%  { transform: translateY(calc(var(--ml-amp, 28px) * -1.0)); }
+  100% { transform: translateY(calc(var(--ml-amp, 28px) * -0.9)); }
+}
+
+@layer utilities {
+  .ml-loop-x { animation: ml-loop-x-25 var(--ml-scroll, 14s) linear infinite; }
+  .ml-sway-y { animation: ml-sway-irregular var(--ml-sway, 7s) ease-in-out infinite; animation-delay: var(--ml-delay, 0s); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ml-loop-x, .ml-sway-y { animation: none !important; }
+}

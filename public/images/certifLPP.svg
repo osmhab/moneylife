@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="224px" height="302px" viewBox="0 0 224 302" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>CertifLPP</title>
+    <defs>
+        <path d="M0,0 L224,0 L224,302 L0,302 L0,0 Z" id="path-1"></path>
+        <linearGradient x1="57.9496409%" y1="100%" x2="-9.97731845%" y2="-49.5378199%" id="linearGradient-2">
+            <stop stop-color="#4FD1C5" offset="0%"></stop>
+            <stop stop-color="#4FD1C5" offset="100%"></stop>
+        </linearGradient>
+        <path d="M153.270647,1.98951966e-13 L153.270647,40.9119138 C153.270647,54.1667478 164.015813,64.9119138 177.270647,64.9119138 L224,64.9119138 L224,64.9119138 L153.270647,1.98951966e-13 Z" id="path-3"></path>
+        <filter x="-3.5%" y="-3.9%" width="114.1%" height="115.4%" filterUnits="objectBoundingBox" id="filter-4">
+            <feOffset dx="5" dy="5" in="SourceAlpha" result="shadowOffsetOuter1"></feOffset>
+            <feComposite in="shadowOffsetOuter1" in2="SourceAlpha" operator="out" result="shadowOffsetOuter1"></feComposite>
+            <feColorMatrix values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.25 0" type="matrix" in="shadowOffsetOuter1"></feColorMatrix>
+        </filter>
+    </defs>
+    <g id="CertifLPP" stroke="none" fill="none" xlink:href="#path-1" fill-rule="evenodd" stroke-width="1">
+        <g id="Icone-LPP-group">
+            <g id="Group">
+                <path d="M24,0 L153.270647,0 L153.270647,0 L224,64.9119138 L224,278 C224,291.254834 213.254834,302 200,302 L24,302 C10.745166,302 0,291.254834 0,278 L0,24 C0,10.745166 10.745166,0 24,0 Z" id="Rectangle-2" fill="url(#linearGradient-2)"></path>
+                <g id="LPP" transform="translate(24, 20.5)" fill="#FFFFFF" fill-rule="nonzero">
+                    <polygon id="Path" points="3.6328125 59 31.8779297 59 31.8779297 51.4619141 12.7753906 51.4619141 12.7753906 15.3154297 3.6328125 15.3154297"></polygon>
+                    <path d="M36.6163872,59 L45.7589653,59 L45.7589653,45.2255859 L54.1749809,45.2255859 C63.3781059,45.2255859 69.5236138,39.2919922 69.5236138,30.3007812 L69.5236138,30.2402344 C69.5236138,21.2490234 63.3781059,15.3154297 54.1749809,15.3154297 L36.6163872,15.3154297 L36.6163872,59 Z M51.9347466,22.5507812 C57.1720513,22.5507812 60.2599419,25.3056641 60.2599419,30.2705078 L60.2599419,30.3310547 C60.2599419,35.2958984 57.1720513,38.0810547 51.9347466,38.0810547 L45.7589653,38.0810547 L45.7589653,22.5507812 L51.9347466,22.5507812 Z" id="Shape"></path>
+                    <path d="M74.2317978,59 L83.374376,59 L83.374376,45.2255859 L91.7903916,45.2255859 C100.993517,45.2255859 107.139024,39.2919922 107.139024,30.3007812 L107.139024,30.2402344 C107.139024,21.2490234 100.993517,15.3154297 91.7903916,15.3154297 L74.2317978,15.3154297 L74.2317978,59 Z M89.5501572,22.5507812 C94.7874619,22.5507812 97.8753525,25.3056641 97.8753525,30.2705078 L97.8753525,30.3310547 C97.8753525,35.2958984 94.7874619,38.0810547 89.5501572,38.0810547 L83.374376,38.0810547 L83.374376,22.5507812 L89.5501572,22.5507812 Z" id="Shape"></path>
+                </g>
+                <rect id="Rectangle-3" fill="#FFFFFF" x="26" y="108.5" width="100" height="17.5" rx="8.75"></rect>
+                <rect id="Rectangle-3-Copy" fill="#FFFFFF" x="26" y="133.5" width="148" height="17.5" rx="8.75"></rect>
+            </g>
+            <g id="Path">
+                <use fill="black" fill-opacity="1" filter="url(#filter-4)" xlink:href="#path-3"></use>
+                <use fill="#AFEAE5" fill-rule="evenodd" xlink:href="#path-3"></use>
+            </g>
+        </g>
+    </g>
+</svg>

@@ -4,11 +4,18 @@ import Link from "next/link";
 import { db } from "@/lib/firebaseAdmin";
 import type * as admin from "firebase-admin";
 import AutosaveBridge from './_client/AutosaveBridge';
+import LppCertificateEditor from './_client/LppCertificateEditor';
+import type { LppParsed, LppProofs } from '@/lib/layoutTypes';
+import RobotApprentiCard from './_client/RobotApprentiCard';
+
+
 
 import PrefillConfiguratorButton from "../_components/PrefillConfiguratorButton";
 import { computeAvsAiMonthly } from "@/lib/avsAI";
 import AvsAiCard from "../_components/AvsAiCard";
 import GapsAndCardsClient from "../_components/GapsAndCardsClient";
+import AnalysisArrivalToast from './_client/AnalysisArrivalToast';
+
 
 // LPP helpers
 import { computeLppAnalysis, type SurvivorContext } from "@/lib/lpp";
@@ -21,6 +28,12 @@ import {
   computeAccidentSurvivorsMonthly,
 } from "@/lib/laa";
 
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
+import { BadgeCheck } from "lucide-react";
+
+
+
+
 export const dynamic = 'force-dynamic';
 export const revalidate = 0; // pas de SSG/ISR
 
@@ -31,53 +44,7 @@ const SHOW_INFO_CARDS = false;
 /* =========================
  * Types Firestore (LPP parsed & Analyse)
  * ========================= */
-type LppParsed = {
-  id?: string;
-  clientToken?: string;
-  // Identité & méta
-  employeur?: string | null;
-  caisse?: string | null;
-  dateCertificat?: string | null;
-  prenom?: string | null;
-  nom?: string | null;
-  dateNaissance?: string | null;
-  // Salaires & avoirs
-  salaireDeterminant?: number | null;
-  deductionCoordination?: number | null;
-  salaireAssureEpargne?: number | null;
-  salaireAssureRisque?: number | null;
-  avoirVieillesse?: number | null;
-  avoirVieillesseSelonLpp?: number | null;
-  interetProjetePct?: number | null;
-  // Rentes & capitaux (annuels pour les rentes certificat)
-  renteInvaliditeAnnuelle?: number | null;
-  renteEnfantInvaliditeAnnuelle?: number | null;
-  renteConjointAnnuelle?: number | null;
-  renteOrphelinAnnuelle?: number | null;
-  capitalDeces?: number | null;
-  capitalRetraite65?: number | null;
-  renteRetraite65Annuelle?: number | null;
-  // Options / opérations
-  rachatPossible?: number | null;
-  eplDisponible?: number | null;
-  miseEnGage?: boolean | null;
 
-  // Méta IA
-  proofs?: Record<
-    string,
-    { snippet: string; page?: number; x1?: number; y1?: number; x2?: number; y2?: number }
-  > | null;
-  confidence?: number | null;
-  needs_review?: boolean;
-  extractedAt?: admin.firestore.FieldValue;
-  docType?: "LPP_CERT";
-  sourcePath?: string;
-  filename?: string;
-  text?: string;
-
-  // Optionnel: anomalies listées par l'IA
-  issues?: string[];
-};
 
 type AnalysisDoc = {
   clientToken: string;
@@ -208,14 +175,56 @@ function computeAge(dateStr?: string | null): number | undefined {
   return age;
 }
 
+
+
+/* =========================
+ * Helpers Server → Client (plain objects only)
+ * ========================= */
+function isPlainObject(o: any) {
+  if (o === null || typeof o !== 'object') return false;
+  const proto = Object.getPrototypeOf(o);
+  return proto === Object.prototype || proto === null;
+}
+function tsToIso(v: any): string | undefined {
+  // Firestore Timestamp: has toDate() or {_seconds,_nanoseconds}
+  try {
+    if (v?.toDate) return v.toDate().toISOString();
+    if (typeof v?._seconds === 'number') {
+      const ms = v._seconds * 1000 + Math.floor((v._nanoseconds || 0) / 1e6);
+      return new Date(ms).toISOString();
+    }
+  } catch (_) {}
+  return undefined;
+}
+/** Supprime/convertit tout ce qui n'est pas “plain” pour être passé à un Client Component */
+function sanitizeForClient<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    if (v == null) { out[k] = v; continue; }
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') { out[k] = v; continue; }
+    if (Array.isArray(v)) {
+      out[k] = v.map((el) => (typeof el === 'object' ? sanitizeForClient(el as any) : el));
+      continue;
+    }
+    const iso = tsToIso(v);
+    if (iso) { out[k] = iso; continue; }
+    if (isPlainObject(v)) { out[k] = sanitizeForClient(v as any); continue; }
+    // Sinon: on DROP (ex: classes, Map, Date, etc.)
+    // console.warn('[sanitizeForClient] Dropped non-plain field:', k);
+  }
+  return out;
+}
+
+
+
+
 /* =========================
  * Page (Server Component)
  * ========================= */
-type Props = { params: Promise<{ id: string }> };
-
-
-export default async function AnalysePage({ params }: Props) {
-  const { id } = await params;
+export default async function AnalysePage(
+  props: { params: Promise<{ id: string }> }
+) {
+  const { id } = await props.params; // ✅ attendre params avant d'utiliser id
 
   const analysis = await getAnalysis(id);
   if (!analysis) {
@@ -248,10 +257,39 @@ export default async function AnalysePage({ params }: Props) {
   const coeff: 1 | 0.75 | 0.5 | 0.25 = analysis?.meta?.coeffCarriere ?? 1;
 
   // --- AVS/AI (Échelle 44)
-  const avs = await computeAvsAiMonthly(revenuAnnuel, {
-    year: 2025,
-    coeffCarriere: coeff,
-  });
+
+
+// 1) AVS “actuelle” (risques immédiats: invalidité & survivants)
+const avsNow = await computeAvsAiMonthly(revenuAnnuel, {
+  year: 2025,
+  coeffCarriere: coeff,
+  // projectTo65: false (par défaut)
+})
+
+// 2) AVS “projetée 65” (pour la carte Retraite)
+const startWorkYearCH =
+  analysis?.meta?.debutActiviteYear ??
+  analysis?.meta?.debutActiviteSuisse ??
+  analysis?.meta?.startWorkYearCH ??
+  analysis?.meta?.startYear ??
+  undefined
+
+const missingYearsList =
+  analysis?.meta?.anneesSansCotisationList ??
+  analysis?.meta?.missingYears ??
+  [] as number[]
+
+const birthDateISO = lpp?.dateNaissance ?? analysis?.meta?.dateNaissance ?? undefined
+
+const avs65 = await computeAvsAiMonthly(revenuAnnuel, {
+  year: 2025,
+  coeffCarriere: coeff,          // fallback si infos incomplètes
+  projectTo65: true,             // ← active la projection
+  birthDateISO,
+  startWorkYearCH,
+  missingYears: Array.isArray(missingYearsList) ? missingYearsList : [],
+})
+
 
   // --- LPP (coordinated salary, savings, survivants)
   const employmentRate: number =
@@ -259,7 +297,7 @@ export default async function AnalysePage({ params }: Props) {
     analysis?.meta?.tauxOccupation ??
     1;
 
-  // Rente LPP de référence mensuelle (pour survivants)
+  // Rente LPP de référence mensuelle (***uniquement pour survivants***, cf. minima 60% / 20%)
   const referenceMonthlyPension: number =
     toMonthly(lpp?.renteInvaliditeAnnuelle) ??
     toMonthly(lpp?.renteRetraite65Annuelle) ??
@@ -296,10 +334,11 @@ export default async function AnalysePage({ params }: Props) {
     {
       annualSalaryAvs: revenuAnnuel,
       degreeInvalidityPct: degreeInvalidityPct,
-      aiMonthly: avs.invalidity, // coordination AI + LAA ≤ 90%
+      aiMonthly: avsNow.invalidity, // coordination AI + LAA ≤ 90%
     },
     laaRegs
   );
+
 
   // Survivants accident — context minimal
   const maritalStatus = survivorCtx.maritalStatus;
@@ -308,9 +347,14 @@ export default async function AnalysePage({ params }: Props) {
     maritalStatus === "mariee" ||
     maritalStatus === "partenariat_enregistre";
 
-  const spouseHasRightAccident: boolean =
-    (analysis?.meta?.laaSpouseHasRight as boolean | undefined) ??
-    (isMarriedOrReg && (survivorCtx.hasChild || (survivorCtx.ageAtWidowhood ?? 45) >= 45));
+  const ageAtWidowhood = computeAge(lpp?.dateNaissance) ?? analysis?.meta?.age;
+const hasChildNow = !!survivorCtx.hasChild;
+
+const spouseHasRightAccident: boolean =
+  (analysis?.meta?.laaSpouseHasRight as boolean | undefined) ??
+  (isMarriedOrReg && (hasChildNow || (typeof ageAtWidowhood === 'number' && ageAtWidowhood >= 45)));
+
+
 
   const nbEnfants: number =
     analysis?.meta?.nbEnfants ??
@@ -319,8 +363,10 @@ export default async function AnalysePage({ params }: Props) {
       : 0);
 
   const avsSurvivorsMonthlyTotal =
-    (spouseHasRightAccident ? (avs.widowWidower ?? 0) : 0) +
-    nbEnfants * (avs.child ?? 0);
+  (spouseHasRightAccident ? (avsNow.widowWidower ?? 0) : 0) +
+  nbEnfants * (avsNow.child ?? 0);
+
+
 
   const survAcc = computeAccidentSurvivorsMonthly(
     {
@@ -338,19 +384,59 @@ export default async function AnalysePage({ params }: Props) {
   const clientDocPath = analysis?.clientToken ? `clients/${analysis.clientToken}` : "";
 
 
+  // Rente invalidité LPP depuis le certificat (si dispo) — on n'applique plus de fallback ici
+const lppInvalidityFromCert =
+  typeof lpp?.renteInvaliditeAnnuelle === "number"
+    ? Math.round(lpp.renteInvaliditeAnnuelle / 12)
+    : undefined;
+
+// Inputs pour le fallback "minima légaux" — transmis à useGaps (calcul côté lib)
+const ageYears = computeAge(lpp?.dateNaissance) ?? analysis?.meta?.age;
+
+const currentAssetsLpp =
+  (typeof lpp?.avoirVieillesseSelonLpp === "number" ? lpp.avoirVieillesseSelonLpp : undefined) ??
+  (typeof lpp?.avoirVieillesse === "number" ? lpp.avoirVieillesse : undefined);
+
+
+
+
+
+// Normalisation & sérialisation pour l'éditeur (Client Component)
+const lppForEditor: LppParsed | null = lpp
+  ? {
+      ...(sanitizeForClient(lpp) as any),
+      review: lpp.review ?? {
+        status: lpp.needs_review ? 'flagged' : 'pending',
+      },
+      sources: lpp.sources ?? {},
+    }
+  : null;
+
+
+
+const isVerified = lppForEditor?.review?.status === 'verified';
+
+
+
+
   return (
     <main className="w-full space-y-8 px-2 sm:px-4 lg:px-6">
+      <AnalysisArrivalToast
+        analysisId={id}
+        confidence={lpp?.confidence ?? null}
+        isVerified={isVerified}
+        force
+      />
+
       {/* Header */}
       <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Analyse #{id.slice(0, 8)}</h1>
-        </div>
+       
         <div className="flex items-center gap-2">
           <Link
             href="/scan"
             className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
           >
-            ⟵ Refaire un scan
+            Refaire un scan
           </Link>
           {/* @ts-expect-error server/edge compat */}
           <PrefillConfiguratorButton clientToken={id} disabled={!lpp} />
@@ -365,18 +451,29 @@ export default async function AnalysePage({ params }: Props) {
     <h2 className="mb-4 text-xl font-semibold">1er pilier (AVS/AI)</h2>
     <AvsAiCard
       year={2025}
-      oldAge65={avs.oldAge65}
-      invalidity={avs.invalidity}
-      widowWidower={avs.widowWidower}
-      orphan={avs.orphan}
-      child={avs.child}
-      matchedIncome={avs.baseIncomeMatched}
-      coeff={avs.coeff}
-      forWidowWidower120={avs.forWidowWidower120}
-      supplementary30={avs.supplementary30}
+      // retraite = projeté
+      oldAge65={avs65.oldAge65}
+      // risques immédiats = actuel
+      invalidity={avsNow.invalidity}
+      widowWidower={avsNow.widowWidower}
+      orphan={avsNow.orphan}
+      child={avsNow.child}
+      // meta/info (peu critique) — tu peux prendre avs65 ou avsNow, même baseIncomeMatched
+      matchedIncome={avs65.baseIncomeMatched ?? avsNow.baseIncomeMatched}
+      // on garde le coeff ACTUEL pour transparence
+      coeff={avsNow.coeff}
+      forWidowWidower120={avs65.forWidowWidower120}
+      supplementary30={avs65.supplementary30}
     />
+    {/* Optionnel: petite ligne de transparence */}
+    {typeof avs65.coeffProjectedTo65 === 'number' && (
+      <p className="mt-2 text-xs text-muted-foreground">
+        AVS projetée à 65 ans : {Math.round(avs65.coeffProjectedTo65 * 44)} / 44 années.
+      </p>
+    )}
   </section>
 )}
+
 
 
       {/* Bloc interactif (Lacunes + LPP + LAA synchronisés) */}
@@ -386,32 +483,53 @@ export default async function AnalysePage({ params }: Props) {
         clientDocPath={clientDocPath} 
         annualIncome={revenuAnnuel}
         avs={{
-          invalidityMonthly: avs.invalidity,
-          widowMonthly: avs.widowWidower,
-          childMonthly: avs.child,
-          oldAgeMonthly: avs.oldAge65,
+          // risques immédiats = AVS actuelle
+          invalidityMonthly: avsNow.invalidity,
+          widowMonthly: avsNow.widowWidower,
+          childMonthly: avsNow.child,
+          // retraite = AVS projetée à 65 ans
+          oldAgeMonthly: avs65.oldAge65,
         }}
+
         lpp={{
-          invalidityMonthly:
-            typeof lpp?.renteInvaliditeAnnuelle === "number"
-              ? Math.round(lpp.renteInvaliditeAnnuelle / 12)
-              : referenceMonthlyPension,
-          invalidityChildMonthly:
-            typeof lpp?.renteEnfantInvaliditeAnnuelle === "number"
-              ? Math.round(lpp.renteEnfantInvaliditeAnnuelle / 12)
-              : undefined,
-          widowMonthly: certWidowMonthly ?? lppRes.survivor.amounts.widowWidowerMonthly,
-          orphanMonthly: certOrphanMonthly ?? lppRes.survivor.amounts.orphanMonthly,
-          retirementAnnualFromCert: lpp?.renteRetraite65Annuelle ?? undefined,
-          capitalAt65FromCert: lpp?.capitalRetraite65 ?? undefined,
-          minConversionRatePct: lppRes.meta.convMinPct,
-        }}
+  // 1) Invalidité (priorité au certif — le fallback minima sera fait dans useGaps)
+  invalidityMonthly: lppInvalidityFromCert,
+  invalidityChildMonthly:
+    typeof lpp?.renteEnfantInvaliditeAnnuelle === "number"
+      ? Math.round(lpp.renteEnfantInvaliditeAnnuelle / 12)
+      : undefined, // sinon 20% sera appliqué côté useGaps
+
+  // 2) Survivants LPP (priorité aux certifs; sinon minima calculés dans computeLppAnalysis)
+  widowMonthly: certWidowMonthly ?? lppRes.survivor.amounts.widowWidowerMonthly,
+  orphanMonthly: certOrphanMonthly ?? lppRes.survivor.amounts.orphanMonthly,
+
+  // 3) Retraite LPP (pour l’estimation retraite et proxy éventuel)
+  retirementAnnualFromCert: lpp?.renteRetraite65Annuelle ?? undefined,
+  capitalAt65FromCert: lpp?.capitalRetraite65 ?? undefined,
+  minConversionRatePct: lppRes.meta.convMinPct,
+
+  // 4) ***NOUVEAU*** — Inputs pour fallback "minima invalidité" (conforme loi)
+  invalidityMinYear: 2025,
+  invalidityMinAgeYears: ageYears,
+  invalidityMinCoordinatedSalary: lppRes.coordinatedSalary, // annuel LPP obligatoire
+  invalidityMinCurrentAssets: currentAssetsLpp, // avoir acquis au moment du droit (si connu)
+}}
+
+
         
-        survivorDefault={{
-          maritalStatus: survivorCtx.maritalStatus,
-          hasChild: !!survivorCtx.hasChild,
-          ageAtWidowhood: survivorCtx.ageAtWidowhood,
-        }}
+   survivorDefault={{
+  maritalStatus: survivorCtx.maritalStatus,
+  hasChild: !!survivorCtx.hasChild,
+  ageAtWidowhood: computeAge(lpp?.dateNaissance) ?? analysis?.meta?.age, // ✅ pas de "?? 45"
+  partnerDesignated: !!survivorCtx.beneficiaryDesignationOnFile,
+  cohabitationYears: survivorCtx.cohabitationYears,
+  marriedSince5y: typeof survivorCtx.marriageYears === 'number'
+    ? survivorCtx.marriageYears >= 5
+    : undefined,
+}}
+
+
+
         laaParams={
           laaRegs?.laa
             ? {
@@ -431,6 +549,7 @@ export default async function AnalysePage({ params }: Props) {
           invalidityDegreePct: 100,
           childrenCount: analysis?.meta?.nbEnfants ?? 0,
           weeklyHours: analysis?.meta?.weeklyHours ?? undefined,
+          birthDateISO,
         }}
         lppCard={{
           year: lppRes.year,
@@ -471,131 +590,74 @@ export default async function AnalysePage({ params }: Props) {
       />
       </Suspense>
 
-      {/* Bloc Certificat LPP — détails extraits */}
-      <section className="rounded-2xl border bg-white p-4 shadow-sm md:p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Certificat LPP</h2>
-          {lpp && (
-            <div className="flex items-center gap-2">
-              <span
-                className="rounded-full px-2 py-1 text-xs font-medium text-white"
-                style={{ backgroundColor: "#4fd1c5" }}
-              >
-                Confiance {Math.round((lpp.confidence ?? 0.7) * 100)}%
-              </span>
-              {lpp.needs_review && (
-                <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
-                  Vérifier
-                </span>
-              )}
-            </div>
-          )}
+
+
+
+
+
+
+
+
+{/* Accordéon — LPP */}
+<Accordion type="single" collapsible>
+  {/* Item 1 : Robot apprenti (inclut l’éditeur) */}
+  <AccordionItem
+   value="robot-lpp"
+   className="rounded-2xl border bg-white shadow-sm overflow-hidden"
+   >
+<AccordionTrigger 
+id="robot-accordion-trigger"
+className="px-4 md:px-6 text-base hover:bg-muted/40 data-[state=open]:bg-muted/30">
+  <div className="flex w-full items-center gap-2 pr-2">
+    <span className="group-hover:underline">Robot apprenti — Certificat LPP</span>
+
+    {/* badge poussé à droite, avant le chevron */}
+    {isVerified ? (
+  <span
+    className="ml-auto mr-2 inline-flex items-center gap-1 rounded-full border border-transparent
+               bg-[#4fd1c5] px-2 py-0.5 text-xs font-medium text-white pointer-events-none"
+  >
+    <BadgeCheck className="h-3.5 w-3.5" />
+    Vérifié
+  </span>
+) : (
+  <span
+    className="ml-auto mr-2 inline-flex items-center rounded-full border border-amber-200
+               bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 pointer-events-none"
+  >
+    Vérifier svp
+  </span>
+)}
+
+  </div>
+</AccordionTrigger>
+
+
+
+
+
+    <AccordionContent className="px-0 md:px-0 pb-0 md:pb-0">
+      {!lppForEditor ? (
+        <div className="px-4 md:px-6 pb-4 md:pb-6 text-sm text-gray-600">
+          Aucun certificat LPP n’a été extrait pour ce client (encore).
         </div>
+      ) : (
+        <div className="px-4 md:px-6 pb-4 md:pb-6">
+          <RobotApprentiCard doc={lppForEditor} />
+        </div>
+      )}
+    </AccordionContent>
+  </AccordionItem>
 
-        {!lpp ? (
-          <p className="text-sm text-gray-600">
-            Aucun certificat LPP n’a été extrait pour ce client (encore).
-          </p>
-        ) : (
-          <div className="space-y-6">
-            {/* Identité & document */}
-            <div>
-              <h3 className="mb-2 font-medium">Identité & document</h3>
-              <div className="grid gap-3 text-sm md:grid-cols-2">
-                <Field label="Caisse de pension" value={lpp.caisse || "—"} />
-                <Field label="Date du certificat" value={formatDateSwiss(lpp.dateCertificat)} />
-                <Field label="Prénom" value={lpp.prenom || "—"} />
-                <Field label="Nom" value={lpp.nom || "—"} />
-                <Field label="Date de naissance" value={formatDateSwiss(lpp.dateNaissance)} />
-                <Field label="Employeur" value={lpp.employeur || "—"} />
-                <Field label="Fichier source" value={lpp.filename || lpp.sourcePath || "—"} />
-              </div>
-            </div>
 
-            {/* Salaires & avoirs */}
-            <div>
-              <h3 className="mb-2 font-medium">Salaires & avoirs</h3>
-              <div className="grid gap-3 text-sm md:grid-cols-3">
-                <Field label="Salaire déterminant" value={formatChf(lpp.salaireDeterminant)} />
-                <Field label="Déduction de coordination" value={formatChf(lpp.deductionCoordination)} />
-                <Field label="Salaire assuré (Épargne)" value={formatChf(lpp.salaireAssureEpargne)} />
-                <Field label="Salaire assuré (Risque)" value={formatChf(lpp.salaireAssureRisque)} />
-                <Field label="Avoir de vieillesse (actuel)" value={formatChf(lpp.avoirVieillesse)} />
-                <Field label="… dont selon LPP/BVG" value={formatChf(lpp.avoirVieillesseSelonLpp)} />
-                <Field label="Taux d’intérêt projeté" value={formatPct(lpp.interetProjetePct)} />
-              </div>
-            </div>
+</Accordion>
 
-            {/* Prestations & retraite */}
-            <div>
-              <h3 className="mb-2 font-medium">Prestations & retraite</h3>
-              <div className="grid gap-3 text-sm md:grid-cols-3">
-                <Field label="Rente d’invalidité (an)" value={formatChf(lpp.renteInvaliditeAnnuelle)} />
-                <Field
-                  label="Rente enfant d’invalide (an)"
-                  value={formatChf(lpp.renteEnfantInvaliditeAnnuelle)}
-                />
-                <Field label="Rente de conjoint (an)" value={formatChf(lpp.renteConjointAnnuelle)} />
-                <Field label="Rente d’orphelin (an)" value={formatChf(lpp.renteOrphelinAnnuelle)} />
-                <Field label="Capital décès" value={formatChf(lpp.capitalDeces)} />
-                <Field label="Capital à la retraite (65 ans)" value={formatChf(lpp.capitalRetraite65)} />
-                <Field
-                  label="Rente à la retraite (65 ans, an)"
-                  value={formatChf(lpp.renteRetraite65Annuelle)}
-                />
-              </div>
-            </div>
 
-            {/* Options / opérations */}
-            <div>
-              <h3 className="mb-2 font-medium">Options & opérations</h3>
-              <div className="grid gap-3 text-sm md:grid-cols-3">
-                <Field label="Rachat possible" value={formatChf(lpp.rachatPossible)} />
-                <Field label="EPL disponible" value={formatChf(lpp.eplDisponible)} />
-                <Field
-                  label="Mise en gage"
-                  value={
-                    lpp.miseEnGage == null ? "—" : lpp.miseEnGage ? "Oui" : "Non"
-                  }
-                />
-              </div>
-            </div>
 
-            {/* Anomalies & preuves */}
-            <div className="grid gap-6 md:grid-cols-2">
-              <div>
-                <h3 className="mb-2 font-medium">Anomalies détectées</h3>
-                {Array.isArray(lpp.issues) && lpp.issues.length > 0 ? (
-                  <ul className="space-y-1 list-disc pl-5 text-sm">
-                    {lpp.issues.map((it: string, i: number) => (
-                      <li key={i}>{it}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-gray-600">Aucune anomalie notée.</p>
-                )}
-              </div>
-              <div>
-                <h3 className="mb-2 font-medium">Preuves (snippets)</h3>
-                {lpp.proofs && Object.keys(lpp.proofs).length > 0 ? (
-                  <div className="max-h-48 space-y-1 overflow-auto rounded border bg-gray-50 p-3 text-sm text-gray-800">
-                    {Object.entries(lpp.proofs!).map(([k, v]) => (
-                      <div key={k}>
-                        <span className="mr-2 rounded bg-gray-200 px-1 py-0.5 font-mono text-xs">
-                          {k}
-                        </span>
-                        <span>{v.snippet}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-600">Aucune preuve disponible.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
+
+
+
+
 
       {/* Fichiers traités */}
       <section className="rounded-2xl border bg-white p-4 shadow-sm md:p-6">

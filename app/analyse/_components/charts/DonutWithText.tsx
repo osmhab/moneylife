@@ -1,3 +1,5 @@
+//app/analyse/_components/chart/DonutWithText.tsx
+
 'use client';
 
 import * as React from 'react';

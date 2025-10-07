@@ -15,6 +15,21 @@ import type { Line as LayoutLine } from "@/lib/layoutTypes";
 // 🔥 AVS/AI — Échelle 44 (2025)
 import { computeAvsAiMonthly } from "@/lib/avsAI";
 
+//ML Learner
+import {
+  normalizeText,
+  sha256Hex,
+  findExistingByTextHash,
+  mergeFromPrevious,
+  applyTemplateByCaisse,
+  slugifyCaisse,
+} from '@/lib/learner';
+
+
+
+
+
+
 /* ===========================
    Version / Logs
    =========================== */
@@ -44,6 +59,34 @@ function indexOfLine(lines: string[], re: RegExp): number {
   for (let i = 0; i < lines.length; i++) if (re.test(lines[i])) return i;
   return -1;
 }
+
+
+/* ===========================
+   Diff util — quels champs ont été remplis ?
+   =========================== */
+const DATA_KEYS: ReadonlyArray<string> = [
+  'employeur','caisse','dateCertificat','prenom','nom','dateNaissance',
+  'salaireDeterminant','deductionCoordination','salaireAssureEpargne','salaireAssureRisque',
+  'avoirVieillesse','avoirVieillesseSelonLpp','interetProjetePct',
+  'renteInvaliditeAnnuelle','renteEnfantInvaliditeAnnuelle','renteConjointAnnuelle','renteOrphelinAnnuelle',
+  'capitalDeces','capitalRetraite65','renteRetraite65Annuelle',
+  'rachatPossible','eplDisponible','miseEnGage'
+];
+
+function isEmptyVal(v: any) {
+  return v === undefined || v === null || v === '';
+}
+function diffFilled(prev: any, next: any, keys = DATA_KEYS): string[] {
+  const changed: string[] = [];
+  for (const k of keys) {
+    const a = prev?.[k];
+    const b = next?.[k];
+    if (isEmptyVal(a) && !isEmptyVal(b) && a !== b) changed.push(k);
+  }
+  return changed;
+}
+
+
 
 /* ===========================
    Détection LPP (FR/DE/IT + filename)
@@ -453,49 +496,84 @@ export async function POST(req: Request) {
             confidence, issues: sanityIssues
           });
 
-          // Firestore : enregistrement complet LPP
-          const lppDoc = {
-            clientToken,
-            sourcePath: f.name,
-            filename,
-            text,
-            // Champs LPP étendus
-            employeur: ai.employeur ?? null,
-            caisse: ai.caisse ?? null,
-            dateCertificat: ai.dateCertificat ?? null,
-            prenom: ai.prenom ?? null,
-            nom: ai.nom ?? null,
-            dateNaissance: ai.dateNaissance ?? null,
-            salaireDeterminant: ai.salaireDeterminant ?? null,
-            deductionCoordination: ai.deductionCoordination ?? null,
-            salaireAssureEpargne: ai.salaireAssureEpargne ?? null,
-            salaireAssureRisque: ai.salaireAssureRisque ?? null,
-            avoirVieillesse: ai.avoirVieillesse ?? null,
-            avoirVieillesseSelonLpp: ai.avoirVieillesseSelonLpp ?? null,
-            interetProjetePct: ai.interetProjetePct ?? null,
-            renteInvaliditeAnnuelle: ai.renteInvaliditeAnnuelle ?? null,
-            renteEnfantInvaliditeAnnuelle: ai.renteEnfantInvaliditeAnnuelle ?? null,
-            renteConjointAnnuelle: ai.renteConjointAnnuelle ?? null,
-            renteOrphelinAnnuelle: ai.renteOrphelinAnnuelle ?? null,
-            capitalDeces: ai.capitalDeces ?? null,
-            capitalRetraite65: ai.capitalRetraite65 ?? null,
-            renteRetraite65Annuelle: ai.renteRetraite65Annuelle ?? null,
-            rachatPossible: ai.rachatPossible ?? null,
-            eplDisponible: ai.eplDisponible ?? null,
-            miseEnGage: ai.miseEnGage ?? null,
+// Firestore : enregistrement complet LPP (avec MoneyLife Learner + meta)
+const textHash = await sha256Hex(normalizeText(text));
 
-            // Méta
-            proofs: ai?.proofs ?? null,
-            confidence,
-            needs_review,
-            extractedAt: now,
-            docType: "LPP_CERT" as const,
-          };
+// Base parsed doc
+let parsed: any = {
+  clientToken,
+  sourcePath: f.name,
+  filename,
+  text,
 
-          const ref = await db.collection("lpp_parsed").add(lppDoc);
-          console.log("[parse:file] Firestore saved LPP id=", ref.id);
-          createdLppIds.push(ref.id);
-          textsForAggregate.push({ filename, path: f.name, docType: "LPP_CERT" });
+  // Champs LPP étendus
+  employeur: ai.employeur ?? null,
+  caisse: ai.caisse ?? null,
+  dateCertificat: ai.dateCertificat ?? null,
+  prenom: ai.prenom ?? null,
+  nom: ai.nom ?? null,
+  dateNaissance: ai.dateNaissance ?? null,
+  salaireDeterminant: ai.salaireDeterminant ?? null,
+  deductionCoordination: ai.deductionCoordination ?? null,
+  salaireAssureEpargne: ai.salaireAssureEpargne ?? null,
+  salaireAssureRisque: ai.salaireAssureRisque ?? null,
+  avoirVieillesse: ai.avoirVieillesse ?? null,
+  avoirVieillesseSelonLpp: ai.avoirVieillesseSelonLpp ?? null,
+  interetProjetePct: ai.interetProjetePct ?? null,
+  renteInvaliditeAnnuelle: ai.renteInvaliditeAnnuelle ?? null,
+  renteEnfantInvaliditeAnnuelle: ai.renteEnfantInvaliditeAnnuelle ?? null,
+  renteConjointAnnuelle: ai.renteConjointAnnuelle ?? null,
+  renteOrphelinAnnuelle: ai.renteOrphelinAnnuelle ?? null,
+  capitalDeces: ai.capitalDeces ?? null,
+  capitalRetraite65: ai.capitalRetraite65 ?? null,
+  renteRetraite65Annuelle: ai.renteRetraite65Annuelle ?? null,
+  rachatPossible: ai.rachatPossible ?? null,
+  eplDisponible: ai.eplDisponible ?? null,
+  miseEnGage: ai.miseEnGage ?? null,
+
+  // Méta
+  proofs: ai?.proofs ?? null,
+  confidence,
+  needs_review,
+  extractedAt: now,
+  docType: "LPP_CERT" as const,
+
+  // Learner
+  textHash,
+  review: { status: 'pending' as const },
+  sources: {},
+};
+
+// 1) Réutilisation par hash (si déjà scanné identique)
+const beforeReuse = { ...parsed };
+const prev = await findExistingByTextHash(textHash);
+if (prev) {
+  parsed = mergeFromPrevious(parsed, prev);
+}
+const reusedFields = diffFilled(beforeReuse, parsed);
+
+// 2) Bootstrap par caisse (compléter champs manquants selon template vérifié)
+const beforeTpl = { ...parsed };
+parsed = await applyTemplateByCaisse(parsed?.caisse ?? null, parsed);
+const tplFields = diffFilled(beforeTpl, parsed);
+
+// 3) Learner meta lisible
+parsed.caisseSlug = slugifyCaisse(parsed?.caisse ?? null);
+parsed.learnerMeta = {
+  reusedByHash: !!prev,
+  appliedTemplate: tplFields.length > 0,
+  templateId: parsed.caisseSlug ?? null,
+  appliedFields: Array.from(new Set([...reusedFields, ...tplFields])),
+  updatedAt: new Date().toISOString(),
+};
+
+// 4) Écriture Firestore
+const ref = await db.collection("lpp_parsed").add(parsed);
+console.log("[parse:file] Firestore saved LPP id=", ref.id);
+createdLppIds.push(ref.id);
+textsForAggregate.push({ filename, path: f.name, docType: "LPP_CERT" });
+
+
 
           /* ===========================
              🔥 AVS/AI — calcul mensuel (Échelle 44, 2025)

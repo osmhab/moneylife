@@ -1,6 +1,6 @@
 // lib/firebase.ts
 import { initializeApp, getApps } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, setLogLevel } from "firebase/firestore";
 import { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider } from "firebase/auth";
 import { getStorage } from "firebase/storage"; // ⬅️ AJOUT
 
@@ -16,6 +16,8 @@ const firebaseConfig = {
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
 export const db = getFirestore(app);
+setLogLevel("error"); // 🔇 réduit le verbiage des WebChannels
+
 export const auth = getAuth(app);
 export const storage = getStorage(app); // ⬅️ AJOUT
 export const googleProvider = new GoogleAuthProvider();

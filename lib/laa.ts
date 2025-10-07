@@ -1,101 +1,90 @@
 // lib/laa.ts
-import { db } from '@/lib/firebaseAdmin';
+// Calculs LAA locaux (IJ, invalidité coordonnée AI/LAA, survivants coordonnés)
 
-export type RegsLaa = {
-  year: number; currency: string;
-  laa: {
-    insured_earnings_max: number;
-    daily_allowance: { pct_of_insured_earnings: number; start_from_day: number; };
-    disability: { pct_at_full_invalidity: number; min_degree_for_pension: number; };
-    survivors: {
-      spouse_pct: number; orphan_pct: number; double_orphan_pct: number;
-      family_cap_pct: number; with_avs_ai_overall_cap_pct: number;
-    };
-    coverage_rules: { non_occupational_covered_if_weekly_hours_gte: number; };
-    coordination: { invalidity_ai_laa_cap_pct: number; };
-  };
-};
+import { getRegs } from '@/lib/regs'
 
-const round = (x: number) => Math.round(x);
-const pct = (x: number, p: number) => (x * p) / 100;
+function roundCHF(x: number) { return Math.round(x) }
 
-export async function loadRegsLaa(year = 2025): Promise<RegsLaa> {
-  const snap = await db.collection('regs_laa').doc(String(year)).get();
-  if (!snap.exists) throw new Error(`regs_laa/${year} introuvable`);
-  return snap.data() as RegsLaa;
+export async function loadRegsLaa(year: number) {
+  return getRegs('laa', year)
 }
 
-export function insuredEarnings(annualSalaryAvs: number, regs: RegsLaa) {
-  return Math.min(annualSalaryAvs, regs.laa.insured_earnings_max);
-}
+export function computeAccidentDailyAllowance(annualSalaryAvs: number, regs: any) {
+  const laa = regs?.laa ?? {}
+  const insuredMax = laa.insured_earnings_max ?? 148200
+  const pct = (laa.daily_allowance?.pct_of_insured_earnings ?? 80) / 100
+  const startFromDay = laa.daily_allowance?.start_from_day ?? 3
 
-export type AccidentInvalidityInput = {
-  annualSalaryAvs: number; degreeInvalidityPct: number; // 0..100
-  aiMonthly?: number; // rente AI mensuelle effective (si connue)
-};
-export function computeAccidentInvalidityMonthly(inp: AccidentInvalidityInput, regs: RegsLaa) {
-  const base = insuredEarnings(inp.annualSalaryAvs, regs);
-  const nominalAnnual = pct(base, regs.laa.disability.pct_at_full_invalidity) * (inp.degreeInvalidityPct / 100);
-  const aiAnnual = (inp.aiMonthly ?? 0) * 12;
-  const capAnnual = pct(base, regs.laa.coordination.invalidity_ai_laa_cap_pct); // 90%
-  const laaAnnual = Math.max(0, Math.min(nominalAnnual, capAnnual - aiAnnual));
+  const insuredAnnual = Math.min(annualSalaryAvs, insuredMax)
+  // IJ ≈ 80% / 365 (approche)
+  const amountPerDay = roundCHF((insuredAnnual * pct) / 365)
+
   return {
-    insuredAnnual: base,
-    nominalMonthly: round(nominalAnnual / 12),
-    coordinatedMonthly: round(laaAnnual / 12),
-    aiMonthly: round(inp.aiMonthly ?? 0),
-    totalMonthly: round((laaAnnual / 12) + (inp.aiMonthly ?? 0)),
-    capMonthly: round(capAnnual / 12)
-  };
-}
-
-/** v4.2 : plus de "double orphelin" en entrée.
- *  On ne distingue plus simple/double côté UI ; on applique le cap famille (70%) puis la coordination 90%.
- */
-export type AccidentSurvivorsInput = {
-  annualSalaryAvs: number;
-  nOrphans: number;                    // nombre d'enfants à charge
-  avsAiSurvivorsMonthlyTotal?: number; // total AVS/AI survivants connu (mensuel)
-  spouseHasRight: boolean;             // conditions LAA réalisées
-};
-export function computeAccidentSurvivorsMonthly(inp: AccidentSurvivorsInput, regs: RegsLaa) {
-  const base = insuredEarnings(inp.annualSalaryAvs, regs);
-  const laa = regs.laa.survivors;
-
-  // Nominaux LAA (conjoint + orphelins)
-  let spouseAnnual = inp.spouseHasRight ? pct(base, laa.spouse_pct) : 0;
-  let orphansAnnual = Math.max(0, inp.nOrphans) * pct(base, laa.orphan_pct);
-
-  // Cap famille 70% sur la part LAA
-  const famCapAnnual = pct(base, laa.family_cap_pct);
-  let nominalTotalAnnual = spouseAnnual + orphansAnnual;
-  if (nominalTotalAnnual > famCapAnnual) {
-    const ratio = famCapAnnual / nominalTotalAnnual;
-    spouseAnnual *= ratio;
-    orphansAnnual *= ratio;
-    nominalTotalAnnual = famCapAnnual;
+    insuredAnnual,
+    dailyAllowance: amountPerDay,
+    startsFromDay: startFromDay,
   }
-
-  // Coordination avec AVS/AI survivants (cap global 90% selon réglages survivants)
-  const avsAnnual = (inp.avsAiSurvivorsMonthlyTotal ?? 0) * 12;
-  const overallCapAnnual = pct(base, laa.with_avs_ai_overall_cap_pct); // souvent 90%
-  const laaPayAnnual = Math.min(nominalTotalAnnual, Math.max(0, overallCapAnnual - avsAnnual));
-
-  // Répartition pro rata des montants LAA payés (selon structure nominale)
-  const prorata = nominalTotalAnnual > 0 ? laaPayAnnual / nominalTotalAnnual : 0;
-
-  return {
-    insuredAnnual: base,
-    spouseMonthly: round((spouseAnnual * prorata) / 12),
-    orphansMonthlyTotal: round((orphansAnnual * prorata) / 12),
-    laaMonthlyTotal: round(laaPayAnnual / 12),
-    avsMonthlyTotal: round(avsAnnual / 12),
-    overallCapMonthly: round(overallCapAnnual / 12)
-  };
 }
 
-export function computeAccidentDailyAllowance(annualSalaryAvs: number, regs: RegsLaa) {
-  const base = insuredEarnings(annualSalaryAvs, regs);
-  const daily = round((pct(base, regs.laa.daily_allowance.pct_of_insured_earnings) / 365));
-  return { insuredAnnual: base, dailyAllowance: daily, startsFromDay: regs.laa.daily_allowance.start_from_day };
+export function computeAccidentInvalidityMonthly(
+  params: { annualSalaryAvs: number; degreeInvalidityPct: number; aiMonthly: number },
+  regs: any
+) {
+  const laa = regs?.laa ?? {}
+  const insuredMax = laa.insured_earnings_max ?? 148200
+  const pctFull = (laa.disability?.pct_at_full_invalidity ?? 80) / 100
+  const overallCapPct = (laa.coordination?.invalidity_ai_laa_cap_pct ?? 90) / 100
+
+  const insuredAnnual = Math.min(params.annualSalaryAvs, insuredMax)
+  const nominalAnnual = insuredAnnual * pctFull * (params.degreeInvalidityPct / 100)
+  const nominalMonthly = nominalAnnual / 12
+
+  // Cap global AVS+LAA (mensuel)
+  const capMonthly = (insuredAnnual * overallCapPct) / 12
+  const coordinatedMonthly = Math.max(0, Math.min(nominalMonthly, capMonthly - (params.aiMonthly ?? 0)))
+  const totalMonthly = (params.aiMonthly ?? 0) + coordinatedMonthly
+
+  return {
+    insuredAnnual,
+    nominalMonthly: roundCHF(nominalMonthly),
+    coordinatedMonthly: roundCHF(coordinatedMonthly),
+    aiMonthly: roundCHF(params.aiMonthly ?? 0),
+    totalMonthly: roundCHF(totalMonthly),
+    capMonthly: roundCHF(capMonthly),
+  }
+}
+
+export function computeAccidentSurvivorsMonthly(
+  params: { annualSalaryAvs: number; spouseHasRight: boolean; nOrphans: number; avsAiSurvivorsMonthlyTotal: number },
+  regs: any
+) {
+  const laa = regs?.laa ?? {}
+  const insuredMax = laa.insured_earnings_max ?? 148200
+  const spousePct = (laa.survivors?.spouse_pct ?? 40) / 100
+  const orphanPct = (laa.survivors?.orphan_pct ?? 15) / 100
+  const familyCapPct = (laa.survivors?.family_cap_pct ?? 70) / 100
+  const overallCapPct = (laa.survivors?.with_avs_ai_overall_cap_pct ?? 90) / 100
+
+  const insuredAnnual = Math.min(params.annualSalaryAvs, insuredMax)
+  const monthlyBase = insuredAnnual / 12
+
+  const spouseMonthly = params.spouseHasRight ? monthlyBase * spousePct : 0
+  const orphansMonthlyTotal = monthlyBase * orphanPct * (params.nOrphans ?? 0)
+
+  // Cap famille LAA
+  const familyCapMonthly = monthlyBase * familyCapPct
+  const laaPre = Math.min(spouseMonthly + orphansMonthlyTotal, familyCapMonthly)
+
+  // Cap global AVS+LAA
+  const overallCapMonthly = monthlyBase * overallCapPct
+  const laaMonthlyTotal = Math.max(0, Math.min(laaPre, overallCapMonthly - (params.avsAiSurvivorsMonthlyTotal ?? 0)))
+
+  return {
+    insuredAnnual,
+    spouseMonthly: roundCHF(spouseMonthly),
+    orphansMonthlyTotal: roundCHF(orphansMonthlyTotal),
+    laaMonthlyTotal: roundCHF(laaMonthlyTotal),
+    avsMonthlyTotal: roundCHF(params.avsAiSurvivorsMonthlyTotal ?? 0),
+    overallCapMonthly: roundCHF(overallCapMonthly),
+  }
 }

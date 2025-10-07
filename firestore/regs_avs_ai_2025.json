@@ -1,8 +1,12 @@
+
 {
   "year": 2025,
   "scale": "44",
   "currency": "CHF",
+  "eduCreditCHF": 45360,
+  "careCreditCHF": 45360,
   "assumption": "revenu_annuel_moyen_determinant = salaire_annonce",
+
   "rows": [
     { "income": 15120, "oldAgeInvalidity": 1260, "oldAgeInvalidityForWidowWidower": 1512, "widowWidowerSurvivor": 1008, "supplementary30": 378, "child40": 504, "orphan60": 756 },
     { "income": 16632, "oldAgeInvalidity": 1293, "oldAgeInvalidityForWidowWidower": 1551, "widowWidowerSurvivor": 1034, "supplementary30": 388, "child40": 517, "orphan60": 776 },

@@ -1,418 +1,255 @@
 // lib/lpp.ts
-import { db } from '@/lib/firebaseAdmin';
+// Calculs LPP : salaire coordonné, bonifications minimales, survivants minima,
+// META (taux de conversion min) + ***minima invalidité LPP (conforme loi, sans intérêts)***.
+
+import { getRegs } from '@/lib/regs'
 
 /* =========================
- * Types Firestore
+ * Types (contexte survivants)
  * ========================= */
-
-type SavingsCreditBand = { age_from: number; age_to: number; percent_of_coordinated_salary: number };
-
-export type RegsLpp = {
-  year: number;
-  currency: string;
-  lpp: {
-    limits_annual: {
-      entry_threshold: number;
-      coordination_deduction: number;
-      upper_salary_limit: number;
-      coordinated_salary_min: number;
-      coordinated_salary_max: number;
-    };
-    coordination_rules: {
-      standard: { formula: string };
-      adaptive_optional?: {
-        enabled: boolean;
-        comment?: string;
-        coord_deduction_formula: string;
-        avs_max_annual_pension: number;
-      };
-    };
-    minimum_interest_rate: { obligatory_part_pct: number };
-    minimum_conversion_rate: { at_reference_age_pct: number; reference_age: number };
-    savings_credits_min: SavingsCreditBand[];
-    benefits_minima: {
-      survivors: {
-        widow_widower_pct_of_last_oldage_or_disability_pension: number;
-        orphan_pct_of_last_oldage_or_disability_pension: number;
-      };
-      invalidity: { right_from_invalidity_pct_gte: number; comment?: string };
-    };
-    retirement_window: { early_from_age: number; reference_age: number; postpone_until_age: number };
-  };
-};
-
-export type LppSurvivants = {
-  year: number;
-  currency: string;
-  lpp_survivants: {
-    priority: { certificate_values_override: boolean; comment?: string };
-    eligibility: {
-      veuve: {
-        base: any[];
-        otherwise_lump_sum?: { enabled: boolean; annual_pension_multiplier: number };
-        extinction?: any[];
-      };
-      veuf: {
-        base: any[];
-        otherwise_lump_sum?: { enabled: boolean; annual_pension_multiplier: number };
-        extinction?: any[];
-      };
-      partenaire_enregistre: {
-        note?: string;
-        base: any[];
-        otherwise_lump_sum?: { enabled: boolean; annual_pension_multiplier: number };
-        extinction?: any[];
-      };
-      partenaire_vie_concubin: {
-        plan_dependent: boolean;
-        required_all: any[];
-        one_of: any[];
-        exclusions?: any[];
-        extinction?: any[];
-      };
-      orphelin: {
-        base: any[];
-        double_orphan_rule?: { plan_dependent: boolean; comment?: string };
-      };
-    };
-    amounts_minima: {
-      reference_pension: 'old_age_or_full_disability_pension_of_deceased';
-      widow_widower_pct: number; // 60
-      orphan_pct: number; // 20
-      lump_sum_if_not_eligible: { annual_pension_multiplier: number }; // 3
-    };
-    death_capital?: {
-      mandatory_BVG: { provided: boolean; comment?: string };
-      supralegal_plan?: {
-        provided_by_plan: boolean;
-        typical_basis?: string[];
-        beneficiaries_order?: any;
-        plan_flags?: any;
-      };
-    };
-  };
-};
-
-/* =========================
- * Types App (contexte & résultats)
- * ========================= */
-
-export type EmploymentRate = number; // 1 = 100%, 0.6 = 60%
-
 export type SurvivorContext = {
-  // Statut au moment du décès de l'assuré·e
   maritalStatus:
+    | 'celibataire'
     | 'marie'
     | 'mariee'
-    | 'celibataire'
     | 'divorce'
     | 'divorcee'
     | 'partenariat_enregistre'
-    | 'concubinage';
-
-  // Conjoint/partenaire
-  ageAtWidowhood?: number;
-  marriageYears?: number;
-  registeredPartnershipYears?: number;
-
-  // Concubinage (partenaire de vie)
-  cohabitationYears?: number;
-  beneficiaryDesignationOnFile?: boolean;
-  hasCommonChildOrMaintenanceDuty?: boolean;
-
-  // Extinctions
-  remarriedOrNewRegPartner?: boolean;
-  newMarriageOrNewRegPartner?: boolean;
-
-  // Enfants
-  hasChild?: boolean; // au sens LPP
-  childAge?: number; // pour évaluer le droit orphelin
-  inTraining?: boolean; // formation en cours <= 25 ans
-};
-
-export type CoordinatedSalaryResult = {
-  annualSalaryCapped: number;
-  coordinationDeductionUsed: number;
-  coordinatedSalary: number;
-  rule: 'standard' | 'adaptive';
-};
-
-export type SavingsCreditResult = {
-  bandPercent: number; // %
-  annualCredit: number; // CHF/an
-};
-
-export type SurvivorAmounts = {
-  // Montants mensuels estimés MINIMA (si le certificat n'est pas dispo)
-  widowWidowerMonthly?: number; // 60% de la rente de référence
-  orphanMonthly?: number; // 20% de la rente de référence
-
-  // Capital unique si non-éligible (3x rente annuelle)
-  lumpSumIfNotEligible?: number; // CHF (estimation)
-};
-
-export type SurvivorEligibility = {
-  spouseEligible: boolean; // veuf/veuve/partenaire enregistré selon le statut
-  spouseMode: 'pension' | 'lump_sum' | 'none';
-  concubinEligible: boolean; // si plan le permet & conditions
-  orphanEligible: boolean;
-};
-
-/* =========================
- * Loaders Firestore (+ cache)
- * ========================= */
-
-const cache: Record<string, any> = {};
-
-export async function loadRegsLpp(year = 2025): Promise<RegsLpp> {
-  const key = `regs_lpp/${year}`;
-  if (cache[key]) return cache[key];
-  const snap = await db.collection('regs_lpp').doc(String(year)).get();
-  if (!snap.exists) throw new Error(`regs_lpp/${year} introuvable`);
-  const data = snap.data() as RegsLpp;
-  cache[key] = data;
-  return data;
-}
-
-export async function loadLppSurvivants(year = 2025): Promise<LppSurvivants> {
-  const key = `lpp_survivants/${year}`;
-  if (cache[key]) return cache[key];
-  const snap = await db.collection('lpp_survivants').doc(String(year)).get();
-  if (!snap.exists) throw new Error(`lpp_survivants/${year} introuvable`);
-  const data = snap.data() as LppSurvivants;
-  cache[key] = data;
-  return data;
+    | 'concubinage'
+  hasChild?: boolean
+  ageAtWidowhood?: number
+  marriageYears?: number
+  registeredPartnershipYears?: number
+  cohabitationYears?: number
+  beneficiaryDesignationOnFile?: boolean
+  hasCommonChildOrMaintenanceDuty?: boolean
+  remarriedOrNewRegPartner?: boolean
+  newMarriageOrNewRegPartner?: boolean
+  childAge?: number
+  inTraining?: boolean
 }
 
 /* =========================
- * Outils calc
+ * Types (analyse LPP globale)
  * ========================= */
-
-const clamp = (x: number, min: number, max: number) => Math.max(min, Math.min(max, x));
-const round = (x: number) => Math.round(x);
-
-export function calcCoordinatedSalary(
-  annualSalary: number,
-  employmentRate: EmploymentRate,
-  regs: RegsLpp,
-  opts?: { useAdaptive?: boolean }
-): CoordinatedSalaryResult {
-  const { limits_annual, coordination_rules } = regs.lpp;
-
-  // Plafonne le salaire assuré à l'upper limit LPP
-  const annualSalaryCapped = Math.min(annualSalary, limits_annual.upper_salary_limit);
-
-  // ADAPTATIF ?
-  if (opts?.useAdaptive && coordination_rules.adaptive_optional?.enabled) {
-    const avsMaxAnnual = coordination_rules.adaptive_optional.avs_max_annual_pension; // ex. 30'240
-    const coordDeduction =
-      Math.min(0.3 * annualSalary, 0.875 * avsMaxAnnual) * (employmentRate ?? 1);
-    const candidate = annualSalary - coordDeduction;
-    const coordinatedSalary = clamp(
-      candidate,
-      0, // certaines caisses n'imposent pas le min légal en adaptatif; on garde >= 0
-      limits_annual.coordinated_salary_max
-    );
-    return {
-      annualSalaryCapped,
-      coordinationDeductionUsed: round(coordDeduction),
-      coordinatedSalary: round(coordinatedSalary),
-      rule: 'adaptive',
-    };
-  }
-
-  // STANDARD
-  const candidate = annualSalaryCapped - limits_annual.coordination_deduction;
-  const coordinatedSalary = clamp(
-    candidate,
-    limits_annual.coordinated_salary_min,
-    limits_annual.coordinated_salary_max
-  );
-  return {
-    annualSalaryCapped,
-    coordinationDeductionUsed: limits_annual.coordination_deduction,
-    coordinatedSalary: round(coordinatedSalary),
-    rule: 'standard',
-  };
+export type LppAnalysisArgs = {
+  year: number
+  annualSalary: number
+  employmentRate: number // 0..1
+  age: number
+  /** "Dernière rente" (invalidité ou retraite) servant de base aux survivants LPP minima */
+  referenceMonthlyPension: number
+  useAdaptiveCoordination?: boolean
+  survivorContext: SurvivorContext
 }
 
-export function calcSavingsCredit(
-  age: number,
-  coordinatedSalary: number,
-  regs: RegsLpp
-): SavingsCreditResult {
-  const band =
-    regs.lpp.savings_credits_min.find((b) => age >= b.age_from && age <= b.age_to) ??
-    regs.lpp.savings_credits_min[0];
-  const annualCredit = (band.percent_of_coordinated_salary / 100) * (coordinatedSalary ?? 0);
-  return { bandPercent: band.percent_of_coordinated_salary, annualCredit: round(annualCredit) };
-}
-
-/* =========================
- * Survivants: éligibilité & montants minima
- * ========================= */
-
-function checkCond(cond: any, ctx: SurvivorContext): boolean {
-  if (!cond || typeof cond !== 'object') return true;
-  const { cond: name, value } = cond;
-
-  const op = (res: boolean) => {
-    if (cond.and) return res && checkCond(cond.and, ctx);
-    if (cond.or) return res || checkCond(cond.or, ctx);
-    return res;
-  };
-
-  switch (name) {
-    case 'has_child':
-    case 'has_child_under_18':
-      return op(!!ctx.hasChild);
-    case 'age_at_widowhood_gte':
-    case 'age_at_partner_widowhood_gte':
-      return op((ctx.ageAtWidowhood ?? 0) >= Number(value));
-    case 'marriage_years_gte':
-      return op((ctx.marriageYears ?? 0) >= Number(value));
-    case 'registered_partnership_years_gte':
-      return op((ctx.registeredPartnershipYears ?? 0) >= Number(value));
-    case 'cohabitation_years_gte':
-      return op((ctx.cohabitationYears ?? 0) >= Number(value));
-    case 'has_common_child_or_maintenance_duty':
-      return op(!!ctx.hasCommonChildOrMaintenanceDuty);
-    case 'beneficiary_designation_on_file':
-      return op(!!ctx.beneficiaryDesignationOnFile);
-    case 'not_married_and_no_reg_partner':
-      return op(
-        ctx.maritalStatus !== 'marie' &&
-          ctx.maritalStatus !== 'mariee' &&
-          ctx.maritalStatus !== 'partenariat_enregistre'
-      );
-    case 'remarried_or_new_reg_partner':
-      return op(!!ctx.remarriedOrNewRegPartner);
-    case 'new_marriage_or_new_reg_partner':
-      return op(!!ctx.newMarriageOrNewRegPartner);
-    case 'child_age_lt':
-      return op((ctx.childAge ?? 0) < Number(value));
-    case 'in_training_and_age_lte':
-      return op(!!ctx.inTraining && (ctx.childAge ?? 0) <= Number(value));
-    default:
-      return true; // inconnu → on ne bloque pas
-  }
-}
-
-function allTrue(conds: any[] | undefined, ctx: SurvivorContext): boolean {
-  if (!conds?.length) return true;
-  return conds.every((c) => checkCond(c, ctx));
-}
-
-function anyTrue(conds: any[] | undefined, ctx: SurvivorContext): boolean {
-  if (!conds?.length) return false;
-  return conds.some((c) => checkCond(c, ctx));
-}
-
-export function estimateSurvivorEligibilityAndAmounts(
-  ctx: SurvivorContext,
-  referenceMonthlyPension: number, // rente vieillesse/invalidité (part obligatoire) de l'assuré·e
-  rules: LppSurvivants
-): { eligibility: SurvivorEligibility; amounts: SurvivorAmounts } {
-  const r = rules.lpp_survivants;
-
-  // --- Spouse / registered partner
-  let spouseEligible = false;
-  let spouseMode: SurvivorEligibility['spouseMode'] = 'none';
-
-  const isMarried =
-    ctx.maritalStatus === 'marie' || ctx.maritalStatus === 'mariee' || ctx.maritalStatus === 'partenariat_enregistre';
-
-  if (isMarried) {
-    const bloc = ctx.maritalStatus === 'partenariat_enregistre' ? r.eligibility.partenaire_enregistre : r.eligibility.veuve; // veuve/veuf → mêmes règles min.
-    const baseOK = allTrue(bloc.base, ctx);
-    if (baseOK) {
-      spouseEligible = true;
-      spouseMode = 'pension';
-    } else if (bloc.otherwise_lump_sum?.enabled) {
-      spouseEligible = false;
-      spouseMode = 'lump_sum';
+export type LppAnalysis = {
+  year: number
+  currency: 'CHF'
+  coordinatedSalary: number
+  savingsCredit: { pct: number; annual: number }
+  survivor: {
+    amounts: {
+      widowWidowerMonthly: number
+      orphanMonthly: number
     }
   }
-
-  // --- Concubin (plan dépendant)
-  let concubinEligible = false;
-  const concubinRule = r.eligibility.partenaire_vie_concubin;
-  if (ctx.maritalStatus === 'concubinage' && concubinRule?.plan_dependent) {
-    const requiredAll = allTrue(concubinRule.required_all, ctx);
-    const oneOf = anyTrue(concubinRule.one_of, ctx);
-    const excluded = anyTrue(concubinRule.exclusions, ctx);
-    concubinEligible = requiredAll && oneOf && !excluded;
+  meta: {
+    convMinPct: number
+    coordination: {
+      deductionUsed: number
+      min: number
+      max: number
+      adaptive: boolean
+    }
   }
-
-  // --- Orphelin
-  const orphanEligible = allTrue(r.eligibility.orphelin.base, ctx);
-
-  // --- Montants minima (si pas de certificat)
-  const widowPct = r.amounts_minima.widow_widower_pct / 100; // 0.6
-  const orphanPct = r.amounts_minima.orphan_pct / 100; // 0.2
-  const widowWidowerMonthly = round(referenceMonthlyPension * widowPct);
-  const orphanMonthly = round(referenceMonthlyPension * orphanPct);
-
-  // Capital unique si non-éligible (3x rente annuelle)
-  let lumpSumIfNotEligible: number | undefined;
-  if (spouseMode === 'lump_sum') {
-    const mult = r.amounts_minima.lump_sum_if_not_eligible.annual_pension_multiplier || 3;
-    lumpSumIfNotEligible = round(referenceMonthlyPension * 12 * mult);
-  }
-
-  return {
-    eligibility: {
-      spouseEligible,
-      spouseMode,
-      concubinEligible,
-      orphanEligible,
-    },
-    amounts: {
-      widowWidowerMonthly: spouseEligible && spouseMode === 'pension' ? widowWidowerMonthly : undefined,
-      orphanMonthly: orphanEligible ? orphanMonthly : undefined,
-      lumpSumIfNotEligible,
-    },
-  };
 }
 
-/* =========================
- * Facade principale pour l'analyse
- * ========================= */
+/* ===========================================
+ * Types (minima invalidité LPP — conforme loi)
+ * =========================================== */
+export type LppInvalidityMinArgs = {
+  year: number
+  /** âge actuel (années pleines) au moment de la naissance du droit */
+  ageYears: number
+  /** 'F' | 'M' (optionnel) si tes regs différencient l’âge de référence */
+  sex?: 'F' | 'M'
+  /** salaire coordonné (part obligatoire) utilisé pour les bonifications futures */
+  coordinatedSalary: number
+  /** avoir de vieillesse LPP acquis au moment de la naissance du droit */
+  currentAssets?: number
+}
 
-export async function computeLppAnalysis(opts: {
-  year?: number;
-  annualSalary: number;
-  employmentRate?: EmploymentRate;
-  age: number;
-  referenceMonthlyPension: number; // si tu as la rente LPP (ou estimer via capital * taux conv. min.)
-  useAdaptiveCoordination?: boolean;
-  survivorContext: SurvivorContext;
-}) {
-  const year = opts.year ?? 2025;
-  const regs = await loadRegsLpp(year);
-  const surv = await loadLppSurvivants(year);
+export type LppInvalidityMinResult = {
+  /** Avoir extrapolé ***sans intérêts*** (acquis + somme des bonifs futures) */
+  projectedAssetsAtRefAge_NoInterest: number
+  /** Rente annuelle min (100%) = 6.8% * avoir extrapolé */
+  invalidityAnnualMin: number
+  /** Rente mensuelle min (100%) */
+  invalidityMonthlyMin: number
+  /** Rente d’enfant d’invalide (par enfant) = 20% de la rente d’invalidité */
+  childMonthlyMin: number
+  assumptions: {
+    convMinPct: number
+    retirementAge: number
+    yearsUntilRef: number
+  }
+}
 
-  const coord = calcCoordinatedSalary(opts.annualSalary, opts.employmentRate ?? 1, regs, {
-    useAdaptive: !!opts.useAdaptiveCoordination,
-  });
+/* ==============
+ * Utils internes
+ * ============== */
+function clamp(x: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, x))
+}
+function roundCHF(x: number) {
+  return Math.round(x)
+}
 
-  const savings = calcSavingsCredit(opts.age, coord.coordinatedSalary, regs);
+/**
+ * Renvoie le % de bonification vieillesse (7/10/15/18) applicable pour un âge donné,
+ * à partir de regs.lpp.savings_credits_min si présent, sinon fallback légal 7/10/15/18.
+ */
+function getSavingsCreditPctForAge(regs: any, age: number): number {
+  const credits = regs?.lpp?.savings_credits_min ?? regs?.lpp?.savings_credits
+  if (Array.isArray(credits)) {
+    // format attendu: [{ age_from, age_to, percent_of_coordinated_salary }, ...]
+    const band = credits.find(
+      (b: any) =>
+        age >= Number(b?.age_from ?? -1) && age <= Number(b?.age_to ?? 10_000)
+    )
+    const pct = band?.percent_of_coordinated_salary
+    if (pct != null) return Number(pct)
+  }
+  // Fallback minimal légal si le JSON n’a pas les bandes
+  if (age < 25) return 0
+  if (age <= 34) return 7
+  if (age <= 44) return 10
+  if (age <= 54) return 15
+  return 18
+}
 
-  const survEval = estimateSurvivorEligibilityAndAmounts(
-    opts.survivorContext,
-    opts.referenceMonthlyPension,
-    surv
-  );
+/* ===========================================
+ * 1) Analyse LPP (coordination, bonifs, survivants minima)
+ * =========================================== */
+export async function computeLppAnalysis(args: LppAnalysisArgs): Promise<LppAnalysis> {
+  const regs = getRegs('lpp', args.year)
+  const survRegs = getRegs('lpp_survivants', args.year)
+
+  // ---- Coordination (part obligatoire)
+  const limits = regs?.lpp?.limits_annual ?? {}
+  const entryThreshold = Number(limits.entry_threshold ?? 22680)
+  const coordDeduction = Number(limits.coordination_deduction ?? 26460)
+  const csMin = Number(limits.coordinated_salary_min ?? 3780)
+  const csMax = Number(limits.coordinated_salary_max ?? 64260)
+
+  // Option "adaptive" (désactivée par défaut dans regs 2025)
+  const adaptiveCfg = regs?.lpp?.coordination_rules?.adaptive_optional ?? { enabled: false }
+  let deductionUsed = coordDeduction
+  if (args.useAdaptiveCoordination && adaptiveCfg?.enabled) {
+    // Exemple simplifié basé sur JSON (si présent)
+    const avsMax = Number(
+      regs?.lpp?.coordination_rules?.adaptive_optional?.avs_max_annual_pension ?? 30240
+    )
+    const cand = Math.min(0.30 * args.annualSalary, 0.875 * avsMax) * args.employmentRate
+    deductionUsed = Math.round(cand)
+  }
+
+  let coordinatedSalary = clamp(args.annualSalary - deductionUsed, csMin, csMax)
+  if (args.annualSalary < entryThreshold) {
+    coordinatedSalary = 0 // hors LPP obligatoire
+  }
+
+  // ---- Bonifications vieillesse (minima) pour l'année courante
+  const creditPct = getSavingsCreditPctForAge(regs, args.age)
+  const creditAnnual = roundCHF((creditPct / 100) * coordinatedSalary)
+
+  // ---- Survivants LPP (minima)
+  // Règles: 60% conjoint, 20% orphelin, sur la "dernière rente (invalidité ou vieillesse)"
+  const widPct = Number(survRegs?.lpp_survivants?.amounts_minima?.widow_widower_pct ?? 60)
+  const orpPct = Number(survRegs?.lpp_survivants?.amounts_minima?.orphan_pct ?? 20)
+  const widowWidowerMonthly = roundCHF(args.referenceMonthlyPension * (widPct / 100))
+  const orphanMonthly = roundCHF(args.referenceMonthlyPension * (orpPct / 100))
+
+  // ---- Taux de conversion minimal pour méta
+  const convMinPct = Number(
+    regs?.lpp?.minimum_conversion_rate?.at_reference_age_pct ?? 6.8
+  )
 
   return {
-    year,
-    currency: regs.currency,
-    coordinatedSalary: coord,
-    savingsCredit: savings,
-    survivor: survEval,
-    meta: {
-      convMinPct: regs.lpp.minimum_conversion_rate.at_reference_age_pct,
-      interestMinPct: regs.lpp.minimum_interest_rate.obligatory_part_pct,
+    year: args.year,
+    currency: 'CHF',
+    coordinatedSalary,
+    savingsCredit: { pct: creditPct, annual: creditAnnual },
+    survivor: {
+      amounts: { widowWidowerMonthly, orphanMonthly },
     },
-  };
+    meta: {
+      convMinPct,
+      coordination: {
+        deductionUsed,
+        min: csMin,
+        max: csMax,
+        adaptive: !!(args.useAdaptiveCoordination && adaptiveCfg?.enabled),
+      },
+    },
+  }
+}
+
+/* ==========================================================
+ * 2) Minima invalidité LPP — ***conforme loi, sans intérêts***
+ *    - Avoir extrapolé = avoir acquis + somme des bonifs futures (SANS intérêts)
+ *    - Rente invalidité = 6.8% * avoir extrapolé
+ *    - Rente enfant d’invalide = 20% de la rente d’invalidité
+ * ========================================================== */
+export function computeLppInvalidityMinima(
+  args: LppInvalidityMinArgs
+): LppInvalidityMinResult {
+  const regs = getRegs('lpp', args.year)
+
+  // Taux de conversion minimal (ex. 6.8%)
+  const convMinPct: number = Number(
+    regs?.lpp?.minimum_conversion_rate?.at_reference_age_pct ?? 6.8
+  )
+
+  // Âge de référence: tente un unisexe puis sex-spécifique, sinon 65
+  const retirementAge: number = Number(
+    regs?.lpp?.retirement_age_unisex ??
+      (args.sex === 'F'
+        ? regs?.lpp?.retirement_age_female
+        : regs?.lpp?.retirement_age_male) ??
+      regs?.lpp?.retirement_age ??
+      65
+  )
+
+  const yearsUntilRef = Math.max(0, Math.floor(retirementAge - args.ageYears))
+
+  // 1) Avoir acquis (tel quel, ***sans*** intérêts futurs)
+  const acquired = Math.max(0, args.currentAssets ?? 0)
+
+  // 2) Somme des bonifications futures (***sans*** intérêts), basées sur le salaire coordonné
+  let futureCreditsNoInterest = 0
+  for (let y = 0; y < yearsUntilRef; y++) {
+    const ageNext = args.ageYears + y + 1
+    const pct = getSavingsCreditPctForAge(regs, ageNext) / 100
+    futureCreditsNoInterest += Math.max(0, args.coordinatedSalary) * pct
+  }
+
+  // 3) Avoir extrapolé SANS intérêts
+  const projectedNoInterest = roundCHF(acquired + futureCreditsNoInterest)
+
+  // 4) Rente d’invalidité minimale (100%) = convMinPct * avoir extrapolé
+  const invalidityAnnualMin = roundCHF(projectedNoInterest * (convMinPct / 100))
+  const invalidityMonthlyMin = roundCHF(invalidityAnnualMin / 12)
+
+  // 5) Rente d’enfant d’invalide = 20% de la rente d’invalidité
+  const childMonthlyMin = roundCHF(invalidityMonthlyMin * 0.20)
+
+  return {
+    projectedAssetsAtRefAge_NoInterest: projectedNoInterest,
+    invalidityAnnualMin,
+    invalidityMonthlyMin,
+    childMonthlyMin,
+    assumptions: { convMinPct, retirementAge, yearsUntilRef },
+  }
 }
