@@ -14,9 +14,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Installation préalable de pnpm (avant setup-node)
+      # Installer pnpm AVANT setup-node (pour que le cache pnpm fonctionne)
       - name: Install pnpm (global)
-        run: npm i -g pnpm@10
+        run: npm i -g pnpm@10.17.1
 
       - name: Setup Node (with pnpm cache)
         uses: actions/setup-node@v4
@@ -27,8 +27,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          # utilise pnpm v10 pour la commande "approve-builds"
-          version: 10
+          # pas de 'version' -> lit packageManager du package.json
           run_install: false
 
       - name: Approve native build scripts
@@ -61,9 +60,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Installation préalable de pnpm (avant setup-node)
       - name: Install pnpm (global)
-        run: npm i -g pnpm@10
+        run: npm i -g pnpm@10.17.1
 
       - name: Setup Node (with pnpm cache)
         uses: actions/setup-node@v4
@@ -74,7 +72,6 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
           run_install: false
 
       - name: Approve native build scripts
