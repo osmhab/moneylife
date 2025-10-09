@@ -77,9 +77,33 @@ import {
 
 
 import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 
+
+import { useRouter } from "next/navigation";
+
+import {
+  onAuthStateChanged,
+  signInAnonymously,
+  linkWithCredential,
+  EmailAuthProvider,
+  linkWithPopup,
+  GoogleAuthProvider,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+} from "firebase/auth";
+import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+
+import { getFunctions, httpsCallable } from "firebase/functions";
 
 
 
@@ -1050,6 +1074,157 @@ const commitChildDates = React.useCallback(() => {
   );
 }
 
+function SeeDetailsButton({
+  analysisId,
+}: {
+  analysisId?: string;
+}) {
+  const router = useRouter();
+  const [userState, setUserState] = React.useState<"loading" | "anon" | "member">("loading");
+  const [open, setOpen] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+  const [email, setEmail] = React.useState("");
+  const [pwd, setPwd] = React.useState("");
+
+  React.useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        await signInAnonymously(auth).catch(() => {});
+        setUserState("anon");
+      } else {
+        setUserState(u.isAnonymous ? "anon" : "member");
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Migration réelle via Callable Functions
+async function migrateIfNeeded(anonUid: string, newUid: string) {
+  if (!anonUid || !newUid || anonUid === newUid) return;
+  const fn = httpsCallable(getFunctions(/* éventuellement: undefined, "europe-west6" */), "migrateClientData");
+  await fn({ fromUid: anonUid, toUid: newUid });
+  try {
+    localStorage.setItem("ml_clientDocPath", `clients/${newUid}`);
+  } catch {}
+}
+
+
+  function go() {
+    if (!analysisId) return;
+    router.push(`/analyse/${analysisId}/invalidite`);
+  }
+
+  async function onLinkEmail() {
+    setBusy(true);
+    setErr(null);
+    const current = auth.currentUser;
+    if (!current) return;
+    try {
+      const cred = EmailAuthProvider.credential(email, pwd);
+      await linkWithCredential(current, cred); // ✅ garde le même UID
+      setOpen(false);
+      go();
+    } catch (e: any) {
+      if (e?.code === "auth/email-already-in-use") {
+        try {
+          const anonUid = current.uid;
+          const res = await signInWithEmailAndPassword(auth, email, pwd);
+          const newUid = res.user.uid;
+          if (newUid !== anonUid) await migrateIfNeeded(anonUid, newUid);
+          setOpen(false);
+          go();
+        } catch (e2: any) {
+          setErr(e2?.message || "Connexion au compte existant impossible.");
+        }
+      } else {
+        setErr(e?.message || "Création du compte impossible.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onLinkGoogle() {
+    setBusy(true);
+    setErr(null);
+    const current = auth.currentUser;
+    if (!current) return;
+    const provider = new GoogleAuthProvider();
+    try {
+      await linkWithPopup(current, provider); // ✅ garde le même UID
+      setOpen(false);
+      go();
+    } catch (e: any) {
+      if (e?.code === "auth/credential-already-in-use" || e?.code === "auth/account-exists-with-different-credential") {
+        try {
+          const anonUid = current.uid;
+          const res = await signInWithPopup(auth, provider);
+          const newUid = res.user.uid;
+          if (newUid !== anonUid) await migrateIfNeeded(anonUid, newUid);
+          setOpen(false);
+          go();
+        } catch (e2: any) {
+          setErr(e2?.message || "Connexion Google impossible.");
+        }
+      } else {
+        setErr(e?.message || "Lien Google impossible.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        variant="link"
+        className="px-0"
+        onClick={() => {
+          if (userState === "member") go();
+          else if (userState === "anon") setOpen(true);
+        }}
+      >
+        Voir détails
+      </Button>
+
+      <AlertDialog open={open} onOpenChange={(o: boolean) => setOpen(o)}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Créez votre compte pour accéder aux détails</AlertDialogTitle>
+            <AlertDialogDescription>
+              Les détails (timeline, pièces, prestations) sont protégés. Créez un compte pour y accéder.
+              Vos données anonymes seront rattachées automatiquement.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input type="password" placeholder="Mot de passe" value={pwd} onChange={(e) => setPwd(e.target.value)} />
+              {err ? <p className="text-sm text-red-600">{err}</p> : null}
+            </div>
+            <div className="flex gap-2">
+              <Button className="w-full" onClick={onLinkEmail} disabled={busy || !email || !pwd}>
+                {busy ? "Création…" : "Créer mon compte"}
+              </Button>
+              <Button className="w-full" variant="outline" onClick={onLinkGoogle} disabled={busy}>
+                Google
+              </Button>
+            </div>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Fermer</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+
+
 /* ========= Composant principal ========= */
 
 type Props = {
@@ -1822,8 +1997,9 @@ if (!qpReady) {
               />
               <Legend />
               <div className="flex justify-end">
-                <Link href={analysisId ? `/analyse/${analysisId}/invalidite` : '#'}>Voir détails</Link>
+                <SeeDetailsButton analysisId={analysisId} />
               </div>
+
             </CardContent>
           </Card>
         </motion.div>

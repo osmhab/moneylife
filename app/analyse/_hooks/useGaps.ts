@@ -457,20 +457,68 @@ export function useGaps(params: {
       gap: Math.max(0, targetsMonthly.invalidity - invMaladieCovered),
     };
 
-    // ===== INVALIDITÉ (accident — coordination AI + LAA ≤ 90%)
+            // ===== INVALIDITÉ (accident — coordination AI + LAA ≤ 90%)
     const aiMonthlyTotalForAccident = avsInvalidityEff + children * aiChildMonthly;
-    const laaInv = laaInvalidityMonthly(annualIncome, aiMonthlyTotalForAccident, Math.max(40, Math.min(100, ctx.invalidityDegreePct ?? 100)), laaParams);
-    const invAccidentCovered = laaInv.totalMonthly + Math.max(0, thirdPillar?.invalidityMonthly ?? 0);
+
+    // AI + LAA (déjà coordonné à 90% du gain assuré)
+    const laaInv = laaInvalidityMonthly(
+      annualIncome,
+      aiMonthlyTotalForAccident,
+      Math.max(40, Math.min(100, ctx.invalidityDegreePct ?? 100)),
+      laaParams
+    );
+
+    // --- LPP comme "complément jusqu'au cap" (plan intégré)
+    // LPP brute = adulte + enfants (déjà calculées plus haut)
+    const lppAccBrut =
+      Math.max(0, lppInvalidityMonthlyEff) +
+      Math.max(0, children * Math.max(0, lppChildMonthly));
+
+    // Marge encore disponible sous le cap 90% (après AI+LAA coordonné)
+    const remainingUnderCap = Math.max(0, laaInv.capMonthly - laaInv.totalMonthly);
+
+    // LPP effectivement versée (réduite si besoin)
+    const lppAccApplied = Math.min(lppAccBrut, remainingUnderCap);
+
+    // (optionnel) Pour affichage/analytics : réduction LPP due à la coordination
+    // const lppAccReduction = Math.max(0, lppAccBrut - lppAccApplied);
+
+    // Couverture totale accident = (AI+LAA coord.) + LPP appliquée + éventuel 3e pilier
+    const invAccidentCovered =
+      laaInv.totalMonthly + lppAccApplied + Math.max(0, thirdPillar?.invalidityMonthly ?? 0);
+
     const invAccident: GapStack = {
+      // En accident, la "cible" naturelle = cap légal/règlementaire (90% du gain assuré)
       target: laaInv.capMonthly,
       segments: [
-        { label: `AI (AVS/AI + enfants)${(avsInvalidityEstimated || avsInvalidityChildEstimated) ? ' (estimé)' : ''}`, value: laaInv.aiMonthly, source: 'AVS' },
+        {
+          label: `AI (AVS/AI + enfants)${(avsInvalidityEstimated || avsInvalidityChildEstimated) ? ' (estimé)' : ''}`,
+          value: laaInv.aiMonthly,
+          source: 'AVS',
+        },
         { label: 'LAA (coord.)', value: laaInv.laaMonthly, source: 'LAA' },
-        ...(thirdPillar?.invalidityMonthly ? [{ label: '3e pilier', value: thirdPillar.invalidityMonthly, source: 'P3' } as GapSegment] : []),
+
+        // LPP appliquée après coordination (adulte + enfants regroupés)
+        ...(lppAccApplied > 0
+          ? [{ label: 'LPP (complément coord.)', value: lppAccApplied, source: 'LPP' } as GapSegment]
+          : []),
+
+        ...(thirdPillar?.invalidityMonthly
+          ? [{ label: '3e pilier', value: thirdPillar.invalidityMonthly, source: 'P3' } as GapSegment]
+          : []),
+
+        // (optionnel) segment d’info pour montrer la part LPP non versée à cause du cap
+        // ...(lppAccReduction > 0
+        //   ? [{ label: 'Réduction LPP (cap 90%)', value: -lppAccReduction } as GapSegment]
+        //   : []),
       ],
       covered: Math.min(laaInv.capMonthly, invAccidentCovered),
       gap: Math.max(0, laaInv.capMonthly - invAccidentCovered),
     };
+
+    // ===== DÉCÈS (maladie)
+
+
 
     // ===== DÉCÈS (maladie)
     const avsSpouseRight = spouseHasRightBasic({ ...ctx.survivor, hasChild: children > 0 });
