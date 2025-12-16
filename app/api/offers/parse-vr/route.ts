@@ -6,9 +6,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { v4 as uuidv4 } from "uuid";
 import { ImageAnnotatorClient } from "@google-cloud/vision";
 
-import { parseSwissLifeVRTables } from "lib/offers/parsers/swisslife/vr_ai";
-import { parseAxaOffer } from "lib/offers/parsers/axa";
-import { parseBaloiseVRTables } from "lib/offers/parsers/baloise/vr_ai"; // 👈 NOUVEAU
+
 import type {
   OfferParseContext,
   SurrenderValueRow,
@@ -18,6 +16,7 @@ import type {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
 
 
 const vision = new ImageAnnotatorClient();
@@ -45,6 +44,17 @@ function normalizeInsurer(raw: string): InsurerCode | "" {
 export async function POST(req: Request) {
   try {
     const { filePath } = await req.json();
+
+
+      const [swisslifeVr, axa, baloiseVr] = await Promise.all([
+      import("lib/offers/parsers/swisslife/vr_ai"),
+      import("lib/offers/parsers/axa"),
+      import("lib/offers/parsers/baloise/vr_ai"),
+    ]);
+
+    const { parseSwissLifeVRTables } = swisslifeVr;
+    const { parseAxaOffer } = axa;
+    const { parseBaloiseVRTables } = baloiseVr;
 
     if (!filePath || typeof filePath !== "string") {
       return NextResponse.json(
