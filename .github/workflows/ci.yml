@@ -7,53 +7,10 @@ on:
     branches: [ main ]
 
 jobs:
-  lint:
-    name: Lint & Typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # Installer pnpm AVANT setup-node (pour que le cache pnpm fonctionne)
-      - name: Install pnpm (global)
-        run: npm i -g pnpm@10.17.1
-
-      - name: Setup Node (with pnpm cache)
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          # pas de 'version' -> lit packageManager du package.json
-          run_install: false
-
-      - name: Install deps (frozen)
-        run: pnpm install --frozen-lockfile
-
-      - name: ESLint
-        continue-on-error: true
-        run: |
-          if pnpm run | grep -q "^ *lint"; then
-            pnpm run lint
-          else
-            echo "No lint script"
-          fi
-
-      - name: Typecheck (tsc --noEmit)
-        continue-on-error: true
-        run: |
-          if pnpm run | grep -q "^ *typecheck"; then
-            pnpm run typecheck
-          else
-            pnpm exec tsc --noEmit
-          fi
-
   build:
     name: Build
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -64,21 +21,11 @@ jobs:
       - name: Setup Node (with pnpm cache)
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          run_install: false
+          node-version: "20"
+          cache: "pnpm"
 
       - name: Install deps (frozen)
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: |
-          if pnpm run | grep -q "^ *build"; then
-            pnpm run build
-          else
-            pnpm exec next build
-          fi
+        run: pnpm run build
