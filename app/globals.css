@@ -1,3 +1,4 @@
+/*app/globals.css*/
 /* ===== Tailwind v4 ===== */
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
@@ -10,7 +11,7 @@
   --radius: 0.625rem;
 
   /* Brand primaire MoneyLife */
-  --primary: #0030A8;
+  --primary: #003263;
   --primary-foreground: white;
 
   /* Slate (clair) — tes valeurs existantes conservées */
@@ -192,4 +193,50 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ml-loop-x, .ml-sway-y { animation: none !important; }
+}
+
+/* MoneyLife — supprimer les flèches des inputs number */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* ===== MoneyLife Top Route Loader (Google-like continuous) ===== */
+@keyframes ml-toploader-move {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+
+/* Le gradient "glisse" à l’intérieur de la barre => effet flux continu */
+@keyframes ml-toploader-gradient {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+@layer utilities {
+  .ml-toploader-rainbow {
+    background-image: linear-gradient(
+      90deg,
+      #ff004c,
+      #ff7a00,
+      #ffd500,
+      #00d084,
+      #00b3ff,
+      #6a00ff,
+      #ff00c8,
+      #ff004c
+    );
+    background-size: 200% 100%;
+  }
+
+  .ml-toploader {
+    animation:
+      ml-toploader-move 0.9s linear infinite,
+      ml-toploader-gradient 0.65s linear infinite;
+  }
 }

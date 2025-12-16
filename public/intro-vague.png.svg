@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="420px" height="326px" viewBox="0 0 420 326" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Path</title>
+    <defs>
+        <linearGradient x1="38.6393578%" y1="35.9984535%" x2="102.026124%" y2="82.2206164%" id="linearGradient-1">
+            <stop stop-color="#FCBB88" offset="0%"></stop>
+            <stop stop-color="#E90059" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="Formulaires" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Large" transform="translate(0, -314)" fill="url(#linearGradient-1)">
+            <path d="M0,483.617695 C80.3357025,506.629553 157.047324,485.112902 230.134866,419.067741 C303.222407,353.02258 366.510785,318.245005 420,314.735014 L420,640 L0,640 L0,483.617695 Z" id="Path"></path>
+        </g>
+    </g>
+</svg>

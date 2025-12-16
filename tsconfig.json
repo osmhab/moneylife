@@ -1,3 +1,4 @@
+// tsconfig.json
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -11,10 +12,15 @@
     "jsx": "preserve",
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["app/*"],
+      "@/app-components/*": ["app/components/*"],
+      "@/components/*": ["components/*"],   // ✅ déjà présent
+      "@/lib/*": ["app/lib/*"]
     },
+
+    /* ✅ Ajout pour types locaux */
+    "typeRoots": ["./node_modules/@types", "./app/types"],
+
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
@@ -26,6 +32,7 @@
     "moduleDetection": "force",
     "incremental": true,
     "allowJs": true,
+
     "plugins": [
       {
         "name": "next"

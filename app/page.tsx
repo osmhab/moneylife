@@ -40,7 +40,7 @@ export default function LandingPage() {
         { href: "/pricing", label: "Tarifs" },
         { href: "/legal/securite", label: "Sécurité" },
       ]}
-      ctaHref="/scan"
+      ctaHref="/login"
       ctaLabel="Login"
       variant="glass"
       border
