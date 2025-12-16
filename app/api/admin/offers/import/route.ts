@@ -1,59 +1,47 @@
-// lib/offers/parseOfferPdf.ts
+// app/api/admin/offers/import/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { parseOfferPdf } from "lib/offers/parseOfferPdf";
 
-import vision from "@google-cloud/vision";
-import { ManualOfferPayload, InsurerCode, OfferParseContext } from "lib/offers/parsers/types";
-import { parseAxaOffer } from "lib/offers/parsers/axa";
+export const runtime = "nodejs";
 
-const visionClient = new vision.ImageAnnotatorClient();
+export async function POST(req: NextRequest) {
+  try {
+    const form = await req.formData();
 
-async function getOcrTextFromPdfBuffer(pdfBuffer: Buffer): Promise<string> {
-  const [result] = await visionClient.documentTextDetection({
-    image: { content: pdfBuffer },
-  });
+    const file = form.get("file");
+    if (!(file instanceof File)) {
+      return NextResponse.json(
+        { ok: false, error: "Missing file (field name: file)" },
+        { status: 400 }
+      );
+    }
 
-  const fullText = result.fullTextAnnotation?.text;
-  return fullText ?? "";
-}
+    const insurerHintRaw = form.get("insurerHint");
+    const requestIdRaw = form.get("requestId");
+    const clientUidRaw = form.get("clientUid");
 
-function detectInsurerFromText(text: string): InsurerCode | null {
-  if (/AXA/i.test(text)) return "AXA";
-  if (/Swiss Life/i.test(text)) return "Swiss Life";
-  if (/Bâloise/i.test(text) || /Baloise/i.test(text)) return "Bâloise";
-  if (/PAX/i.test(text)) return "PAX";
-  return null;
-}
+    const insurerHint =
+      typeof insurerHintRaw === "string" ? insurerHintRaw : "";
+    const requestId =
+      typeof requestIdRaw === "string" ? requestIdRaw : undefined;
+    const clientUid =
+      typeof clientUidRaw === "string" ? clientUidRaw : undefined;
 
-export async function parseOfferPdf(params: {
-  pdfBuffer: Buffer;
-  insurerHint?: InsurerCode | "";
-  requestId?: string;
-  clientUid?: string;
-}): Promise<ManualOfferPayload> {
-  const { pdfBuffer, insurerHint, requestId, clientUid } = params;
+    const buf = Buffer.from(await file.arrayBuffer());
 
-  // 1) OCR via Google Vision
-  const ocrText = await getOcrTextFromPdfBuffer(pdfBuffer);
-  console.log("[parseOfferPdf] OCR snippet:", ocrText.slice(0, 400));
+    const offer = await parseOfferPdf({
+      pdfBuffer: buf,
+      insurerHint: insurerHint as any,
+      requestId,
+      clientUid,
+    });
 
-  // 2) Détection assureur
-  const autoInsurer = detectInsurerFromText(ocrText);
-  const insurer: InsurerCode =
-    (insurerHint as InsurerCode) || autoInsurer || "AXA"; // fallback
-
-  console.log("[parseOfferPdf] insurer detected =", insurer);
-
-  const baseContext: OfferParseContext = {
-    insurerHint: insurer,
-    requestId,
-    clientUid,
-    ocrText,
-  };
-
-  // 3) Pour l'instant, on ne gère que AXA (mais la structure permet de rajouter les autres)
-  const offer = await parseAxaOffer(baseContext);
-
-  // on force le champ insurer dans l'offre
-  offer.insurer = "AXA";
-
-  return offer;
+    return NextResponse.json({ ok: true, offer });
+  } catch (err: any) {
+    console.error("[api/admin/offers/import] error:", err);
+    return NextResponse.json(
+      { ok: false, error: err?.message ?? "Unknown error" },
+      { status: 500 }
+    );
+  }
 }

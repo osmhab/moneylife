@@ -1,5 +1,5 @@
 // lib/learner.ts
-import { db } from '@/lib/firebaseAdmin';
+import { db } from "@/lib/firebase/admin";
 import crypto from 'crypto';
 
 export function normalizeText(s: string): string {

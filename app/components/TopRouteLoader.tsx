@@ -1,13 +1,12 @@
-
-//app/components/TopRouteLoader.tsx
+// app/components/TopRouteLoader.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 const EVENT_START = "ml:route-loading-start";
 
-export default function TopRouteLoader() {
+function TopRouteLoaderInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -48,5 +47,14 @@ export default function TopRouteLoader() {
 
       <div className="absolute top-0 h-full w-[42%] rounded-full ml-toploader-rainbow ml-toploader shadow-[0_0_14px_rgba(0,0,0,0.18)]" />
     </div>
+  );
+}
+
+export default function TopRouteLoader() {
+  // ✅ Next 16: useSearchParams doit être sous Suspense
+  return (
+    <Suspense fallback={null}>
+      <TopRouteLoaderInner />
+    </Suspense>
   );
 }

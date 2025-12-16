@@ -1,4 +1,3 @@
-// tsconfig.json
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -9,18 +8,24 @@
     ],
     "module": "esnext",
     "moduleResolution": "bundler",
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["app/*"],
-      "@/app-components/*": ["app/components/*"],
-      "@/components/*": ["components/*"],   // ✅ déjà présent
-      "@/lib/*": ["app/lib/*"]
+      "@/*": [
+        "app/*"
+      ],
+      "@/app-components/*": [
+        "app/components/*"
+      ],
+      "@/components/*": [
+        "components/*"
+      ], // ✅ déjà présent
+      "@/lib/*": [
+        "app/lib/*"
+      ]
     },
-
-    /* ✅ Ajout pour types locaux */
-    "typeRoots": ["./node_modules/@types", "./app/types"],
-
+    /* types locaux (optionnel) */
+// "typeRoots": ["./app/types"],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
@@ -32,7 +37,6 @@
     "moduleDetection": "force",
     "incremental": true,
     "allowJs": true,
-
     "plugins": [
       {
         "name": "next"
@@ -43,7 +47,8 @@
     "**/*.ts",
     "**/*.tsx",
     "next-env.d.ts",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
