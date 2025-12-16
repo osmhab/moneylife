@@ -15,6 +15,10 @@ import type {
   InsurerCode,
 } from "lib/offers/parsers/types";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 
 const vision = new ImageAnnotatorClient();
 
