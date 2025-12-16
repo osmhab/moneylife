@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { db } from "@/lib/firebase/admin";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 /**
  * Route IA — Profil d'investisseur pour le 3e pilier
  *
@@ -26,9 +29,11 @@ import { db } from "@/lib/firebase/admin";
  * L’IA ne sert qu’à rédiger le texte de synthèse (summary).
  */
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+  return new OpenAI({ apiKey });
+}
 
 type Answers = Record<string, string | undefined>;
 
@@ -420,7 +425,7 @@ Ne propose pas de produits précis, reste sur le principe général.
     profile: core,
   };
 
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4.1-mini",
     temperature: 0.4,
     messages: [

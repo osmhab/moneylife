@@ -51,9 +51,11 @@ type HealthAIBlockResponse = AskNextResponse | CompletedResponse;
    OPENAI CLIENT
    ============================================================ */
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+  return new OpenAI({ apiKey });
+}
 
 /* ============================================================
    JSON SCHEMA POUR STRUCTURED OUTPUT
@@ -281,7 +283,7 @@ IMPORTANT :
   let aiJson: HealthAIBlockResponse | null = null;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model,
       messages: [
         {
