@@ -31,7 +31,7 @@ jobs:
           run_install: false
 
       - name: Approve native build scripts
-        run: pnpm approve-builds -y
+        run: pnpm approve-builds --all
 
       - name: Install deps (frozen)
         run: pnpm install --frozen-lockfile
