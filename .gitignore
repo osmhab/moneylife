@@ -27,3 +27,5 @@ secrets/
 *.gcloud.json
 # Firebase emulator junk
 firebase-debug.log
+# Legacy Firebase Functions (DO NOT bundle in Next build)
+app/lib/legacy/functions/node_modules/
