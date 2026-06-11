@@ -21,11 +21,14 @@ export interface Enter_Enfant {
  * Données saisies (formulaire / OCR)
  * =======================================================*/
 export interface ClientData {
+
+  
   /* -------- Identité -------- */
   Enter_prenom: string;
   Enter_nom: string;
   Enter_dateNaissance: string; // "dd.MM.yyyy"
   Enter_sexe: Enter_Sexe;
+  Enter_noAVS?: string | null;
 
   /* -------- Statut civil / conjoint -------- */
   Enter_etatCivil: Enter_EtatCivil;
@@ -43,6 +46,9 @@ export interface ClientData {
   Enter_statutProfessionnel: Enter_StatutProfessionnel;
   Enter_travaillePlusde8HSemaine: boolean;
   Enter_Affilie_LPP: boolean;
+  Enter_employeur?: string | null;
+  Enter_adresseEmployeur?: string | null;
+  Enter_lppTauxActivite?: number | null;
 
   /* -------- IJ -------- */
   Enter_ijMaladie?: boolean;
@@ -63,11 +69,19 @@ export interface ClientData {
   // Salaire assuré : général OU split (épargne/risque)
   Enter_typeSalaireAssure?: "general" | "split";
   Enter_salaireAssureLPP?: number;          // si general
+  Enter_lppSalaireAssureRisque?: number | null; // <-- AJOUT IA
   Enter_salaireAssureLPPRisque?: number;    // si split
   Enter_salaireAssureLPPEpargne?: number;   // si split
 
+
   Enter_renteInvaliditeLPP?: number;
   Enter_renteEnfantInvaliditeLPP?: number;
+  Enter_renteInvaliditeMaladie?: number | null;
+  Enter_lppRenteInvaliditeAccident?: number | null;
+  Enter_renteEnfantInvalideMaladie?: number | null;
+  Enter_renteEnfantInvalideAccident?: number | null;
+  Enter_lppRenteConjointAccident?: number | null;
+  Enter_lppRenteOrphelinAccident?: number | null;
   Enter_renteOrphelinLPP?: number;
   Enter_RenteConjointOuPartenaireLPP?: 0 | 1; // 0 conjoint, 1 partenaire
   Enter_renteConjointLPP?: number;
@@ -90,6 +104,15 @@ export interface ClientData {
 
   /* Vieillesse */
   Enter_rentevieillesseLPP65?: number;
+  Enter_lppCapitalProjete65?: number | null;
+  capitalRetraiteGlobal?: number | null; // capital retraite projeté (source data/projection)
+  Enter_rentevieillesseLPP64?: number | null; Enter_prestationCapital64?: number | null;
+  Enter_rentevieillesseLPP63?: number | null; Enter_prestationCapital63?: number | null;
+  Enter_rentevieillesseLPP62?: number | null; Enter_prestationCapital62?: number | null;
+  Enter_rentevieillesseLPP61?: number | null; Enter_prestationCapital61?: number | null;
+  Enter_rentevieillesseLPP60?: number | null; Enter_prestationCapital60?: number | null;
+  Enter_rentevieillesseLPP59?: number | null; Enter_prestationCapital59?: number | null;
+  Enter_rentevieillesseLPP58?: number | null; Enter_prestationCapital58?: number | null;
 
   /* -------- Métadonnées certificat LPP -------- */
   Enter_dateCertificatLPP?: string; // "dd.MM.yyyy"
@@ -97,6 +120,17 @@ export interface ClientData {
   /* -------- Avoirs / Libre passage -------- */
   Enter_avoirVieillesseObligatoire?: number;
   Enter_avoirVieillesseTotal?: number;
+  institutionName?: string | null;
+  Enter_anneeCertificat?: string | null;
+  Enter_adresseCaisse?: string | null;
+  Enter_lppAvoirObligatoire?: number | null;
+  Enter_lppAvoirMariage?: number | null;
+  Enter_lppCotisationEpargneEmploye?: number | null;
+  Enter_lppCotisationEpargneEmployeur?: number | null;
+  Enter_lppCotisationRisqueFraisEmploye?: number | null;
+  Enter_lppCotisationRisqueFraisEmployeur?: number | null;
+  Enter_lppRachatPossible?: number | null;
+  Enter_lppEPLPossible?: number | null;
   Enter_librePassageObligatoire?: number;
   Enter_librePassageTotal?: number;
 
