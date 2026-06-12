@@ -134,12 +134,13 @@ Objectif : une **app iOS native** (SwiftUI, Xcode), **iOS uniquement**.
 ## 5. Priorités actuelles
 
 1. **Tests unitaires (Vitest)** — *en cours*. Harnais en place (`vitest.config.ts`, `pnpm test`).
-   **46 tests verts** sur le moteur (`3epilier.test.ts`, `lpp.test.ts`, `laa.test.ts`) couvrant :
+   **57 tests verts** sur le moteur (`3epilier`, `lpp`, `laa`, `avsAi`, `avsDeces` `.test.ts`) couvrant :
    priorité override `projectionAssureur` (+ `0` non-override), règle accident → fallback maladie,
    préservation des `0` explicites (`??`), projection à intérêt composé, taux par profil,
    bornes du salaire assuré (clamp min/max), mode certificat `split`, rente vieillesse dynamique,
-   `computeDeathBenefitAssurance`, et LAA (IJ, rentes, capital unique, cap famille 70%).
-   **Reste à couvrir** : `avsAi`, `avsDeces`, `audit3a` (souvent dépendants de données seedées).
+   `computeDeathBenefitAssurance`, LAA (IJ, rentes, capital unique, cap famille 70%),
+   et AVS (années de cotisation, revenu moyen, supplément de carrière, sélecteur échelle 44).
+   **Reste à couvrir** : `audit3a` (dépendant de données seedées).
 2. **Unifier les doublons du moteur** (`app/lib/calculs` vs `lib/shared/calculs` vs racine `lib/`) → une seule source.
 3. **Exposer le moteur en API** — *fait (1re vague)*. **3 endpoints** sous `app/api/calculs/` (validés zod,
    **sécurisés par jeton Firebase** via `app/lib/server/requireAuth.ts`), consommés par l'app iOS :
