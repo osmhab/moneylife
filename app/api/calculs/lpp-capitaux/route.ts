@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAuth } from "@/lib/server/requireAuth";
 import {
   calcCapitalDecesMaladieAucuneRenteLPP,
   calcCapitalDecesAccidentAucuneRenteLAA,
@@ -22,6 +23,12 @@ const BodySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  try {
+    await requireAuth(req);
+  } catch {
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  }
+
   let json: unknown;
   try {
     json = await req.json();
