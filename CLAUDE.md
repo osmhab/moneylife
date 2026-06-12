@@ -123,28 +123,29 @@ Objectif : une **app iOS native** (SwiftUI, Xcode), **iOS uniquement**.
 - Partage **le même projet Firebase** que le web (Auth + Firestore communs).
 - **V1 = tranche verticale** : login → dashboard prévoyance → 1 plan (dérisquer l'archi avant d'industrialiser).
 - **Mode de travail** : pédagogique (Habib débute en Swift — expliquer les concepts au fil de l'eau).
-- **Statut** : tranche verticale V1 **complète** — auth Firebase, lecture Firestore des plans,
-  navigation vers le détail, et **consommation de l'API de calcul serveur** (la projection LPP
-  est affichée via `POST /api/calculs/projection-retraite`, pas recalculée en Swift). Repo iOS
-  propre, commits sur `main`. **Prochaines pistes** : étendre l'API (rentes/capitaux), scan VisionKit,
-  sécuriser l'endpoint (jeton Firebase + App Check), URL d'API configurable dev/prod.
+- **Statut** : tranche verticale V1 **complète + analyse LPP complète**. L'app affiche, via l'API serveur,
+  la **projection retraite, les rentes (invalidité/décès/vieillesse) et les capitaux décès** d'un plan LPP —
+  aucune actuariat en Swift. Appels API **authentifiés** (jeton Firebase joint à chaque requête). Repo iOS
+  propre, commits sur `main`. **Prochaines pistes** : App Check, toggle Maladie/Accident, scan VisionKit,
+  URL d'API configurable dev/prod, tests UI.
 
 ---
 
 ## 5. Priorités actuelles
 
 1. **Tests unitaires (Vitest)** — *en cours*. Harnais en place (`vitest.config.ts`, `pnpm test`).
-   **39 tests verts** sur le moteur (`app/lib/calculs/3epilier.test.ts`, `lpp.test.ts`) couvrant :
+   **46 tests verts** sur le moteur (`3epilier.test.ts`, `lpp.test.ts`, `laa.test.ts`) couvrant :
    priorité override `projectionAssureur` (+ `0` non-override), règle accident → fallback maladie,
    préservation des `0` explicites (`??`), projection à intérêt composé, taux par profil,
-   bornes du salaire assuré (clamp min/max), mode certificat `split` (risque + épargne),
-   rente vieillesse dynamique, et `computeDeathBenefitAssurance`.
-   **Reste à couvrir** : `avsAi`, `avsDeces`, `laa`, `audit3a` (souvent dépendants de données seedées).
+   bornes du salaire assuré (clamp min/max), mode certificat `split`, rente vieillesse dynamique,
+   `computeDeathBenefitAssurance`, et LAA (IJ, rentes, capital unique, cap famille 70%).
+   **Reste à couvrir** : `avsAi`, `avsDeces`, `audit3a` (souvent dépendants de données seedées).
 2. **Unifier les doublons du moteur** (`app/lib/calculs` vs `lib/shared/calculs` vs racine `lib/`) → une seule source.
-3. **Exposer le moteur en API** — *démarré*. `POST /api/calculs/projection-retraite` (LPP / 3a, validé
-   par zod) en place et **consommé par l'app iOS** pour la projection LPP. Reste à étendre (projection
-   complète : rentes + capitaux décès/invalidité, qui demandera `Legal_Settings`) et à sécuriser
-   (vérif jeton Firebase + App Check).
+3. **Exposer le moteur en API** — *fait (1re vague)*. **3 endpoints** sous `app/api/calculs/` (validés zod,
+   **sécurisés par jeton Firebase** via `app/lib/server/requireAuth.ts`), consommés par l'app iOS :
+   `projection-retraite` (LPP/3a), `lpp-rentes`, `lpp-capitaux` (ces 2 derniers utilisent la source unique
+   `app/lib/core/legal.ts` → `LEGAL_2025`, qui remplace l'ancienne constante `DEFAULT_LEGAL_2025` dupliquée).
+   Reste : **App Check**, et étendre aux écrans de lacunes/AVS.
 4. **Nettoyage du code mort** — un inventaire des fichiers orphelins / non importés a été établi (anciens
    résidus, doublons `lib/shared`, composants non câblés). À traiter par vagues, à faible risque.
 
