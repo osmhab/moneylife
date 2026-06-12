@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computeProjections3aAssurance,
   computeProjections3aBanque,
+  computeDeathBenefitAssurance,
   type Data3aAssurance,
   type Data3aBanque,
 } from "./3epilier";
@@ -95,5 +96,27 @@ describe("computeProjections3aBanque", () => {
     };
     // r = 0.5%, n = 1, P = 1200 -> 10050 + 1200 = 11250
     expect(computeProjections3aBanque(data, 64)).toBe(11_250);
+  });
+});
+
+describe("computeDeathBenefitAssurance", () => {
+  it("contrat libéré → retourne l'épargne actuelle (valeur de rachat)", () => {
+    const data = makeAssurance({ valeurRachatActuelle: 5_000, isLibere: true, capitalDecesFixe: 99_999 });
+    expect(computeDeathBenefitAssurance(data)).toBe(5_000);
+  });
+
+  it("capital décès fixe > épargne → prend le capital fixe", () => {
+    const data = makeAssurance({ valeurRachatActuelle: 5_000, capitalDecesFixe: 100_000 });
+    expect(computeDeathBenefitAssurance(data)).toBe(100_000);
+  });
+
+  it("épargne > capital fixe → prend l'épargne (max des deux)", () => {
+    const data = makeAssurance({ valeurRachatActuelle: 150_000, capitalDecesFixe: 100_000 });
+    expect(computeDeathBenefitAssurance(data)).toBe(150_000);
+  });
+
+  it("sans capital fixe ni date de début → retourne l'épargne", () => {
+    const data = makeAssurance({ valeurRachatActuelle: 5_000 });
+    expect(computeDeathBenefitAssurance(data)).toBe(5_000);
   });
 });
