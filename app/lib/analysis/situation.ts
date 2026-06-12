@@ -40,6 +40,8 @@ export interface RiskCard {
 export interface SituationAnalysis {
   totalScore: number;
   salaireMensuel: number;
+  /** Rente retraite mensuelle de base (AVS + LPP, hors 3e pilier) — pour la courbe. */
+  retraiteBaseMensuelle: number;
   retraite: RiskCard;
   invaliditeMaladie: RiskCard;
   invaliditeAccident: RiskCard;
@@ -199,6 +201,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   return {
     totalScore,
     salaireMensuel: salaireAnnuel / 12,
+    retraiteBaseMensuelle: prestationsRetAnnuelle / 12,
     retraite: {
       besoin: cibleRetraiteMensuelle,
       couverture: renteTotaleAffichee,
