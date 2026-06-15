@@ -50,7 +50,15 @@ function getGeminiJsonSchema() {
   };
   TEXT_FIELDS.forEach((f) => (properties[f] = { type: "STRING" }));
   FINANCIAL_FIELDS.forEach((f) => (properties[f] = { type: "INTEGER", description: "Montant entier en CHF nettoyé" }));
-  return { type: "OBJECT", properties };
+
+  // Paliers de projection vieillesse (rentes + capitaux de 58 à 65 ans).
+  for (let age = 58; age <= 65; age++) {
+    properties[`Enter_rentevieillesseLPP${age}`] = { type: "INTEGER", description: `Rente annuelle projetée à ${age} ans` };
+    const capKey = age === 64 || age === 65 ? `Enter_lppCapitalProjete${age}` : `Enter_prestationCapital${age}`;
+    properties[capKey] = { type: "INTEGER", description: `Capital projeté à ${age} ans` };
+  }
+
+  return { type: "OBJECT", properties, required: ["institutionName"] };
 }
 
 export async function POST(req: NextRequest) {
@@ -105,7 +113,7 @@ ${knowledgeBase}`;
     const data: Record<string, any> = {};
     Object.keys(getGeminiJsonSchema().properties).forEach((key) => {
       const val = geminiParsed[key];
-      if (val !== undefined && val !== null && val !== "") {
+      if (val !== undefined && val !== null && val !== "" && val !== "null") {
         if (TEXT_FIELDS.includes(key) || key === "institutionName") {
           data[key] = String(val).trim();
         } else {
