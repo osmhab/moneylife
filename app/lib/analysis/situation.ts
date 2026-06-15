@@ -42,6 +42,8 @@ export interface SituationAnalysis {
   salaireMensuel: number;
   /** Rente retraite mensuelle de base (AVS + LPP, hors 3e pilier) — pour la courbe. */
   retraiteBaseMensuelle: number;
+  /** Capital retraite manquant (lacune annuelle × 25 − capital 3a utilisé) — pour le pricing. */
+  capManquantRetraite: number;
   retraite: RiskCard;
   invaliditeMaladie: RiskCard;
   invaliditeAccident: RiskCard;
@@ -202,6 +204,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
     totalScore,
     salaireMensuel: salaireAnnuel / 12,
     retraiteBaseMensuelle: prestationsRetAnnuelle / 12,
+    capManquantRetraite: Math.max(0, cibleRetAnnuelle - prestationsRetAnnuelle) * 25 - capitalUtilise,
     retraite: {
       besoin: cibleRetraiteMensuelle,
       couverture: renteTotaleAffichee,
