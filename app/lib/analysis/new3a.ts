@@ -51,6 +51,8 @@ export interface New3aOffer {
   taxSaving: number;
   targets: { primeEpargne: number; maladie: number; deces: number; retraite: number };
   provider: string;
+  /** Âge du client (pour l'horizon de souscription). */
+  clientAge: number;
 }
 
 const PLAFOND_3A = 7258;
@@ -223,5 +225,6 @@ export function computeNew3aOffer(input: {
     taxSaving,
     targets,
     provider: ref?.provider || "Sur Mesure",
+    clientAge,
   };
 }
