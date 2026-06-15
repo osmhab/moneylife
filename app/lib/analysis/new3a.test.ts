@@ -105,6 +105,27 @@ describe("computeNew3aOffer", () => {
     expect(offre.recoEpargne).toBeGreaterThan(300);
   });
 
+  it("respecte les overrides d'édition (toggle décès off + prime d'épargne éditée)", () => {
+    const s = baseSituation({
+      capManquantRetraite: 100000,
+      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0 },
+    });
+    const base = computeNew3aOffer({
+      wizard: wizard({ objective: ["protection_family"] }),
+      situation: s, clientAge: 40, clientGender: "M", benchmarks: [benchmark("A")],
+    });
+    expect(base.selDec).toBe(true);
+
+    const edited = computeNew3aOffer({
+      wizard: wizard({ objective: ["protection_family"] }),
+      situation: s, clientAge: 40, clientGender: "M", benchmarks: [benchmark("A")],
+      overrides: { selDec: false, hasUserEditedEpargne: true, primeEpargne: 200 },
+    });
+    expect(edited.selDec).toBe(false);
+    expect(edited.premiums.ret).toBe(200);              // prime d'épargne éditée respectée
+    expect(edited.grossTotal).toBeLessThan(base.grossTotal); // décès retiré → total plus bas
+  });
+
   it("répartit sur le 3a jusqu'au plafond restant puis le 3b", () => {
     const s = baseSituation({
       capManquantRetraite: 100000,

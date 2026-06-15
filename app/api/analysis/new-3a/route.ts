@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase/admin";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { computeSituationAnalysis } from "@/lib/analysis/situation";
-import { computeNew3aOffer, type New3aWizard } from "@/lib/analysis/new3a";
+import { computeNew3aOffer, type New3aWizard, type New3aOverrides } from "@/lib/analysis/new3a";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +30,11 @@ export async function POST(req: NextRequest) {
   }
 
   let wizard: New3aWizard;
+  let overrides: New3aOverrides | undefined;
   try {
     const body = await req.json();
     wizard = body?.wizard ?? body;
+    overrides = body?.overrides;
   } catch {
     return NextResponse.json({ error: "Corps de requête invalide" }, { status: 400 });
   }
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
     const clientAge = Number(cloudData.Enter_age) || ageFromDateNaissance(cloudData.Enter_dateNaissance);
     const clientGender = cloudData.Enter_civilite === "Mme" ? "F" : "M";
 
-    const offer = computeNew3aOffer({ wizard, situation, clientAge, clientGender, benchmarks });
+    const offer = computeNew3aOffer({ wizard, situation, clientAge, clientGender, benchmarks, overrides });
 
     return NextResponse.json({ offer, meta: { nbModels: benchmarks.length, clientAge } });
   } catch (e: any) {

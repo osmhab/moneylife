@@ -20,6 +20,21 @@ export interface New3aWizard {
   monthlyBudget: number;
 }
 
+/** Surcharges issues de l'édition interactive du client sur l'écran résultat. */
+export interface New3aOverrides {
+  selRet?: boolean;
+  selInc?: boolean;
+  selDec?: boolean;
+  selPay?: boolean;
+  /** Prime d'épargne éditée manuellement (utilisée si hasUserEditedEpargne). */
+  primeEpargne?: number;
+  /** Rente d'invalidité mensuelle cible éditée. */
+  maladie?: number;
+  /** Capital décès cible édité. */
+  deces?: number;
+  hasUserEditedEpargne?: boolean;
+}
+
 export interface New3aOffer {
   selRet: boolean;
   selInc: boolean;
@@ -95,25 +110,29 @@ export function computeNew3aOffer(input: {
   clientAge: number;
   clientGender: string; // "M" | "F"
   benchmarks: any[];
+  /** Surcharges d'édition interactive (toggles / cibles / prime éditée). */
+  overrides?: New3aOverrides;
 }): New3aOffer {
   const { wizard, situation, clientAge, clientGender, benchmarks } = input;
+  const ov = input.overrides || {};
 
   const isFemale = clientGender === "F";
   const isSmoker = wizard.isSmoker === true;
   const riskProfile: RiskProfile = wizard.riskProfile || "balanced";
   const objectives = wizard.objective || [];
 
-  // Mapping objectifs → couvertures actives (épargne + libération toujours actives).
-  const selRet = true;
-  const selPay = true;
-  const selInc = objectives.includes("protection_income");
-  const selDec = objectives.includes("protection_family") || objectives.includes("protection");
+  // Couvertures actives : par défaut mappées sur les objectifs (épargne + libération
+  // toujours actives), sauf surcharge explicite par l'édition du client.
+  const selRet = ov.selRet ?? true;
+  const selPay = ov.selPay ?? true;
+  const selInc = ov.selInc ?? objectives.includes("protection_income");
+  const selDec = ov.selDec ?? (objectives.includes("protection_family") || objectives.includes("protection"));
 
   const derived = deriveTargets(situation);
   const targets = {
     primeEpargne: wizard.monthlyBudget || 250,
-    maladie: derived.maladie,
-    deces: derived.deces,
+    maladie: ov.maladie ?? derived.maladie,
+    deces: ov.deces ?? derived.deces,
     retraite: derived.retraite,
   };
   const existing3a = derived.existing3a;
@@ -150,16 +169,22 @@ export function computeNew3aOffer(input: {
   }
   const idealEpargne = Math.max(0, roundTo5Cents(requiredMonthlyPremium));
 
-  // Côté serveur, pas d'édition manuelle : on applique la prime suggérée (chemin "non édité").
-  const budget = wizard.monthlyBudget || 250;
-  const appliedInc = selInc ? incCost : 0;
-  const appliedDec = selDec ? decCost : 0;
-  let maxAffordableEpargne = budget - appliedInc - appliedDec;
-  if (selPay) {
-    maxAffordableEpargne = budget / (1 + payRate) - appliedInc - appliedDec;
+  // Prime d'épargne : valeur éditée par le client si fournie, sinon suggestion automatique
+  // (max entre l'idéal pour combler la lacune et ce que le budget permet — chemin "non édité").
+  let epargnePremium: number;
+  if (ov.hasUserEditedEpargne && ov.primeEpargne != null) {
+    epargnePremium = Math.max(0, ov.primeEpargne);
+  } else {
+    const budget = wizard.monthlyBudget || 250;
+    const appliedInc = selInc ? incCost : 0;
+    const appliedDec = selDec ? decCost : 0;
+    let maxAffordableEpargne = budget - appliedInc - appliedDec;
+    if (selPay) {
+      maxAffordableEpargne = budget / (1 + payRate) - appliedInc - appliedDec;
+    }
+    epargnePremium = Math.max(idealEpargne, maxAffordableEpargne);
+    epargnePremium = Math.max(50, roundTo5Cents(epargnePremium));
   }
-  let epargnePremium = Math.max(idealEpargne, maxAffordableEpargne);
-  epargnePremium = Math.max(50, roundTo5Cents(epargnePremium));
 
   const payCost = selPay ? (epargnePremium + (selInc ? incCost : 0) + (selDec ? decCost : 0)) * payRate : 0;
   const annualContribution = epargnePremium * 12;
