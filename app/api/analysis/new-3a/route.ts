@@ -1,24 +1,22 @@
-// app/api/analysis/solution/route.ts
+// app/api/analysis/new-3a/route.ts
 //
-// Renvoie la SOLUTION proposée (« Améliorer ma prévoyance ») pour l'utilisateur connecté :
-// prime mensuelle CreditX (retraite / invalidité / décès / exonération), meilleurs providers,
-// split 3a/3b et gain fiscal. Lit Analyse/current + DonneePersonnelles + plans (admin SDK),
-// calcule l'analyse des lacunes puis le pricing à partir des modèles ML (learner_models_3a).
+// Proposition 3a pilotée par le questionnaire (new-3a). Reçoit les réponses du
+// wizard (objectifs / philosophie / profil de risque / fumeur / budget), lit
+// l'analyse des lacunes + les modèles ML côté serveur, et renvoie l'offre chiffrée.
+// Règle métier : on ne chiffre pas sans le questionnaire (memory new-3a-wizard-required).
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase/admin";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { computeSituationAnalysis } from "@/lib/analysis/situation";
-import { computeSolution } from "@/lib/analysis/solution";
-import type { ProviderModelDoc } from "lib/engines/threeA-engine";
+import { computeNew3aOffer, type New3aWizard } from "@/lib/analysis/new3a";
 
 export const dynamic = "force-dynamic";
 
-/** Âge à partir d'une date "jj.mm.aaaa". */
 function ageFromDateNaissance(s: any): number {
   if (!s) return 0;
   const parts = String(s).split(".").map(Number);
-  const year = parts[2] || parts[0]; // tolère "aaaa" seul
+  const year = parts[2] || parts[0];
   if (!year || year < 1900) return 0;
   return new Date().getFullYear() - year;
 }
@@ -29,6 +27,14 @@ export async function POST(req: NextRequest) {
     ({ uid } = await requireAuth(req));
   } catch {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  }
+
+  let wizard: New3aWizard;
+  try {
+    const body = await req.json();
+    wizard = body?.wizard ?? body;
+  } catch {
+    return NextResponse.json({ error: "Corps de requête invalide" }, { status: 400 });
   }
 
   try {
@@ -50,20 +56,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const benchmarks = modelsSnap.docs
-      .map((d) => ({ provider: d.id, ...d.data() }) as ProviderModelDoc)
-      .filter((m) => m.deathUnit && m.disabilityUnit && m.waiverRate);
-
-    // Comme le hook : Enter_age en priorité, sinon dérivé de la date de naissance.
+    const benchmarks = modelsSnap.docs.map((d) => ({ provider: d.id, ...d.data() }));
     const clientAge = Number(cloudData.Enter_age) || ageFromDateNaissance(cloudData.Enter_dateNaissance);
-    const genderF = cloudData.Enter_civilite === "Mme" ? 1 : 0;
+    const clientGender = cloudData.Enter_civilite === "Mme" ? "F" : "M";
 
-    const solution = computeSolution({ situation, clientAge, genderF, benchmarks });
+    const offer = computeNew3aOffer({ wizard, situation, clientAge, clientGender, benchmarks });
 
-    return NextResponse.json({
-      solution,
-      meta: { nbModels: benchmarks.length, clientAge },
-    });
+    return NextResponse.json({ offer, meta: { nbModels: benchmarks.length, clientAge } });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Erreur serveur" }, { status: 500 });
   }
