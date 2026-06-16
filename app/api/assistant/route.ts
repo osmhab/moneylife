@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const upstream = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "x-api-key": key,
@@ -75,17 +75,54 @@ export async function POST(req: NextRequest) {
         max_tokens: 800,
         system: buildSystemPrompt(context),
         messages: clean,
+        stream: true,
       }),
     });
 
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      return NextResponse.json({ error: `Erreur IA ${res.status}`, detail: detail.slice(0, 300) }, { status: 502 });
+    if (!upstream.ok || !upstream.body) {
+      const detail = await upstream.text().catch(() => "");
+      return NextResponse.json({ error: `Erreur IA ${upstream.status}`, detail: detail.slice(0, 300) }, { status: 502 });
     }
 
-    const data = await res.json();
-    const reply = data?.content?.[0]?.text ?? "";
-    return NextResponse.json({ reply });
+    // Ré-émet uniquement les deltas de texte (SSE Anthropic) en flux brut UTF-8.
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const reader = upstream.body!.getReader();
+        const decoder = new TextDecoder();
+        const encoder = new TextEncoder();
+        let buffer = "";
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (const line of lines) {
+              if (!line.startsWith("data:")) continue;
+              const payload = line.slice(5).trim();
+              if (!payload || payload === "[DONE]") continue;
+              try {
+                const evt = JSON.parse(payload);
+                if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
+                  controller.enqueue(encoder.encode(evt.delta.text));
+                }
+              } catch {
+                /* ligne SSE non-JSON ignorée */
+              }
+            }
+          }
+        } catch {
+          /* flux interrompu */
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache" },
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Erreur serveur" }, { status: 500 });
   }
