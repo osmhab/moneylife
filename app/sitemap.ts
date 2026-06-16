@@ -19,8 +19,6 @@ const publicRoutes = [
   "/legal/cookies",
   "/prevoyance/diagnostic",
   "/pricing",
-  "/verifier-3e-pilier",
-  "/verifier-3e-pilier/comprendre",
   "/verifier-3e-pilier/rappel",
 ];
 
