@@ -14,20 +14,17 @@ const MODEL = "claude-sonnet-4-6";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
-// Faits de RÉASSURANCE sur CreditX — uniquement du vérifiable/défendable.
-// ⚠️ Ne jamais y mettre de claim réglementaire non confirmé (FINMA, agrément…).
-// Compléter avec les éléments officiels fournis par CreditX (cf. TODO ci-dessous).
+// Faits de RÉASSURANCE sur CreditX — VÉRIFIÉS (site creditx.ch + registre FINMA).
+// ⚠️ N'ajouter ici que du factuel confirmé : l'assistant les présente tels quels aux clients.
 const CREDITX_FACTS = [
-  "CreditX est une entreprise suisse spécialisée dans la prévoyance (2e et 3e pilier) ; son application s'appelle MoneyLife.",
-  "Les solutions proposées s'appuient sur des assureurs établis et reconnus en Suisse (par exemple AXA, Swiss Life, Baloise, PAX).",
-  "La proposition affichée est gratuite et SANS ENGAGEMENT : rien n'est signé tant que le client n'a pas validé, et il peut tout arrêter à tout moment.",
-  "Un conseiller humain accompagne et valide chaque souscription — aucun contrat n'est conclu automatiquement.",
-  "Les montants sont indicatifs et personnalisés selon les réponses du client ; une offre formelle confirme les chiffres.",
-  // TODO CreditX (à confirmer pour renforcer la réassurance) :
-  //  - Raison sociale exacte + siège + année de création
-  //  - Statut/registre d'intermédiaire (ex. FINMA / registre cantonal), n° d'agrément
-  //  - Sécurité des données (hébergement, conformité nLPD/RGPD)
-  //  - Certifications / partenaires bancaires
+  "CreditX (raison sociale : CreditX Sàrl, UID CHE-203.347.547) est une entreprise suisse de prévoyance basée en Valais (siège à Conthey, contact à Sion). Son application s'appelle MoneyLife.",
+  "CreditX Sàrl est un INTERMÉDIAIRE D'ASSURANCE NON LIÉ enregistré auprès de la FINMA (autorité fédérale de surveillance des marchés financiers) sous le numéro F01536084 — vérifiable sur le registre public de la FINMA. « Non lié » = indépendant : CreditX n'appartient à aucun assureur et compare pour le client.",
+  "La plateforme centralise et analyse les documents de prévoyance (2e et 3e pilier), révèle les lacunes (retraite, invalidité, décès) et propose des plans 3a personnalisés. (Crédits hypothécaires et privés à venir.)",
+  "Partenaires de prévoyance officiels : AXA, Swiss Life, Pax, Baloise, Helvetia. CreditX peut ajouter d'autres partenaires selon les produits utiles à ses clients.",
+  "Le service est GRATUIT pour le client : CreditX est rémunéré par des commissions versées par les partenaires à la souscription, sans surcoût pour le client.",
+  "Sécurité & données : chiffrement de bout en bout, hébergement sécurisé, audits réguliers ; conformité LPD (loi suisse sur la protection des données) et RGPD. CreditX ne revend jamais les données ; les données de santé sont supprimées après signature.",
+  "La proposition affichée est SANS ENGAGEMENT : rien n'est signé tant que le client n'a pas validé ; un conseiller humain accompagne et valide chaque souscription ; le client peut tout arrêter à tout moment.",
+  "Les montants sont indicatifs et personnalisés ; une offre formelle confirme les chiffres. Contact : formulaire sur creditx.ch/contact (réponse sous 24h ouvrées).",
 ].join("\n- ");
 
 function buildSystemPrompt(context: any): string {
