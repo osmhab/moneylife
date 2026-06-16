@@ -10,16 +10,13 @@ const publicRoutes = [
   "/contact",
   "/presentation",
   "/prevoyance/3e-pilier",
-  "/rappel",
-  "/audit-3a",
-  "/audit-3a/upload",
   "/legal",
   "/legal/cgu",
   "/legal/confidentialite",
   "/legal/cookies",
   "/prevoyance/diagnostic",
   "/pricing",
-  "/verifier-3e-pilier/rappel",
+  "/rappel",
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
