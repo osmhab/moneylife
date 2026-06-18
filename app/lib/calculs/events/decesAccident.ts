@@ -165,12 +165,14 @@ export function computeDecesAccident(
   const LAA_Due = Legal_renteLAADueAt(client, dateDeces);
   const LAA_NonDue = Legal_renteLAANonDueAt(client, dateDeces);
 
-  // Rentes LAA (conjoint à vie si due) + enfants à la date de paiement
-  const laaSurv = LAA_Due
-    ? calcRentesSurvivantsLAA(client, legal, nbEnfantsEligibles)
-    : { renteConjoint: 0, renteEnfants: 0, totalAvantCap: 0, totalApresCap: 0 };
-
-  const laaAnnualBeforeCap = laaSurv.totalApresCap;
+  // La rente d'ORPHELIN LAA est due dès qu'il y a un enfant éligible, QUEL QUE
+  // SOIT l'état civil du défunt. Le CONJOINT, lui, reste conditionné à LAA_Due.
+  const laaFull = calcRentesSurvivantsLAA(client, legal, nbEnfantsEligibles);
+  const laaConjoint = LAA_Due ? laaFull.renteConjoint : 0;
+  const laaEnfants = laaFull.renteEnfants;
+  const laaBase = Math.min(salaireAnnuel, legal.Legal_SalaireAssureMaxLAA);
+  // Cap famille 70% recalculé sur (conjoint éventuel + orphelins).
+  const laaAnnualBeforeCap = Math.min(laaConjoint + laaEnfants, laaBase * 0.7);
 
   /* ---------- Coordination 90% : LAA se réduit d'abord ---------- */
   const laaAllowed = Math.max(0, cap90 - avsAnnual);
@@ -265,9 +267,9 @@ export function computeDecesAccident(
       breakdown: {
         avs: { widowMonthly, orphanMonthlyPerChild, orphanMonthlyTotal },
         laa: {
-          spouseAnnual: laaSurv.renteConjoint,
-          perChildAnnual: nbEnfantsEligibles > 0 ? laaSurv.renteEnfants / nbEnfantsEligibles : 0,
-          cappedFamilyAnnual: laaSurv.totalApresCap,
+          spouseAnnual: laaConjoint,
+          perChildAnnual: nbEnfantsEligibles > 0 ? laaEnfants / nbEnfantsEligibles : 0,
+          cappedFamilyAnnual: laaAnnualBeforeCap,
         },
         lpp: {
           spouseOrPartnerAnnual: lppSpouseOrPartnerAnnual,

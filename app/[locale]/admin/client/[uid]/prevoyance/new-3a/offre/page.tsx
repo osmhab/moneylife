@@ -9,7 +9,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, setDoc, serverTimestamp } from "firebase/firestore";
+// Source de vérité des prestations décès (par pilier × bénéficiaire + capitaux).
+import { computeDecesMaladie } from "@/lib/calculs/events/decesMaladie";
+import { computeDecesAccident } from "@/lib/calculs/events/decesAccident";
+import { LEGAL_2025 } from "@/lib/core/legal";
+import { Legal_Echelle44_2025 } from "@/lib/registry/echelle44";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
@@ -18,242 +23,123 @@ import jsPDF from "jspdf";
 // ============================================================================
 
 const RetraiteComboChart = ({ salary, target, avs, lpp, capital3a, solution3a = 0, isSolution = false }: any) => {
-  const maxVal = salary * 1.1;
-  const getY = (val: number) => 220 - (val / maxVal) * 180; 
-  
-  const ySalary = getY(salary);
-  const yTarget = getY(target);
-  
-  // On calcule les deux rentes séparément pour pouvoir les empiler visuellement
+  // Les 3a (capitaux) sont convertis en rente mensuelle indicative (sur 25 ans).
   const rente3a = (capital3a || 0) / 25 / 12;
   const renteSol = (solution3a || 0) / 25 / 12;
-  const totalActuel = avs + lpp + rente3a + renteSol;
-  
-  // Arrondi mathématique pour éviter le bug des décimales transformées en milliers
-  const lacune = Math.round(Math.max(0, target - totalActuel));
-  
-  return (
-    <div className="w-full h-80 bg-white/5 print:bg-white border border-white/5 print:border-gray-200 rounded-xl p-6 relative font-sans print:break-inside-avoid">
-      <svg className="w-full h-full overflow-visible" viewBox="0 0 600 250" preserveAspectRatio="none">
-        <line x1="60" y1={ySalary} x2="550" y2={ySalary} stroke="currentColor" strokeWidth="1" strokeDasharray="4,4" className="text-white/20 print:text-gray-400" />
-        <line x1="60" y1={yTarget} x2="550" y2={yTarget} stroke="#ef4444" strokeWidth="1.5" />
-        
-        <text x="560" y={ySalary + 4} fontSize="11" fill="currentColor" className="text-white/50 print:text-gray-500 font-bold" textAnchor="start">Salaire brut</text>
-        <text x="560" y={ySalary + 16} fontSize="10" fill="currentColor" className="text-white/40 print:text-gray-400" textAnchor="start">{Math.round(salary).toLocaleString('fr-CH')} CHF</text>
-        
-        <text x="560" y={yTarget - 6} fontSize="11" fill="#ef4444" fontWeight="bold" textAnchor="start">Objectif (80%)</text>
-        <text x="560" y={yTarget + 8} fontSize="10" fill="#ef4444" textAnchor="start">{Math.round(target).toLocaleString('fr-CH')} CHF</text>
-        
-        <rect x="120" y={ySalary} width="80" height={220 - ySalary} className="fill-white/10 print:fill-gray-100" />
-        <text x="160" y="240" fontSize="11" fill="currentColor" className="text-white/50 print:text-gray-600 font-bold" textAnchor="middle">Aujourd'hui</text>
-        
-        <g transform="translate(350, 0)">
-          <rect x="0" y={getY(avs)} width="80" height={220 - getY(avs)} className="fill-white/20 print:fill-gray-200" />
-          <text x="40" y={getY(avs / 2) - 2} fontSize="10" fill="currentColor" className="text-white print:text-gray-800 font-bold" textAnchor="middle">AVS</text>
-          <text x="40" y={getY(avs / 2) + 10} fontSize="9" fill="currentColor" className="text-white print:text-gray-700" textAnchor="middle">{Math.round(avs).toLocaleString()} CHF</text>
-          
-          <rect x="0" y={getY(avs + lpp)} width="80" height={getY(avs) - getY(avs + lpp)} className="fill-white/30 print:fill-gray-300" />
-          <text x="40" y={getY(avs + lpp / 2) - 2} fontSize="10" fill="currentColor" className="text-white print:text-gray-800 font-bold" textAnchor="middle">LPP</text>
-          <text x="40" y={getY(avs + lpp / 2) + 10} fontSize="9" fill="currentColor" className="text-white print:text-gray-700" textAnchor="middle">{Math.round(lpp).toLocaleString()} CHF</text>
-          
-          {/* Bloc : 3e Pilier Existant (Couleur standard Violette) */}
-          {rente3a > 0 && (
-            <g>
-              <rect x="0" y={getY(avs + lpp + rente3a)} width="80" height={getY(avs + lpp) - getY(avs + lpp + rente3a)} fill="#816DEC" opacity="0.9" />
-              <text x="40" y={getY(avs + lpp + rente3a / 2) - 2} fontSize="10" fill="white" className="font-bold" textAnchor="middle">3A</text>
-              <text x="40" y={getY(avs + lpp + rente3a / 2) + 10} fontSize="9" fill="white" textAnchor="middle">{Math.round(rente3a).toLocaleString()} CHF</text>
-            </g>
-          )}
+  const total = avs + lpp + rente3a + renteSol;
+  const lacune = Math.max(0, Math.round(target - total));
+  const scale = Math.max(target, total, 1);
+  const pct = (v: number) => `${(Math.max(0, v) / scale) * 100}%`;
+  const fmt = (n: number) => Math.round(n).toLocaleString("fr-CH");
 
-          {/* Bloc : Nouvelle Solution AXA (Couleur Bleue) - S'empile sur le 3A existant ! */}
-          {renteSol > 0 && (
-            <g>
-              <rect x="0" y={getY(avs + lpp + rente3a + renteSol)} width="80" height={getY(avs + lpp + rente3a) - getY(avs + lpp + rente3a + renteSol)} fill="#2563eb" opacity="0.9" />
-              <text x="40" y={getY(avs + lpp + rente3a + renteSol / 2) - 2} fontSize="10" fill="white" className="font-bold" textAnchor="middle">Solution</text>
-              <text x="40" y={getY(avs + lpp + rente3a + renteSol / 2) + 10} fontSize="9" fill="white" textAnchor="middle">{Math.round(renteSol).toLocaleString()} CHF</text>
-            </g>
-          )}
-          
-          {/* Bloc : Lacune Résiduelle (S'il en reste) */}
-          {lacune > 0 && (
-            <g>
-              <rect x="0" y={getY(totalActuel + lacune)} width="80" height={getY(totalActuel) - getY(totalActuel + lacune)} fill="#ef4444" opacity={isSolution ? "0.15" : "0.3"} />
-              <text x="40" y={getY(totalActuel + lacune / 2) - 2} fontSize="10" fill={isSolution ? "#b91c1c" : "white"} className="font-bold" textAnchor="middle">Lacune</text>
-              <text x="40" y={getY(totalActuel + lacune / 2) + 10} fontSize="9" fill={isSolution ? "#b91c1c" : "white"} textAnchor="middle">{lacune.toLocaleString('fr-CH')} CHF</text>
-            </g>
-          )}
-          <text x="40" y="240" fontSize="11" fill="currentColor" className="text-white/50 print:text-gray-600 font-bold" textAnchor="middle">À partir de 65 ans</text>
-        </g>
-        
-        <line x1="60" y1="220" x2="550" y2="220" stroke="currentColor" strokeWidth="1" className="text-white/20 print:text-gray-300" />
-      </svg>
+  const segs = [
+    { label: "AVS / AI", val: avs, color: "#9ca3af" },
+    { label: "LPP (2e pilier)", val: lpp, color: "#6b7280" },
+    ...(rente3a > 0 ? [{ label: "3e pilier actuel", val: rente3a, color: "#816DEC" }] : []),
+    ...(renteSol > 0 ? [{ label: "Solution proposée", val: renteSol, color: "#2563eb" }] : []),
+  ];
+
+  return (
+    <div className="w-full bg-white/5 print:bg-white border border-white/5 print:border-gray-200 rounded-xl p-6 relative font-sans print:break-inside-avoid space-y-4">
+      <div className="flex justify-between items-baseline">
+        <span className="text-[11px] uppercase font-bold text-white/50 print:text-gray-600">Revenu mensuel dès 65 ans</span>
+        <span className="text-xs font-bold text-white/70 print:text-gray-700">Objectif 80% : CHF {fmt(target)}</span>
+      </div>
+
+      {/* Barre empilée (proportions) */}
+      <div className="h-9 w-full rounded-lg overflow-hidden flex bg-white/10 print:bg-gray-100 border border-white/10 print:border-gray-200">
+        {segs.map((seg, i) => (
+          <div key={i} className="h-full" style={{ width: pct(seg.val), backgroundColor: seg.color }} title={`${seg.label} : ${fmt(seg.val)} CHF`} />
+        ))}
+        {lacune > 0 && (
+          <div className="h-full" style={{ width: pct(lacune), backgroundColor: "#ef4444", opacity: 0.35 }} title={`Lacune : ${fmt(lacune)} CHF`} />
+        )}
+      </div>
+
+      {/* Légende (valeurs lisibles, aucun chevauchement) */}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+        {segs.map((seg, i) => (
+          <div key={i} className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-2 text-white/70 print:text-gray-700">
+              <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: seg.color }} /> {seg.label}
+            </span>
+            <span className="font-bold text-white print:text-gray-900">CHF {fmt(seg.val)}</span>
+          </div>
+        ))}
+        {lacune > 0 && (
+          <div className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-2 font-bold text-[#ef4444] print:text-[#b91c1c]">
+              <span className="w-3 h-3 rounded-sm shrink-0 bg-[#ef4444]/40" /> Lacune
+            </span>
+            <span className="font-bold text-[#ef4444] print:text-[#b91c1c]">− CHF {fmt(lacune)}</span>
+          </div>
+        )}
+      </div>
+
+      <p className="text-[11px] print:text-xs text-white/60 print:text-gray-600 leading-snug pt-3 border-t border-white/5 print:border-gray-200">
+        Salaire actuel <strong className="text-white print:text-gray-900">CHF {fmt(salary)}</strong> → objectif retraite (80%) <strong className="text-white print:text-gray-900">CHF {fmt(target)}</strong>.{" "}
+        {lacune > 0
+          ? <strong className="text-[#ef4444] print:text-[#b91c1c]">Manque CHF {fmt(lacune)} / mois.</strong>
+          : <strong className="text-emerald-400 print:text-emerald-700">Objectif atteint.</strong>}
+      </p>
     </div>
   );
 };
 
 const RetraiteConsoAreaChart = ({ target = 0, avs = 0, lpp = 0, capital3a = 0, solution3a = 0, isSolution = false }: any) => {
   const totalCapital = capital3a + solution3a;
-  
-  // 1. AUTO-MASQUAGE : S'il n'y a aucun capital à consommer, on ne montre pas le graphique
   if (totalCapital <= 0) return null;
+  const hasSol = solution3a > 0; // page solution (vs simple diagnostic)
 
-  // 2. MATHÉMATIQUES : Calcul de l'épuisement pour les deux couches
+  // Manque mensuel à combler à la retraite (cible - rentes viagères AVS+LPP).
   const gapMensuel = Math.max(0, target - (avs + lpp));
   const gapAnnuel = gapMensuel * 12;
-  const totalBesoin = gapAnnuel * 25; // Lacune cumulée sur 25 ans (65 -> 90)
 
-  const epuisementTotalAnnees = gapAnnuel > 0 ? totalCapital / gapAnnuel : 999;
-  const ageEpuisementTotal = Math.min(90, 65 + epuisementTotalAnnees);
-  const isEpuiseTotalAvant90 = ageEpuisementTotal < 90;
+  // Nombre d'années que le capital total permet de combler (puis âge d'épuisement).
+  const yearsTotal = gapAnnuel > 0 ? totalCapital / gapAnnuel : 999;
+  const ageTotal = Math.min(90, 65 + yearsTotal);
+  const totalReaches90 = 65 + yearsTotal >= 90;
 
-  const epuisementBaseAnnees = gapAnnuel > 0 ? capital3a / gapAnnuel : 999;
-  const ageEpuisementBase = Math.min(90, 65 + epuisementBaseAnnees);
-  const isEpuiseBaseAvant90 = ageEpuisementBase < 90;
-
-  // 3. GÉOMÉTRIE : Échelles X et Y
-  const getX = (age: number) => 40 + ((age - 65) / 25) * 520;
-  const xEpuisementTotal = getX(ageEpuisementTotal);
-  const xEpuisementBase = getX(ageEpuisementBase);
-
-  const maxVisual = Math.max(totalBesoin, totalCapital, 50000);
-  const yBottom = 100;
-  const yTopBase = 20; 
-  const getY = (val: number) => yBottom - (val / maxVisual) * (yBottom - yTopBase);
-
-  const yBesoin = getY(totalBesoin);
-  const yCapitalStartTotal = getY(totalCapital);
-  const yCapitalStartBase = getY(capital3a);
-
-  // Polygones pour le capital de base (Existant)
-  const capitalRestantBase90 = capital3a - totalBesoin;
-  const capitalAreaBase = isEpuiseBaseAvant90
-    ? `40,${yCapitalStartBase} ${xEpuisementBase},${yBottom} 40,${yBottom}`
-    : `40,${yCapitalStartBase} 560,${getY(capitalRestantBase90)} 560,${yBottom} 40,${yBottom}`;
-  const capitalLineBase = isEpuiseBaseAvant90
-    ? `40,${yCapitalStartBase} ${xEpuisementBase},${yBottom}`
-    : `40,${yCapitalStartBase} 560,${getY(capitalRestantBase90)}`;
-
-  // Polygones pour le capital total (Existant + Solution)
-  const capitalRestantTotal90 = totalCapital - totalBesoin;
-  const capitalAreaTotal = isEpuiseTotalAvant90
-    ? `40,${yCapitalStartTotal} ${xEpuisementTotal},${yBottom} 40,${yBottom}`
-    : `40,${yCapitalStartTotal} 560,${getY(capitalRestantTotal90)} 560,${yBottom} 40,${yBottom}`;
-  const capitalLineTotal = isEpuiseTotalAvant90
-    ? `40,${yCapitalStartTotal} ${xEpuisementTotal},${yBottom}`
-    : `40,${yCapitalStartTotal} 560,${getY(capitalRestantTotal90)}`;
-
-  const rectBesoinTotal = `40,${yBesoin} 560,${yBesoin} 560,${yBottom} 40,${yBottom}`;
-  const rectBesoinComble = `40,${yBesoin} ${xEpuisementTotal},${yBesoin} ${xEpuisementTotal},${yBottom} 40,${yBottom}`;
+  // Position sur la frise 65 -> 90 (en %).
+  const pct = (age: number) => ((Math.min(90, Math.max(65, age)) - 65) / 25) * 100;
+  const fmt = (n: number) => Math.round(n).toLocaleString("fr-CH");
 
   return (
-    <div className="w-full h-48 bg-white/5 print:bg-white border border-white/5 print:border-gray-200 rounded-xl p-4 relative mt-4 print:break-inside-avoid">
-      <span className="absolute top-4 left-6 text-[10px] uppercase font-bold text-white/40 print:text-gray-500">Projection de la consommation des réserves (65 - 90 ans)</span>
-      <svg className="w-full h-full mt-4 overflow-visible" viewBox="0 0 600 120" preserveAspectRatio="none">
-        <line x1="40" y1={yBottom} x2="560" y2={yBottom} stroke="currentColor" className="text-white/20 print:text-gray-300" strokeWidth="1" />
-        
-        <text x="40" y={yBottom + 15} fontSize="11" fill="currentColor" className="text-white/40 print:text-gray-500 font-bold">65 ans</text>
-        <text x="300" y={yBottom + 15} fontSize="10" fill="currentColor" className="text-white/40 print:text-gray-500" textAnchor="middle">Espérance de vie</text>
-        <text x="560" y={yBottom + 15} fontSize="11" fill="currentColor" className="text-white/40 print:text-gray-500 font-bold" textAnchor="end">90 ans</text>
-        
-        {!isSolution ? (
-          // ===================================================================
-          // GRAPH_01 : MODE DIAGNOSTIC (Seul le capital existant est dessiné)
-          // ===================================================================
-          <g>
-            {totalBesoin > 0 && (
-              <g>
-                <polygon points={rectBesoinTotal} fill="#ef4444" opacity="0.1" className="print:fill-red-50" />
-                <line x1="40" y1={yBesoin} x2="560" y2={yBesoin} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4,4" opacity="0.5" />
-                <text x="555" y={yBesoin < 35 ? yBesoin + 12 : yBesoin - 5} fontSize="9" fill="#ef4444" fontWeight="bold" textAnchor="end">
-                  Lacune cumulée : {totalBesoin.toLocaleString('fr-CH')} CHF
-                </text>
-              </g>
-            )}
-            
-            <polygon points={capitalAreaBase} fill="#816DEC" opacity="0.7" />
-            <polyline points={capitalLineBase} fill="none" stroke="#6d28d9" strokeWidth="2" />
-            
-            {isEpuiseBaseAvant90 && totalBesoin > 0 && (
-              <g>
-                <circle cx={xEpuisementBase} cy={yBottom} r="3" fill="#a78bfa" className="print:fill-[#6d28d9]" />
-                <text x={xEpuisementBase} y={yBottom - 10} fontSize="10" fill="#a78bfa" className="print:fill-[#6d28d9]" fontWeight="bold" textAnchor={xEpuisementBase > 500 ? "end" : "middle"}>
-                  Épuisé à {Math.floor(ageEpuisementBase)} ans
-                </text>
-              </g>
-            )}
-            <text x="45" y={yCapitalStartBase > 80 ? yCapitalStartBase - 6 : yCapitalStartBase + 12} fontSize="10" fill="currentColor" className="text-white print:text-gray-900" fontWeight="bold">
-              Capital 3A : {capital3a.toLocaleString('fr-CH')} CHF
-            </text>
-          </g>
-        ) : (
-          // ===================================================================
-          // GRAPH_02 : MODE SOLUTION (Capital Total superposé au Capital Existant)
-          // ===================================================================
-          <g>
-            {/* Fond rouge de base de la lacune + texte global (Besoin cumulé) */}
-            {totalBesoin > 0 && (
-              <g>
-                <polygon points={rectBesoinTotal} fill="#ef4444" opacity="0.1" />
-                <line x1="40" y1={yBesoin} x2="560" y2={yBesoin} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4,4" opacity="0.4" />
-                <text x="555" y={yBesoin - 5} fontSize="9" fill="#ef4444" fontWeight="bold" textAnchor="end">
-                  Lacune cumulée : {totalBesoin.toLocaleString('fr-CH')} CHF
-                </text>
-              </g>
-            )}
+    <div className="w-full bg-white/5 print:bg-white border border-white/5 print:border-gray-200 rounded-xl p-6 relative mt-4 print:break-inside-avoid space-y-5">
+      <div className="flex justify-between items-baseline">
+        <span className="text-[11px] uppercase font-bold text-white/50 print:text-gray-600">Durée de couverture du manque</span>
+        <span className="text-xs font-bold text-white/70 print:text-gray-700">Manque : CHF {fmt(gapMensuel)} / mois</span>
+      </div>
 
-            {/* Rectangle bleu de la lacune couverte par la solution */}
-            {totalBesoin > 0 && (
-              <g>
-                <polygon points={rectBesoinComble} fill="#2563eb" opacity="0.85" />
-                {/* La ligne bleue s'arrête exactement là où le capital s'épuise */}
-                <line x1="40" y1={yBesoin} x2={isEpuiseTotalAvant90 ? xEpuisementTotal : 560} y2={yBesoin} stroke="#2563eb" strokeWidth="1.5" strokeDasharray="4,4" opacity="0.8" />
-                {/* TEXTE EN BLANC : Affiche la valeur exacte de l'apport de la solution ! */}
-                <text x={isEpuiseTotalAvant90 ? xEpuisementTotal - 5 : 555} y={yBesoin + 14} fontSize="9" fill="white" fontWeight="bold" textAnchor="end">
-                  Lacune comblée : {Math.round(solution3a).toLocaleString('fr-CH')} CHF
-                </text>
-              </g>
-            )}
+      {/* AVEC la solution */}
+      <div className="space-y-1.5">
+        <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider text-[#2563eb] print:text-[#2563eb]">
+          <span>{hasSol ? "Avec la solution proposée" : "Votre épargne 3a actuelle"}</span>
+          <span>{totalReaches90 ? "à vie (90 ans +)" : `jusqu'à ~${Math.round(ageTotal)} ans`}</span>
+        </div>
+        <div className="h-5 w-full bg-white/10 print:bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full bg-[#2563eb] rounded-full" style={{ width: `${pct(ageTotal)}%` }} />
+        </div>
+      </div>
 
-            {/* COURBE 1 : Le Capital Total incluant la Solution (Couleur Bleue) */}
-            {solution3a > 0 && (
-              <g>
-                <polygon points={capitalAreaTotal} fill="#2563eb" opacity="0.15" />
-                <polyline points={capitalLineTotal} fill="none" stroke="#1d4ed8" strokeWidth="2.5" />
-              </g>
-            )}
-            
-            {/* COURBE 2 : Le Capital Existant superposé (Couleur Violette) */}
-            {capital3a > 0 && (
-               <g>
-                 <polygon points={capitalAreaBase} fill="#816DEC" opacity="0.4" className="print:opacity-60" />
-                 <polyline points={capitalLineBase} fill="none" stroke="#6d28d9" strokeWidth="1.5" />
-                 {/* Mini label pour bien identifier cette ligne */}
-                 <text x="45" y={yCapitalStartBase > 80 ? yCapitalStartBase - 4 : yCapitalStartBase + 10} fontSize="8" fill="#a78bfa" className="print:fill-[#6d28d9]" fontWeight="bold">
-                   Capital 3A existant
-                 </text>
-               </g>
-            )}
 
-            {isEpuiseTotalAvant90 && totalBesoin > 0 && (
-              <g>
-                <circle cx={xEpuisementTotal} cy={yBottom} r="3" fill="#3b82f6" className="print:fill-[#1d4ed8]" />
-                <text x={xEpuisementTotal} y={yBottom - 10} fontSize="10" fill="#3b82f6" className="print:fill-[#1d4ed8]" fontWeight="bold" textAnchor={xEpuisementTotal > 500 ? "end" : "middle"}>
-                  Épuisé à {Math.floor(ageEpuisementTotal)} ans
-                </text>
-              </g>
-            )}
-            
-            <text x="45" y={yCapitalStartTotal > 80 ? yCapitalStartTotal - 6 : yCapitalStartTotal + 12} fontSize="10" fill="currentColor" className="text-white print:text-gray-900" fontWeight="bold">
-              Capital projeté total : {totalCapital.toLocaleString('fr-CH')} CHF
-            </text>
-          </g>
-        )}
-      </svg>
+      {/* Échelle d'âge */}
+      <div className="flex justify-between text-[9px] font-bold text-white/40 print:text-gray-400 px-0.5">
+        <span>65 ans</span><span>75</span><span>85</span><span>90 +</span>
+      </div>
+
+      {/* Synthèse */}
+      <p className="text-[11px] print:text-xs text-white/60 print:text-gray-600 leading-snug pt-3 border-t border-white/5 print:border-gray-200">
+        {hasSol ? "Capital total " : "Votre capital 3a "}<strong className="text-white print:text-gray-900">CHF {fmt(totalCapital)}</strong> consommé pour combler le manque de CHF {fmt(gapMensuel)}/mois →{" "}
+        {totalReaches90
+          ? <strong className="text-emerald-400 print:text-emerald-700">couvre le manque à vie.</strong>
+          : <strong className="text-[#2563eb] print:text-[#2563eb]">tient jusqu'à ~{Math.round(ageTotal)} ans.</strong>}
+      </p>
     </div>
   );
 };
 
-const PerteGainAreaChart = ({ type, salary, target, current, ai = 0, lpp = 0, enfant = 0, isSolution = false, coverage = 0 }: any) => {
+const PerteGainAreaChart = ({ type, salary, target, current, ai = 0, lpp = 0, enfant = 0, isSolution = false, coverage = 0, laa = 0 }: any) => {
   const isMaladie = type === "maladie";
   const maxVal = salary * 1.1;
   const getY = (val: number) => 150 - (val / maxVal) * 130;
@@ -339,31 +225,54 @@ const PerteGainAreaChart = ({ type, salary, target, current, ai = 0, lpp = 0, en
         
         {!isMaladie && (
           <g>
-            <polygon points={ptsAccidentBase} className="fill-white/10 print:fill-gray-100" />
-            
+            {/* LAA / SUVA : base ~80% dès le 1er jour */}
+            <polygon points={`50,${getY(laa)} 500,${getY(laa)} 500,150 50,150`} className="fill-white/20 print:fill-gray-200" />
+            <text x="275" y={getY(laa / 2)} fontSize="10" fill="currentColor" className="text-white print:text-gray-800 font-bold" textAnchor="middle">LAA / SUVA</text>
+            <text x="275" y={getY(laa / 2) + 12} fontSize="9" fill="currentColor" className="text-white/70 print:text-gray-700" textAnchor="middle">{Math.round(laa).toLocaleString('fr-CH')} CHF</text>
+
+            {/* AI (si applicable) */}
+            {ai > 0 && (
+              <g>
+                <polygon points={`50,${getY(laa + ai)} 500,${getY(laa + ai)} 500,${getY(laa)} 50,${getY(laa)}`} className="fill-white/30 print:fill-gray-300" />
+                <text x="275" y={getY(laa + ai / 2)} fontSize="10" fill="currentColor" className="text-white print:text-gray-800 font-bold" textAnchor="middle">AI</text>
+                <text x="275" y={getY(laa + ai / 2) + 12} fontSize="9" fill="currentColor" className="text-white/70 print:text-gray-700" textAnchor="middle">{Math.round(ai).toLocaleString('fr-CH')} CHF</text>
+              </g>
+            )}
+
+            {/* LPP (si applicable) */}
+            {lpp > 0 && (
+              <g>
+                <polygon points={`50,${ySansEnfant} 500,${ySansEnfant} 500,${getY(laa + ai)} 50,${getY(laa + ai)}`} className="fill-white/40 print:fill-gray-400" />
+                <text x="275" y={getY(laa + ai + lpp / 2)} fontSize="10" fill="currentColor" className="text-white print:text-gray-800 font-bold" textAnchor="middle">LPP</text>
+                <text x="275" y={getY(laa + ai + lpp / 2) + 12} fontSize="9" fill="currentColor" className="text-white/70 print:text-gray-700" textAnchor="middle">{Math.round(lpp).toLocaleString('fr-CH')} CHF</text>
+              </g>
+            )}
+
+            {/* Enfants : rentes qui chutent à la majorité */}
             {enfant > 0 && (
               <g>
-                <polygon points={`50,${yCurrent} ${xDrop},${yCurrent} ${xDrop},${ySansEnfant} 50,${ySansEnfant}`} className="fill-white/20 print:fill-gray-200" />
-                <text x={(50 + xDrop) / 2} y={getY(current - enfant / 2)} fontSize="10" fill="currentColor" className="text-white print:text-gray-800 font-bold" textAnchor="middle">Enfants</text>
-                <text x={(50 + xDrop) / 2} y={getY(current - enfant / 2) + 12} fontSize="9" fill="currentColor" className="text-white/70 print:text-gray-700" textAnchor="middle">{enfant.toLocaleString()} CHF</text>
-                
+                <polygon points={`50,${yCurrent} ${xDrop},${yCurrent} ${xDrop},${ySansEnfant} 50,${ySansEnfant}`} className="fill-white/50 print:fill-gray-500" />
+                <text x={(50 + xDrop) / 2} y={getY(current - enfant / 2)} fontSize="10" fill="currentColor" className="text-white print:text-gray-900 font-bold" textAnchor="middle">Enfants</text>
+                <text x={(50 + xDrop) / 2} y={getY(current - enfant / 2) + 12} fontSize="9" fill="currentColor" className="text-white/70 print:text-gray-800" textAnchor="middle">{Math.round(enfant).toLocaleString('fr-CH')} CHF</text>
                 <polyline points={`${xDrop},${yCurrent} ${xDrop},150`} fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="2,2" className="text-white/30 print:text-gray-400" />
                 <text x={xDrop} y="160" fontSize="9" fill="currentColor" className="text-white/50 print:text-gray-500" textAnchor="middle">Fin rentes</text>
               </g>
             )}
 
-            <polyline points={ptsAccidentLine} fill="none" stroke="currentColor" strokeWidth="2" className="text-white/30 print:text-gray-400" />
-            
-            {hasLacuneFinale && (
+            {/* Ligne de couverture */}
+            <polyline points={ptsAccidentLine} fill="none" stroke="currentColor" strokeWidth="2" className="text-white/40 print:text-gray-500" />
+
+            {/* Lacune éventuelle (l'accident est en général bien couvert par la LAA) */}
+            {hasLacuneFinale ? (
               <g>
-                <polygon points={polyAccPoints} fill={isSolution ? "#2563eb" : "#ef4444"} opacity={isSolution ? "0.85" : "0.3"} />
-                <text x={accTxX} y={accTxY} fontSize="11" fill={isSolution ? "white" : "#b91c1c"} fontWeight="bold" textAnchor="middle">
-                  {isSolution ? "Solution" : "Lacune"} : {(target - (current - enfant)).toLocaleString('fr-CH')} CHF
+                <polygon points={polyAccPoints} fill="#ef4444" opacity="0.3" />
+                <text x={accTxX} y={accTxY} fontSize="11" fill="#b91c1c" fontWeight="bold" textAnchor="middle">
+                  Lacune : {(target - (current - enfant)).toLocaleString('fr-CH')} CHF
                 </text>
               </g>
+            ) : (
+              <text x="275" y={yTarget - 8} fontSize="10" fill="#059669" fontWeight="bold" textAnchor="middle">Couverture suffisante (LAA 80%)</text>
             )}
-            
-            <text x={enfant > 0 && !hasLacuneInitiale ? 195 : 275} y={ySansEnfant + 25} fontSize="12" fill="currentColor" className="text-white/60 print:text-gray-700 font-bold" textAnchor="middle">Couverture : {(current - enfant).toLocaleString('fr-CH')} CHF</text>
           </g>
         )}
 
@@ -432,22 +341,107 @@ const PerteGainAreaChart = ({ type, salary, target, current, ai = 0, lpp = 0, en
   );
 };
 
-const DecesRentesAreaChart = ({ rente }: any) => {
+// Ligne de légende par PILIER : qui verse quoi à chaque survivant
+// (rente du conjoint = à vie ; rente d'orphelin = jusqu'à la majorité).
+const PilierLegend = ({ label, color, conjoint, orphelin }: any) => {
+  const fmt = (n: number) => Math.round(n).toLocaleString("fr-CH");
   return (
-    <div className="w-full h-48 bg-white/5 print:bg-white border border-white/5 print:border-gray-200 rounded-xl p-6 relative print:break-inside-avoid">
-      <span className="absolute top-4 left-6 text-[11px] uppercase font-bold text-white/50 print:text-gray-600">Évolution des rentes de survivants (AVS/LPP estimées)</span>
-      <div className="w-full h-full relative mt-4">
-        <svg className="w-full h-full overflow-visible" viewBox="0 0 600 120" preserveAspectRatio="none">
-          <line x1="40" y1="90" x2="560" y2="90" stroke="currentColor" className="text-white/20 print:text-gray-300" strokeWidth="1" />
-          <text x="40" y="105" fontSize="11" fill="currentColor" className="text-white/50 print:text-gray-600 font-bold">Aujourd'hui</text>
-          <text x="560" y="105" fontSize="11" fill="currentColor" className="text-white/50 print:text-gray-600 font-bold" textAnchor="end">Majorité du dernier enfant</text>
-          
-          <polygon points="40,90 40,30 400,30 400,60 560,60 560,90" className="fill-white/10 print:fill-gray-100" />
-          <polyline points="40,90 40,30 400,30 400,60 560,60" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/30 print:text-gray-400" />
-          
-          <text x="220" y="50" fontSize="11" fill="currentColor" className="text-white/60 print:text-gray-700 font-bold" textAnchor="middle">Rentes conjoint & orphelins (~CHF {rente.toLocaleString('fr-CH')} /m)</text>
-          <text x="480" y="75" fontSize="10" fill="currentColor" className="text-white/50 print:text-gray-500 font-bold" textAnchor="middle">Baisse des rentes</text>
-        </svg>
+    <div className="flex items-center justify-between text-xs gap-3">
+      <span className="flex items-center gap-2 text-white/80 print:text-gray-800 font-bold shrink-0">
+        <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: color }} /> {label}
+      </span>
+      <span className="text-white/60 print:text-gray-600 text-right">
+        Conjoint <strong className="text-white print:text-gray-900">{fmt(conjoint)}</strong>
+        <span className="opacity-50"> · </span>
+        Orphelins <strong className="text-white print:text-gray-900">{fmt(orphelin)}</strong> /m
+      </span>
+    </div>
+  );
+};
+
+// Rentes de survivants dans le temps, par cause (maladie / accident).
+// Même esprit que les graphes incapacité de gain : composantes empilées,
+// chute à la majorité du dernier enfant, lacune vs besoin + légende détaillée.
+const DecesRentesChart = ({ cause, target = 0, data = {} }: any) => {
+  const isAcc = cause === "accident";
+  // Détail par pilier × bénéficiaire : conjoint (rente à vie) + orphelin (baisse).
+  const laaC = data.laaC || 0, laaE = data.laaE || 0;
+  const avsC = data.avsC || 0, avsE = data.avsE || 0;
+  const lppC = data.lppC || 0, lppE = data.lppE || 0;
+  // Pour le graphe empilé : base = rentes conjoint ; bloc orphelins = baisse totale.
+  const laa = laaC, ai = avsC, lpp = lppC;
+  const enfant = laaE + avsE + lppE;
+  const baseFinal = laa + ai + lpp;        // rente stable (après majorité)
+  const current = baseFinal + enfant;      // rente aujourd'hui (avec orphelins)
+  const maxVal = Math.max(target, current, 1) * 1.12;
+  const getY = (v: number) => 140 - (v / maxVal) * 118;
+  const yTarget = getY(target);
+  const yCur = getY(current);
+  const yFin = getY(baseFinal);
+  const yLaa = getY(laa);
+  const yLaaAi = getY(laa + ai);
+  const xDrop = 340;
+  const fmt = (n: number) => Math.round(n).toLocaleString("fr-CH");
+  const lacune = Math.max(0, target - baseFinal);
+
+  return (
+    <div className="w-full bg-white/5 print:bg-white border border-white/5 print:border-gray-200 rounded-xl p-5 relative font-sans print:break-inside-avoid space-y-3">
+      <span className="text-[11px] uppercase font-bold text-white/50 print:text-gray-600">
+        Rentes de survivants — Décès par {isAcc ? "accident" : "maladie"}
+      </span>
+      <svg className="w-full h-36 overflow-visible" viewBox="0 0 600 155" preserveAspectRatio="none">
+        <line x1="50" y1={yTarget} x2="500" y2={yTarget} stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4,4" />
+        <text x="508" y={yTarget + 3} fontSize="10" fill="#ef4444" fontWeight="bold">Besoin</text>
+        <text x="508" y={yTarget + 15} fontSize="9" fill="#ef4444">{fmt(target)}</text>
+
+        {laa > 0 && (
+          <g>
+            <polygon points={`50,${yLaa} 500,${yLaa} 500,140 50,140`} fill="#cbd5e1" opacity="0.85" className="print:opacity-100" />
+            <text x="275" y={getY(laa / 2) + 3} fontSize="10" fill="#1f2937" fontWeight="bold" textAnchor="middle">LAA survivants</text>
+          </g>
+        )}
+        {ai > 0 && (
+          <g>
+            <polygon points={`50,${yLaaAi} 500,${yLaaAi} 500,${yLaa} 50,${yLaa}`} fill="#94a3b8" opacity="0.9" className="print:opacity-100" />
+            <text x="275" y={getY(laa + ai / 2) + 3} fontSize="10" fill="#1f2937" fontWeight="bold" textAnchor="middle">AVS / AI</text>
+          </g>
+        )}
+        {lpp > 0 && (
+          <g>
+            <polygon points={`50,${yFin} 500,${yFin} 500,${yLaaAi} 50,${yLaaAi}`} fill="#64748b" opacity="0.9" className="print:opacity-100" />
+            <text x="275" y={getY(laa + ai + lpp / 2) + 3} fontSize="10" fill="#ffffff" fontWeight="bold" textAnchor="middle">LPP</text>
+          </g>
+        )}
+        {enfant > 0 && (
+          <g>
+            <polygon points={`50,${yCur} ${xDrop},${yCur} ${xDrop},${yFin} 50,${yFin}`} fill="#816DEC" opacity="0.7" />
+            <text x={(50 + xDrop) / 2} y={getY(baseFinal + enfant / 2) + 3} fontSize="9" fill="#ffffff" fontWeight="bold" textAnchor="middle">Orphelins</text>
+            <polyline points={`${xDrop},${yCur} ${xDrop},140`} fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="2,2" className="text-white/30 print:text-gray-400" />
+            <text x={xDrop} y="150" fontSize="8" fill="currentColor" className="text-white/50 print:text-gray-500" textAnchor="middle">Majorité dernier enfant</text>
+          </g>
+        )}
+        {lacune > 0 && (
+          <g>
+            {/* Lacune posée DESSUS la prestation (en escalier), du sommet des rentes
+                jusqu'à la cible — s'élargit après la majorité du dernier enfant. */}
+            <polygon points={`50,${yTarget} 500,${yTarget} 500,${yFin} ${xDrop},${yFin} ${xDrop},${yCur} 50,${yCur}`} fill="#ef4444" opacity="0.3" />
+            <text x={415} y={(yTarget + yFin) / 2 + 3} fontSize="10" fill="#b91c1c" fontWeight="bold" textAnchor="middle">Lacune {fmt(lacune)}</text>
+          </g>
+        )}
+        <line x1="50" y1="140" x2="500" y2="140" stroke="currentColor" className="text-white/20 print:text-gray-300" strokeWidth="1" />
+        <text x="50" y="152" fontSize="9" fill="currentColor" className="text-white/50 print:text-gray-600">Aujourd'hui</text>
+        <text x="500" y="152" fontSize="9" fill="currentColor" className="text-white/50 print:text-gray-600" textAnchor="end">Long terme</text>
+      </svg>
+
+      {/* Légende par PILIER : qui verse quoi à chaque survivant */}
+      <div className="space-y-1.5 pt-2 border-t border-white/5 print:border-gray-200">
+        {isAcc && <PilierLegend label="LAA / SUVA" color="#cbd5e1" conjoint={laaC} orphelin={laaE} />}
+        <PilierLegend label="AVS / AI" color="#94a3b8" conjoint={avsC} orphelin={avsE} />
+        <PilierLegend label="LPP (2e pilier)" color="#64748b" conjoint={lppC} orphelin={lppE} />
+        <div className="flex items-center justify-between text-xs pt-1 border-t border-white/5 print:border-gray-100">
+          <span className="font-bold text-[#ef4444] print:text-[#b91c1c]">Lacune (après majorité du dernier enfant)</span>
+          <span className="font-bold text-[#ef4444] print:text-[#b91c1c]">− CHF {fmt(lacune)} /m</span>
+        </div>
       </div>
     </div>
   );
@@ -457,10 +451,10 @@ const DecesCapitalChart = ({ target, coverage = 0, isSolution = false }: any) =>
   const maxVisual = Math.max(target * 1.5, 200000);
   const scale = (v: number) => (v > 0 ? (v / maxVisual) * 100 : 0);
 
-  // En mode solution, on n'affiche comme « sécurisé » que le capital RÉELLEMENT
-  // assuré (coverage). Le reste éventuel reste une lacune (rouge).
-  const covered = isSolution ? Math.min(Number(coverage) || 0, target) : 0;
-  const residual = isSolution ? Math.max(0, target - covered) : target;
+  // Capital effectivement versé aux survivants (existant en diagnostic, ou
+  // proposé en solution). Le reste à couvrir est une lacune (rouge).
+  const covered = Math.min(Number(coverage) || 0, target);
+  const residual = Math.max(0, target - covered);
 
   const hCov = scale(covered);
   const hRes = scale(residual);
@@ -479,7 +473,7 @@ const DecesCapitalChart = ({ target, coverage = 0, isSolution = false }: any) =>
               <>
                 <rect x="200" y={yCovTop} width="200" height={hCov} fill="#2563eb" opacity="0.9" />
                 <text x="300" y={yCovTop + (residual > 0 ? 16 : -10)} fontSize="13" fill={residual > 0 ? "white" : "#2563eb"} fontWeight="bold" textAnchor="middle">
-                  Garantie : CHF {covered.toLocaleString('fr-CH')}
+                  {isSolution ? "Garantie" : "Déjà couvert"} : CHF {covered.toLocaleString('fr-CH')}
                 </text>
               </>
             )}
@@ -536,7 +530,15 @@ const getVal = (proj: any, label: string, col: number = 0) => {
       .filter((r: any) => r.label && r.label.toLowerCase().includes(keyword.toLowerCase()))
       .reduce((sum: number, r: any) => sum + (Number(r.cells?.[col]) || 0), 0);
   };
-  
+
+  // Répartit le montant RÉELLEMENT versé d'un pilier (déjà coordonné) entre le
+  // conjoint et les orphelins, au prorata des montants bruts du moteur.
+  const splitPilier = (total: number, brutConjoint: number, brutOrphelin: number) => {
+    const g = brutConjoint + brutOrphelin;
+    if (g <= 0) return { c: Math.round(total), e: 0 };
+    return { c: Math.round((total * brutConjoint) / g), e: Math.round((total * brutOrphelin) / g) };
+  };
+
   export default function AdminCustomOfferBookletPage() {
     const router = useRouter();
     const params = useParams();
@@ -549,8 +551,14 @@ const getVal = (proj: any, label: string, col: number = 0) => {
   
     // --- DONNÉES DU DIAGNOSTIC ---
     const [currentRetState, setCurrentRetState] = useState({ current: 4850, target: 8400, salary: 10500, avs: 2390, lpp: 2460, cap3a: 0 });
-    const [currentIncState, setCurrentIncState] = useState({ currentMaladie: 4200, aiMaladie: 2000, lppMaladie: 2200, enfantsMaladie: 0, currentAccident: 8400, enfantsAccident: 0, target: 9450 });
-    const [currentDecState, setCurrentDecState] = useState({ current: 150000, target: 100000, renteDeces: 3500 }); 
+    const [currentIncState, setCurrentIncState] = useState({ currentMaladie: 4200, aiMaladie: 2000, lppMaladie: 2200, enfantsMaladie: 0, currentAccident: 8400, laaAccident: 6720, aiAccident: 0, lppAccident: 1680, enfantsAccident: 0, target: 9450 });
+    const [currentDecState, setCurrentDecState] = useState({ current: 150000, target: 100000, renteDeces: 3500, renteAvs: 2100, renteLpp: 1400 });
+    // Rentes de survivants par cause (décès maladie vs accident), mensuelles.
+    const [decRentes, setDecRentes] = useState({
+      target: 6720,
+      maladie: { avsC: 2100, avsE: 700, lppC: 1400, lppE: 500, laaC: 0, laaE: 0 },
+      accident: { laaC: 4200, laaE: 900, avsC: 2100, avsE: 700, lppC: 1400, lppE: 500 },
+    });
   
     // --- DONNÉES DE L'OFFRE ---
     const [providerRet, setProviderRet] = useState("Swiss Life");
@@ -575,6 +583,12 @@ const getVal = (proj: any, label: string, col: number = 0) => {
     const [selDec, setSelDec] = useState(true);
     const [selPay, setSelPay] = useState(true);
 
+    const [isSavingOffer, setIsSavingOffer] = useState(false);
+    const [offerSaved, setOfferSaved] = useState(false);
+
+    // Notes libres du conseiller (page finale du dossier).
+    const [notes, setNotes] = useState("Aucune note.");
+
     useEffect(() => {
       const loadData = async () => {
         if (!clientUid) return;
@@ -598,12 +612,15 @@ const getVal = (proj: any, label: string, col: number = 0) => {
           // --- FETCH DES PLANS 3A EXISTANTS ---
           const plansSnap = await getDocs(collection(db, "clients", clientUid, "plans"));
           let capital3aExistant = 0;
+          let lppPlanData: any = {}; // champs Enter_* du certificat LPP (rentes/capitaux survivants)
           plansSnap.forEach(d => {
             const p = d.data();
             const type = (p.type || "").toLowerCase();
             const isActive = p.status === "ACTIVE" || !p.status;
             const isPrivatePlan = type.includes("3a") || type.includes("3b") || type.includes("pilier");
-            
+
+            if (p.type === "LPP_BASE" && isActive) lppPlanData = p.data || {};
+
             if (isPrivatePlan && isActive) {
               const pd = p.data || {};
               const montantStr = String(pd.capitalRetraiteProjete || pd.capitalRetraiteGlobal || pd.soldeActuel || pd.montant || "0");
@@ -664,16 +681,93 @@ setCurrentIncState({
   lppMaladie: Math.round(lppM_fin), // On passe la base stricte
   enfantsMaladie: Math.round(enfantsMaladie), // L'écart créera l'escalier !
   currentAccident: Math.round(currentAccident),
+  laaAccident: Math.round(laaA_fin),
+  aiAccident: Math.round(aiA_fin),
+  lppAccident: Math.round(lppA_fin),
   enfantsAccident: Math.round(enfantsAccident),
-  target: Math.round(cibleIncM) 
+  target: Math.round(cibleIncM)
 });
   
           // --- C. DONNÉES DÉCÈS ---
           const decM = projections.deces_maladie || {};
+          const decA = projections.deces_accident || {};
           const renteVeuve = getVal(decM, "AVS/AI", 0) / 12;
           const renteLpp = getVal(decM, "LPP", 0) / 12;
           const totalRentesDeces = renteVeuve + renteLpp;
           const capExistants = getVal(decM, "Prestations en capital / indemnité unique", 0);
+
+          // Rentes de survivants dans le temps (col 2 = aujourd'hui, dernière col
+          // = après majorité du dernier enfant). L'écart = rentes d'orphelins.
+          const lastColDM = Math.max(2, (decM.headerYears?.length || 3) - 1);
+          const lastColDA = Math.max(2, (decA.headerYears?.length || 3) - 1);
+          // Décès par maladie
+          const dmAi_cur = getVal(decM, "AVS/AI", 2) / 12, dmAi_fin = getVal(decM, "AVS/AI", lastColDM) / 12;
+          const dmLpp_cur = getVal(decM, "LPP", 2) / 12, dmLpp_fin = getVal(decM, "LPP", lastColDM) / 12;
+          const dmEnfant = Math.max(0, (dmAi_cur - dmAi_fin) + (dmLpp_cur - dmLpp_fin));
+          // Décès par accident (rentes de survivants LAA en plus)
+          const daLaa_cur = (getVal(decA, "LAA", 2) || getVal(decA, "LAA/SUVA", 2)) / 12;
+          const daLaa_fin = (getVal(decA, "LAA", lastColDA) || getVal(decA, "LAA/SUVA", lastColDA)) / 12;
+          const daAi_cur = getVal(decA, "AVS/AI", 2) / 12, daAi_fin = getVal(decA, "AVS/AI", lastColDA) / 12;
+          const daLpp_cur = getVal(decA, "LPP", 2) / 12, daLpp_fin = getVal(decA, "LPP", lastColDA) / 12;
+          const daEnfant = Math.max(0, (daLaa_cur - daLaa_fin) + (daAi_cur - daAi_fin) + (daLpp_cur - daLpp_fin));
+          // Besoin de revenu des survivants (cible) — fallback 80% du salaire.
+          const cibleDeces =
+            (getVal(decM, "Revenu cible", 2) / 12) ||
+            (getVal(decA, "Revenu cible", 2) / 12) ||
+            Math.round(salaireMensuel * 0.8);
+
+          // Repli (dérivé des matrices) si le moteur échoue (données incomplètes).
+          const decRentesFallback = {
+            target: Math.round(cibleDeces),
+            maladie: {
+              avsC: Math.round(dmAi_fin), avsE: Math.round(Math.max(0, dmAi_cur - dmAi_fin)),
+              lppC: Math.round(dmLpp_fin), lppE: Math.round(Math.max(0, dmLpp_cur - dmLpp_fin)),
+              laaC: 0, laaE: 0,
+            },
+            accident: {
+              laaC: Math.round(daLaa_fin), laaE: Math.round(Math.max(0, daLaa_cur - daLaa_fin)),
+              avsC: Math.round(daAi_fin), avsE: Math.round(Math.max(0, daAi_cur - daAi_fin)),
+              lppC: Math.round(daLpp_fin), lppE: Math.round(Math.max(0, daLpp_cur - daLpp_fin)),
+            },
+          };
+
+          // SOURCE DE VÉRITÉ : moteur décès (détail par pilier × bénéficiaire + capitaux).
+          let decCapitalMaladie = Math.round(capExistants);
+          try {
+            // ClientData : DonneePersonnelles fait FOI (salaire brut, naissance, enfants,
+            // état civil). Le plan LPP ne sert qu'à COMPLÉTER les champs absents (rentes /
+            // capitaux survivants) — il ne doit PAS écraser le salaire (le plan porte le
+            // salaire ASSURÉ LPP, plus bas, qui fausserait AVS/LAA).
+            const clientForEngine = { ...lppPlanData, ...(pData || {}) } as any;
+            const today = new Date();
+            const dm = computeDecesMaladie(today, clientForEngine, LEGAL_2025, Legal_Echelle44_2025.rows);
+            const da = computeDecesAccident(today, clientForEngine, LEGAL_2025, Legal_Echelle44_2025.rows);
+            const nbA = da.meta.inputs.nbEnfantsEligibles || 0;
+
+            // Répartition conjoint/orphelin (au prorata du brut) du montant réellement versé.
+            const mLpp = splitPilier(dm.monthly.lpp, dm.meta.breakdown.lpp.spouseOrPartnerAnnual / 12, dm.meta.breakdown.lpp.orphansAnnual / 12);
+            const aLaa = splitPilier(da.monthly.laa, da.meta.breakdown.laa.spouseAnnual / 12, (da.meta.breakdown.laa.perChildAnnual * nbA) / 12);
+            const aLpp = splitPilier(da.monthly.lpp, da.meta.breakdown.lpp.spouseOrPartnerAnnual / 12, (da.meta.breakdown.lpp.perChildAnnual * nbA) / 12);
+
+            setDecRentes({
+              target: Math.round(cibleDeces),
+              maladie: {
+                avsC: Math.round(dm.meta.breakdown.avs.widowMonthly),
+                avsE: Math.round(dm.meta.breakdown.avs.orphanMonthlyTotal),
+                lppC: mLpp.c, lppE: mLpp.e, laaC: 0, laaE: 0,
+              },
+              accident: {
+                laaC: aLaa.c, laaE: aLaa.e,
+                avsC: Math.round(da.meta.breakdown.avs.widowMonthly),
+                avsE: Math.round(da.meta.breakdown.avs.orphanMonthlyTotal),
+                lppC: aLpp.c, lppE: aLpp.e,
+              },
+            });
+            decCapitalMaladie = Math.round(dm.capitals.totalCapitalsMaladie || capExistants);
+          } catch (e) {
+            console.warn("Moteur décès indisponible, repli sur les matrices:", e);
+            setDecRentes(decRentesFallback);
+          }
   
           const isMarried = pData.Enter_etatCivil == 1 || pData.Enter_etatCivil == "1";
           const enfants = pData.Enter_enfants || [];
@@ -696,30 +790,46 @@ setCurrentIncState({
   
           if (!isMarried && enfants.length === 0) besoinDecesCible = 50000;
   
-          setCurrentDecState({ 
-            current: Math.round(capExistants), 
-            target: Math.round(besoinDecesCible), 
-            renteDeces: Math.round(totalRentesDeces > 0 ? totalRentesDeces : 0)
+          setCurrentDecState({
+            current: decCapitalMaladie,
+            target: Math.round(besoinDecesCible),
+            renteDeces: Math.round(totalRentesDeces > 0 ? totalRentesDeces : 0),
+            renteAvs: Math.round(renteVeuve),
+            renteLpp: Math.round(renteLpp)
           });
   
           // --- D. OFFRE ---
-          const savedData = sessionStorage.getItem("creditx_temp_offer");
-          if (savedData) {
-            const data = JSON.parse(savedData);
-            setPremiumRet(Math.round(data.premiumRet));
-            setPremiumInc(Math.round(data.premiumInc));
-            setPremiumDec(Math.round(data.premiumDec));
-            setPremiumPay(Math.round(data.premiumPay || 12));
-            setCapitalRet(Math.round(data.capitalRet));
-            setCoverageInc(Math.round(data.coverageInc));
-            setCoverageDec(Math.round(data.coverageDec));
+          // Applique une offre (depuis resultat OU depuis Firestore). Gère les
+          // deux formes : `provider` unique (resultat) ou providerRet/Inc/Dec.
+          const applyOffer = (data: any) => {
+            const n = (v: any) => (v == null || isNaN(Number(v)) ? null : Math.round(Number(v)));
+            if (n(data.premiumRet) != null) setPremiumRet(n(data.premiumRet)!);
+            if (n(data.premiumInc) != null) setPremiumInc(n(data.premiumInc)!);
+            if (n(data.premiumDec) != null) setPremiumDec(n(data.premiumDec)!);
+            if (n(data.premiumPay) != null) setPremiumPay(n(data.premiumPay)!);
+            if (n(data.capitalRet) != null) setCapitalRet(n(data.capitalRet)!);
+            if (n(data.coverageInc) != null) setCoverageInc(n(data.coverageInc)!);
+            if (n(data.coverageDec) != null) setCoverageDec(n(data.coverageDec)!);
             if (data.provider) { setProviderRet(data.provider); setProviderInc(data.provider); setProviderDec(data.provider); }
-            // Pré-sélection des couvertures : flag explicite s'il existe, sinon
-            // « proposée » si elle a été chiffrée (prime / capital > 0).
-            setSelRet(data.selRet ?? (Math.round(data.premiumRet) > 0 || Math.round(data.capitalRet) > 0));
-            setSelInc(data.selInc ?? (Math.round(data.premiumInc) > 0));
-            setSelDec(data.selDec ?? (Math.round(data.premiumDec) > 0));
-            setSelPay(data.selPay ?? (Math.round(data.premiumPay || 0) > 0));
+            if (data.providerRet) setProviderRet(data.providerRet);
+            if (data.providerInc) setProviderInc(data.providerInc);
+            if (data.providerDec) setProviderDec(data.providerDec);
+            if (data.isReplaceMode != null) setIsReplaceMode(!!data.isReplaceMode);
+            setSelRet(data.selRet ?? ((n(data.premiumRet) || 0) > 0 || (n(data.capitalRet) || 0) > 0));
+            setSelInc(data.selInc ?? ((n(data.premiumInc) || 0) > 0));
+            setSelDec(data.selDec ?? ((n(data.premiumDec) || 0) > 0));
+            setSelPay(data.selPay ?? ((n(data.premiumPay) || 0) > 0));
+            if (typeof data.notes === "string" && data.notes.trim()) setNotes(data.notes);
+          };
+
+          const freshFromResultat = sessionStorage.getItem("creditx_temp_offer");
+          if (freshFromResultat) {
+            // Arrivée depuis resultat = chiffrage frais, prioritaire.
+            applyOffer(JSON.parse(freshFromResultat));
+          } else {
+            // Sinon, on recharge la dernière offre enregistrée (édition admin).
+            const offerSnap = await getDoc(doc(db, "clients", clientUid, "prevoyance_offer", "current"));
+            if (offerSnap.exists()) applyOffer(offerSnap.data());
           }
         } catch (err) {
           console.error("Erreur:", err);
@@ -729,6 +839,32 @@ setCurrentIncState({
       };
       loadData();
     }, [clientUid]);
+
+  // Enregistre l'offre éditée (durable) → rechargée à la prochaine visite.
+  const handleSaveOffer = async () => {
+    if (!clientUid) return;
+    setIsSavingOffer(true);
+    try {
+      await setDoc(doc(db, "clients", clientUid, "prevoyance_offer", "current"), {
+        providerRet, premiumRet, capitalRet, isReplaceMode,
+        providerInc, premiumInc, coverageInc,
+        providerDec, premiumDec, coverageDec,
+        premiumPay,
+        selRet, selInc, selDec, selPay,
+        notes,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      // L'offre Firestore fait foi : on purge le temporaire de resultat.
+      sessionStorage.removeItem("creditx_temp_offer");
+      setOfferSaved(true);
+      setTimeout(() => setOfferSaved(false), 2500);
+    } catch (e) {
+      console.error("Erreur d'enregistrement de l'offre:", e);
+      alert("Erreur lors de l'enregistrement de l'offre.");
+    } finally {
+      setIsSavingOffer(false);
+    }
+  };
 
   // Fonction d'arrondi aux 5 centimes suisses et formatage à 2 décimales
   const formatCHF = (val: number) => {
@@ -752,11 +888,12 @@ setCurrentIncState({
   // Numérotation dynamique : les pages 1–8 sont fixes ; les pages solution
   // (2.1/2.2/2.3) n'existent que si proposées, donc le résumé décale.
   const padPage = (n: number) => String(n).padStart(2, "0");
-  let _pageCursor = 9;
+  let _pageCursor = 10; // pages fixes 1–9 (dont 1.5 rentes de survivants)
   const pageRet = hasRet ? _pageCursor++ : null;
   const pageInc = hasInc ? _pageCursor++ : null;
   const pageDec = hasDec ? _pageCursor++ : null;
-  const pageResume = _pageCursor;
+  const pageResume = _pageCursor++;
+  const pageNotes = _pageCursor;
   const pageSolutionsStart = pageRet ?? pageInc ?? pageDec ?? pageResume;
 
   if (loading) {
@@ -796,6 +933,10 @@ setCurrentIncState({
         <div className="flex items-center gap-2">
           <Button onClick={() => setEditMode(!editMode)} className={`rounded-full text-xs font-bold px-4 py-2 flex gap-1.5 ${editMode ? 'bg-white/10 text-white' : 'bg-[#816DEC] text-white'}`}>
             {editMode ? <Eye size={14} /> : <Edit3 size={14} />} {editMode ? "Aperçu Impression" : "Ajuster l'Offre"}
+          </Button>
+          <Button onClick={handleSaveOffer} disabled={isSavingOffer} className={`rounded-full text-xs font-bold px-4 py-2 flex gap-1.5 ${offerSaved ? 'bg-emerald-600 text-white' : 'bg-white/10 hover:bg-white/20 text-white'}`}>
+            {isSavingOffer ? <Loader2 size={14} className="animate-spin" /> : offerSaved ? <CheckCircle2 size={14} /> : <Edit3 size={14} />}
+            {isSavingOffer ? "Enregistrement…" : offerSaved ? "Enregistré" : "Enregistrer"}
           </Button>
           <Button onClick={() => window.print()} className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-full text-xs font-bold px-4 py-2 flex gap-1.5">
             <Printer size={14} /> Exporter PDF
@@ -928,6 +1069,19 @@ setCurrentIncState({
                     <input type="number" value={premiumPay} onChange={(e) => setPremiumPay(Number(e.target.value))} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-[#816DEC]" placeholder="CHF / mois" />
                   </div>
                </div>
+
+               {/* --- NOTES DU CONSEILLER --- */}
+               <div className="bg-white/5 p-3 rounded-xl border border-white/10 space-y-3">
+                  <label className="text-[11px] font-bold text-white/70 uppercase block">Notes du conseiller</label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={5}
+                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-[#816DEC] resize-y leading-relaxed"
+                    placeholder="Aucune note."
+                  />
+                  <p className="text-[9px] text-white/30">Apparaît sur la dernière page du dossier client.</p>
+               </div>
             </div>
           </motion.div>
         )}
@@ -1019,6 +1173,10 @@ setCurrentIncState({
                   <span className="text-white/60 print:text-[#4b5563]">1.4 Focus protection familiale</span>
                   <span className="text-white/40 print:text-gray-400">08</span>
                 </div>
+                <div className="flex justify-between border-b border-dashed border-white/10 print:border-gray-300 pb-2 pl-6">
+                  <span className="text-white/60 print:text-[#4b5563]">1.5 Rentes de survivants (décès)</span>
+                  <span className="text-white/40 print:text-gray-400">09</span>
+                </div>
                 {(hasRet || hasInc || hasDec) && (
                 <div className="flex justify-between border-b border-dashed border-white/10 print:border-gray-300 pb-2 mt-6">
                   <span className="font-bold text-white/90 print:text-[#111827]">2. Solutions Recommandées</span>
@@ -1046,6 +1204,10 @@ setCurrentIncState({
                 <div className="flex justify-between border-b border-dashed border-white/10 print:border-gray-300 pb-2 mt-6">
                   <span className="font-bold text-white/90 print:text-[#111827]">Résumé de l'investissement</span>
                   <span className="font-bold text-[#816DEC] print:text-gray-500">{padPage(pageResume)}</span>
+                </div>
+                <div className="flex justify-between border-b border-dashed border-white/10 print:border-gray-300 pb-2 mt-4">
+                  <span className="font-bold text-white/90 print:text-[#111827]">Notes du conseiller</span>
+                  <span className="font-bold text-[#816DEC] print:text-gray-500">{padPage(pageNotes)}</span>
                 </div>
               </div>
             </div>
@@ -1225,12 +1387,15 @@ setCurrentIncState({
                     <span className="font-bold uppercase text-amber-500 print:text-[#d97706] tracking-wider text-sm">Cas d'Accident</span>
                     <DonutChart percentage={Math.round((currentIncState.currentAccident / currentRetState.salary) * 100)} colorClass="text-amber-500" printColor="print:text-[#d97706]" />
                   </div>
-                  <PerteGainAreaChart 
-                    type="accident" 
-                    salary={currentRetState.salary} 
-                    current={currentIncState.currentAccident} 
+                  <PerteGainAreaChart
+                    type="accident"
+                    salary={currentRetState.salary}
+                    current={currentIncState.currentAccident}
                     target={currentIncState.target}
-                    enfant={currentIncState.enfantsAccident} 
+                    laa={currentIncState.laaAccident}
+                    ai={currentIncState.aiAccident}
+                    lpp={currentIncState.lppAccident}
+                    enfant={currentIncState.enfantsAccident}
                   />
                 </div>
               </div>
@@ -1255,15 +1420,12 @@ setCurrentIncState({
                 </p>
 
                 <div className="bg-black/20 print:bg-gray-50 border border-white/5 print:border-gray-200 rounded-xl p-8 space-y-6">
-                  <span className="text-xs font-bold uppercase tracking-wider text-white/40 print:text-gray-500">Déficit de capital estimé</span>
-                  <DecesCapitalChart target={currentDecState.target} />
+                  <span className="text-xs font-bold uppercase tracking-wider text-white/40 print:text-gray-500">Besoin de capital immédiat vs capital versé</span>
+                  <DecesCapitalChart target={currentDecState.target} coverage={currentDecState.current} />
                   <p className="text-xs print:text-sm text-white/50 print:text-[#4b5563] leading-relaxed">
                     CreditX recommande un filet de sécurité immédiat estimé ici à <strong>CHF {currentDecState.target.toLocaleString('fr-CH')}</strong> pour amortir le choc financier des premières années (frais fixes, succession, impôts) et garantir la transition sereine pour le conjoint et les enfants, selon la situation maritale et familiale actuelle.
                   </p>
                 </div>
-
-                <DecesRentesAreaChart rente={currentDecState.renteDeces} />
-
               </div>
             </div>
             <div className="w-full mt-auto pt-4 text-[9px] print:text-[10px] text-white/20 print:text-gray-400 uppercase tracking-widest font-bold border-t border-white/5 print:border-gray-300 flex justify-between">
@@ -1272,7 +1434,28 @@ setCurrentIncState({
             </div>
           </div>
 
-          {/* --- PAGE 9 : SOLUTION RETRAITE --- */}
+          {/* --- PAGE 9 : RENTES DE SURVIVANTS (DÉCÈS) --- */}
+          <div className={pageWrapperClass}>
+            <div className="flex-1 w-full">
+              <div className="flex items-center gap-2 border-b border-white/5 print:border-gray-300 pb-4 mb-8">
+                <Heart size={18} className="text-purple-400 print:text-[#374151]" />
+                <h3 className="text-sm print:text-lg font-bold uppercase tracking-widest text-white/60 print:text-[#374151] leading-none">1.5 Rentes de survivants (décès)</h3>
+              </div>
+              <div className="space-y-6 text-sm print:text-base">
+                <p className="text-white/60 print:text-[#4b5563] leading-relaxed">
+                  Au-delà du capital immédiat, vos proches perçoivent des rentes de survivants. Leur montant et leur durée diffèrent selon que le décès survient par maladie ou par accident (rentes LAA en plus).
+                </p>
+                <DecesRentesChart cause="maladie" target={decRentes.target} data={decRentes.maladie} />
+                <DecesRentesChart cause="accident" target={decRentes.target} data={decRentes.accident} />
+              </div>
+            </div>
+            <div className="w-full mt-auto pt-4 text-[9px] print:text-[10px] text-white/20 print:text-gray-400 uppercase tracking-widest font-bold border-t border-white/5 print:border-gray-300 flex justify-between">
+              <span>CreditX | Analyse de prévoyance</span>
+              <span>Page 09</span>
+            </div>
+          </div>
+
+          {/* --- PAGE 10 : SOLUTION RETRAITE --- */}
           {hasRet && (
           <div className={pageWrapperClass}>
             <div className="flex-1 w-full">
@@ -1312,14 +1495,14 @@ setCurrentIncState({
                     isSolution={true} 
                   />
                   
-                  {(currentRetState.cap3a > 0 || isReplaceMode) && (
-                    <RetraiteConsoAreaChart 
-                      target={currentRetState.target} 
-                      avs={currentRetState.avs} 
-                      lpp={currentRetState.lpp} 
-                      capital3a={isReplaceMode ? 0 : currentRetState.cap3a} 
+                  {(currentRetState.cap3a > 0 || isReplaceMode || capitalRet > 0) && (
+                    <RetraiteConsoAreaChart
+                      target={currentRetState.target}
+                      avs={currentRetState.avs}
+                      lpp={currentRetState.lpp}
+                      capital3a={isReplaceMode ? 0 : currentRetState.cap3a}
                       solution3a={capitalRet}
-                      isSolution={true} 
+                      isSolution={true}
                     />
                   )}
                 </div>
@@ -1478,6 +1661,23 @@ setCurrentIncState({
             <div className="w-full mt-auto pt-4 text-[9px] print:text-[10px] text-white/20 print:text-gray-400 uppercase tracking-widest font-bold border-t border-white/5 print:border-gray-300 flex justify-between">
               <span>CreditX | Analyse de prévoyance</span>
               <span>Page {padPage(pageResume)}</span>
+            </div>
+          </div>
+
+          {/* --- PAGE NOTES : NOTES DU CONSEILLER --- */}
+          <div className={pageWrapperClass}>
+            <div className="flex-1 w-full">
+              <div className="flex items-center gap-2 border-b border-white/5 print:border-gray-300 pb-4 mb-8">
+                <BookOpen size={18} className="text-[#816DEC] print:text-gray-700" />
+                <h3 className="text-sm print:text-lg font-bold uppercase tracking-widest text-white/60 print:text-[#374151] leading-none">Notes du conseiller</h3>
+              </div>
+              <p className="whitespace-pre-wrap text-sm print:text-base text-white/70 print:text-[#374151] leading-relaxed">
+                {notes && notes.trim() ? notes : "Aucune note."}
+              </p>
+            </div>
+            <div className="w-full mt-auto pt-4 text-[9px] print:text-[10px] text-white/20 print:text-gray-400 uppercase tracking-widest font-bold border-t border-white/5 print:border-gray-300 flex justify-between">
+              <span>CreditX | Analyse de prévoyance</span>
+              <span>Page {padPage(pageNotes)}</span>
             </div>
           </div>
 
