@@ -769,7 +769,7 @@ setCurrentIncState({
 
   // --- LA CLASSE PARFAITE POUR LE PDF ---
   // Dimensions A4 strictes. max-h empêche les dépassements. box-border garde le padding à l'intérieur.
-  const pageWrapperClass = "bg-[#14161F] print:bg-white rounded-3xl p-16 print:p-[15mm] min-h-[1050px] print:min-h-0 print:h-[296mm] print:max-h-[296mm] print:w-[210mm] print:box-border print:m-0 print:rounded-none flex flex-col justify-between border border-white/5 print:border-none break-after-page shadow-2xl print:shadow-none relative overflow-hidden";
+  const pageWrapperClass = "bg-[#14161F] print:bg-white rounded-3xl p-16 print:p-[15mm] min-h-[1050px] print:min-h-0 print:h-[296mm] print:max-h-[296mm] print:w-[210mm] print:box-border print:m-0 print:rounded-none flex flex-col justify-between border border-white/5 print:border-none break-after-page [&:last-child]:break-after-auto shadow-2xl print:shadow-none relative overflow-hidden";
 
   return (
     <div className="min-h-screen bg-[#0D0E12] print:bg-white text-white print:text-[#1f2937] pb-20 selection:bg-[#816DEC]/30 font-sans">
