@@ -23,20 +23,17 @@ import jsPDF from "jspdf";
 // ============================================================================
 
 const RetraiteComboChart = ({ salary, target, avs, lpp, capital3a, solution3a = 0, isSolution = false }: any) => {
-  // Les 3a (capitaux) sont convertis en rente mensuelle indicative (sur 25 ans).
-  const rente3a = (capital3a || 0) / 25 / 12;
-  const renteSol = (solution3a || 0) / 25 / 12;
-  const total = avs + lpp + rente3a + renteSol;
-  const lacune = Math.max(0, Math.round(target - total));
-  const scale = Math.max(target, total, 1);
-  const pct = (v: number) => `${(Math.max(0, v) / scale) * 100}%`;
+  // Le manque mensuel = besoin (80%) − rentes VIAGÈRES garanties (AVS + LPP).
+  // Le 3e pilier est un CAPITAL (il n'est PAS annualisé en rente à vie) : son rôle
+  // — combler ce manque jusqu'à épuisement — est montré par la « durée de couverture ».
   const fmt = (n: number) => Math.round(n).toLocaleString("fr-CH");
+  const lacune = Math.max(0, Math.round(target - (avs + lpp)));
+  const scale = Math.max(target, avs + lpp, 1);
+  const pct = (v: number) => `${(Math.max(0, v) / scale) * 100}%`;
 
   const segs = [
-    { label: "AVS / AI", val: avs, color: "#9ca3af" },
-    { label: "LPP (2e pilier)", val: lpp, color: "#6b7280" },
-    ...(rente3a > 0 ? [{ label: "3e pilier actuel", val: rente3a, color: "#816DEC" }] : []),
-    ...(renteSol > 0 ? [{ label: "Solution proposée", val: renteSol, color: "#2563eb" }] : []),
+    { label: "AVS / AI (à vie)", val: avs, color: "#9ca3af" },
+    { label: "LPP (2e pilier, à vie)", val: lpp, color: "#6b7280" },
   ];
 
   return (
@@ -79,7 +76,7 @@ const RetraiteComboChart = ({ salary, target, avs, lpp, capital3a, solution3a = 
       <p className="text-[11px] print:text-xs text-white/60 print:text-gray-600 leading-snug pt-3 border-t border-white/5 print:border-gray-200">
         Salaire actuel <strong className="text-white print:text-gray-900">CHF {fmt(salary)}</strong> → objectif retraite (80%) <strong className="text-white print:text-gray-900">CHF {fmt(target)}</strong>.{" "}
         {lacune > 0
-          ? <strong className="text-[#ef4444] print:text-[#b91c1c]">Manque CHF {fmt(lacune)} / mois.</strong>
+          ? <><strong className="text-[#ef4444] print:text-[#b91c1c]">Manque CHF {fmt(lacune)} / mois</strong> face aux rentes à vie — comblé par le capital 3e pilier (voir la durée de couverture ci-dessous).</>
           : <strong className="text-emerald-400 print:text-emerald-700">Objectif atteint.</strong>}
       </p>
     </div>
@@ -1462,7 +1459,7 @@ setCurrentIncState({
 
               <div className="space-y-8">
                 <p className="text-sm print:text-base text-white/60 print:text-[#4b5563] leading-relaxed">
-                  Afin de combler votre déficit de vieillesse tout en profitant d'une réduction fiscale immédiate, nous recommandons la mise en place d'une solution d'épargne ciblée. La zone bleue démontre l'harmonisation financière apportée par cette recommandation, sécurisant votre niveau de vie à 65 ans.
+                  Afin de combler votre déficit de vieillesse tout en profitant d'une réduction fiscale immédiate, nous recommandons la mise en place d'une solution d'épargne ciblée. Le graphique de durée de couverture ci-dessous démontre l'apport de cette recommandation : votre capital comble le manque mensuel plus longtemps, jusqu'à sécuriser votre niveau de vie à la retraite.
                 </p>
 
                 <div className="bg-black/20 print:bg-gray-50 border border-white/5 print:border-gray-200 rounded-xl p-8 w-full">
