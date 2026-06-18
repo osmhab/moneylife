@@ -448,55 +448,51 @@ const DecesRentesChart = ({ cause, target = 0, data = {} }: any) => {
 };
 
 const DecesCapitalChart = ({ target, coverage = 0, isSolution = false }: any) => {
-  const maxVisual = Math.max(target * 1.5, 200000);
-  const scale = (v: number) => (v > 0 ? (v / maxVisual) * 100 : 0);
+  const tgt = Number(target) || 0;
+  const covered = Math.min(Number(coverage) || 0, tgt);
+  const residual = Math.max(0, tgt - covered);
+  const fmt = (n: number) => Math.round(n).toLocaleString("fr-CH");
+  const pct = (v: number) => (tgt > 0 ? `${(v / tgt) * 100}%` : "0%");
 
-  // Capital effectivement versé aux survivants (existant en diagnostic, ou
-  // proposé en solution). Le reste à couvrir est une lacune (rouge).
-  const covered = Math.min(Number(coverage) || 0, target);
-  const residual = Math.max(0, target - covered);
-
-  const hCov = scale(covered);
-  const hRes = scale(residual);
-  const yCovTop = 120 - hCov;        // haut de la zone couverte (bleu)
-  const yResTop = yCovTop - hRes;    // haut de la zone résiduelle (rouge), empilée
+  if (tgt <= 0) {
+    return (
+      <div className="w-full bg-white/5 print:bg-white border border-white/5 print:border-gray-200 rounded-xl p-6 text-center">
+        <span className="text-sm font-bold text-emerald-400 print:text-emerald-600">CHF 0 — aucun besoin de capital immédiat</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full h-48 bg-white/5 print:bg-white border border-white/5 print:border-gray-200 rounded-xl p-6 relative font-sans print:break-inside-avoid">
-      <svg className="w-full h-full mt-4 overflow-visible" viewBox="0 0 600 150" preserveAspectRatio="none">
-        <line x1="50" y1="120" x2="550" y2="120" stroke="currentColor" className="text-white/20 print:text-gray-300" strokeWidth="1" />
+    <div className="w-full bg-white/5 print:bg-white border border-white/5 print:border-gray-200 rounded-xl p-6 relative print:break-inside-avoid space-y-4">
+      {/* Barre horizontale : couvert (bleu) + reste (rouge), pleine largeur = besoin */}
+      <div className="h-9 w-full rounded-lg overflow-hidden flex bg-white/10 print:bg-gray-100 border border-white/10 print:border-gray-200">
+        {covered > 0 && <div className="h-full bg-[#2563eb]" style={{ width: pct(covered) }} title={`${isSolution ? "Garantie" : "Déjà couvert"} : ${fmt(covered)} CHF`} />}
+        {residual > 0 && <div className="h-full" style={{ width: pct(residual), backgroundColor: "#ef4444", opacity: 0.4 }} title={`Reste à couvrir : ${fmt(residual)} CHF`} />}
+      </div>
 
-        {target > 0 ? (
-          <g>
-            {/* Part couverte par la solution (bleu) — en mode analyse, covered=0 */}
-            {covered > 0 && (
-              <>
-                <rect x="200" y={yCovTop} width="200" height={hCov} fill="#2563eb" opacity="0.9" />
-                <text x="300" y={yCovTop + (residual > 0 ? 16 : -10)} fontSize="13" fill={residual > 0 ? "white" : "#2563eb"} fontWeight="bold" textAnchor="middle">
-                  {isSolution ? "Garantie" : "Déjà couvert"} : CHF {covered.toLocaleString('fr-CH')}
-                </text>
-              </>
-            )}
-            {/* Part non couverte / besoin (rouge) */}
-            {residual > 0 && (
-              <>
-                <rect x="200" y={yResTop} width="200" height={hRes} fill="#ef4444" opacity={isSolution ? "0.35" : "0.5"} />
-                <text x="300" y={yResTop - 10} fontSize="13" fill="#ef4444" fontWeight="bold" textAnchor="middle">
-                  {isSolution ? `Reste : CHF ${residual.toLocaleString('fr-CH')}` : `CHF ${residual.toLocaleString('fr-CH')}`}
-                </text>
-              </>
-            )}
-          </g>
-        ) : (
-          <text x="300" y="110" fontSize="14" fill="currentColor" className="text-emerald-400 print:text-emerald-600 font-bold" textAnchor="middle">
-            CHF 0 (Aucun besoin immédiat)
-          </text>
+      {/* Montants en légende — jamais tronqués */}
+      <div className="space-y-2">
+        {covered > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-2 text-white/70 print:text-gray-700">
+              <span className="w-3 h-3 rounded-sm shrink-0 bg-[#2563eb]" /> {isSolution ? "Garantie proposée" : "Déjà couvert (capital versé)"}
+            </span>
+            <span className="font-bold text-white print:text-gray-900">CHF {fmt(covered)}</span>
+          </div>
         )}
-
-        <text x="300" y="140" fontSize="11" fill="currentColor" className="text-white/40 print:text-gray-500 font-bold" textAnchor="middle">
-          {isSolution ? "Capital Transitoire Sécurisé" : "Capital Transitoire Requis (Estimé)"}
-        </text>
-      </svg>
+        {residual > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="flex items-center gap-2 font-bold text-[#ef4444] print:text-[#b91c1c]">
+              <span className="w-3 h-3 rounded-sm shrink-0 bg-[#ef4444]/50" /> Reste à couvrir
+            </span>
+            <span className="font-bold text-[#ef4444] print:text-[#b91c1c]">CHF {fmt(residual)}</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between text-sm pt-2 border-t border-white/5 print:border-gray-200">
+          <span className="font-bold text-white/80 print:text-gray-800">Besoin de capital immédiat</span>
+          <span className="font-bold text-white print:text-gray-900">CHF {fmt(tgt)}</span>
+        </div>
+      </div>
     </div>
   );
 };
