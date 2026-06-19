@@ -561,7 +561,9 @@
       "btn_delete": "Supprimer ce plan",
       "to_complete": "À compléter",
       "cancel": "Annuler",
-      "save": "Enregistrer"
+      "save": "Enregistrer",
+      "btn_edit_doc": "Modifier",
+      "btn_open_doc": "Ouvrir"
     },
     "modals": {
       "reject_title": "Refuser l'offre",
@@ -1504,5 +1506,19 @@
       "terms": "Conditions d'utilisation",
       "privacy": "Confidentialité"
     }
+  },
+  "EditSourceDocDrawer": {
+    "title": "Modifier le document",
+    "lbl_title": "Titre du document",
+    "ph_title": "Ex. Certificat LPP 2026",
+    "lbl_type": "Type de document",
+    "ph_custom_type": "Ou saisir un type personnalisé…",
+    "lbl_tags": "Tags",
+    "ph_new_tag": "Ajouter un tag…",
+    "btn_save": "Enregistrer",
+    "btn_saving": "Enregistrement…",
+    "toast_saved": "Document mis à jour",
+    "toast_err": "Erreur lors de la mise à jour",
+    "type_fallback": "Document"
   }
 }

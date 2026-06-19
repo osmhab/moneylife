@@ -561,7 +561,9 @@
       "btn_delete": "Diesen Plan löschen",
       "to_complete": "Zu ergänzen",
       "cancel": "Abbrechen",
-      "save": "Speichern"
+      "save": "Speichern",
+      "btn_edit_doc": "Bearbeiten",
+      "btn_open_doc": "Öffnen"
     },
     "modals": {
       "reject_title": "Offerte ablehnen",
@@ -1504,5 +1506,19 @@
       "terms": "Nutzungsbedingungen",
       "privacy": "Datenschutz"
     }
+  },
+  "EditSourceDocDrawer": {
+    "title": "Dokument bearbeiten",
+    "lbl_title": "Dokumenttitel",
+    "ph_title": "Z. B. BVG-Ausweis 2026",
+    "lbl_type": "Dokumenttyp",
+    "ph_custom_type": "Oder eigenen Typ eingeben…",
+    "lbl_tags": "Tags",
+    "ph_new_tag": "Tag hinzufügen…",
+    "btn_save": "Speichern",
+    "btn_saving": "Speichern…",
+    "toast_saved": "Dokument aktualisiert",
+    "toast_err": "Fehler bei der Aktualisierung",
+    "type_fallback": "Dokument"
   }
 }

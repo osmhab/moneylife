@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { db, auth } from "@/lib/firebase/index"; // 👈 Modifié pour correspondre à ton alias si besoin (app/lib -> @/lib)
+import { buildSourceDocTitle } from "@/lib/core/documentTypes";
 import { collection, onSnapshot } from "firebase/firestore";
 import { Search, FileText, Download, ExternalLink, Filter, Tag, ShieldCheck, Landmark, Building2, Calendar, FileCheck, Info, Share2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -66,15 +67,24 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
           });
         }
         
-        // 2. Le document scan original
+        // 2. Le document scan original — enrichi par la classification IA
+        //    (metadata.sourceDocType / sourceDocTags), éditable depuis PlanDetailsView.
         if (plan.metadata?.sourceFileUrl) {
+          const docType = plan.metadata?.sourceDocType || t("fallback_source_doc");
+          const docTags = Array.isArray(plan.metadata?.sourceDocTags) && plan.metadata.sourceDocTags.length
+            ? plan.metadata.sourceDocTags
+            : [t("fallback_ai_scan")];
+          // Titre lisible : valeur éditée si présente, sinon titre déterministe
+          // (rétroactif pour les plans scannés avant la classification).
+          const title = plan.metadata?.sourceDocTitle
+            || buildSourceDocTitle(plan.type, plan.institutionName);
           allDocs.push({
             id: `${docSnap.id}_source`,
-            name: `${t("fallback_original_doc")} - ${plan.institutionName || t("fallback_contract")}`,
+            name: title,
             url: plan.metadata.sourceFileUrl,
             origin: plan.origin === "creditx" ? "CreditX" : "Upload",
-            types: [t("fallback_source_doc")],
-            tags: [t("fallback_ai_scan")],
+            types: [docType],
+            tags: docTags,
             isSigned: false,
             isFinalDoc: false,
             planId: docSnap.id,
