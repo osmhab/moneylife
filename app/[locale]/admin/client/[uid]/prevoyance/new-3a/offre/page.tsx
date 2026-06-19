@@ -76,7 +76,7 @@ const RetraiteComboChart = ({ salary, target, avs, lpp, capital3a, solution3a = 
       <p className="text-[11px] print:text-xs text-white/60 print:text-gray-600 leading-snug pt-3 border-t border-white/5 print:border-gray-200">
         Salaire actuel <strong className="text-white print:text-gray-900">CHF {fmt(salary)}</strong> → objectif retraite (80%) <strong className="text-white print:text-gray-900">CHF {fmt(target)}</strong>.{" "}
         {lacune > 0
-          ? <><strong className="text-[#ef4444] print:text-[#b91c1c]">Manque CHF {fmt(lacune)} / mois</strong> face aux rentes à vie — comblé par le capital 3e pilier (voir la durée de couverture ci-dessous).</>
+          ? <><strong className="text-[#ef4444] print:text-[#b91c1c]">Manque CHF {fmt(lacune)} / mois</strong> face aux rentes à vie — que votre capital 3e pilier comble pour un temps (voir la durée de couverture ci-dessous).</>
           : <strong className="text-emerald-400 print:text-emerald-700">Objectif atteint.</strong>}
       </p>
     </div>
@@ -112,7 +112,7 @@ const RetraiteConsoAreaChart = ({ target = 0, avs = 0, lpp = 0, capital3a = 0, s
       <div className="space-y-1.5">
         <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider text-[#2563eb] print:text-[#2563eb]">
           <span>{hasSol ? "Avec la solution proposée" : "Votre épargne 3a actuelle"}</span>
-          <span>{totalReaches90 ? "à vie (90 ans +)" : `jusqu'à ~${Math.round(ageTotal)} ans`}</span>
+          <span>{totalReaches90 ? "au-delà de 90 ans" : `épuisé ~${Math.round(ageTotal)} ans`}</span>
         </div>
         <div className="h-5 w-full bg-white/10 print:bg-gray-100 rounded-full overflow-hidden">
           <div className="h-full bg-[#2563eb] rounded-full" style={{ width: `${pct(ageTotal)}%` }} />
@@ -129,8 +129,8 @@ const RetraiteConsoAreaChart = ({ target = 0, avs = 0, lpp = 0, capital3a = 0, s
       <p className="text-[11px] print:text-xs text-white/60 print:text-gray-600 leading-snug pt-3 border-t border-white/5 print:border-gray-200">
         {hasSol ? "Capital total " : "Votre capital 3a "}<strong className="text-white print:text-gray-900">CHF {fmt(totalCapital)}</strong> consommé pour combler le manque de CHF {fmt(gapMensuel)}/mois →{" "}
         {totalReaches90
-          ? <strong className="text-emerald-400 print:text-emerald-700">couvre le manque à vie.</strong>
-          : <strong className="text-[#2563eb] print:text-[#2563eb]">tient jusqu'à ~{Math.round(ageTotal)} ans.</strong>}
+          ? <strong className="text-emerald-400 print:text-emerald-700">couvre le manque sur tout l'horizon de retraite (au-delà de 90 ans).</strong>
+          : <><strong className="text-[#2563eb] print:text-[#2563eb]">tient jusqu'à ~{Math.round(ageTotal)} ans</strong>, puis le manque réapparaît (retour aux seules rentes AVS+LPP).</>}
       </p>
     </div>
   );
