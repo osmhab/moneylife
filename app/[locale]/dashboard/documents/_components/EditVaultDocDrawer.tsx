@@ -7,14 +7,13 @@
 //  - _source      → plan.metadata.sourceDocTitle / sourceDocTags
 //  - _doc_{i}     → plan.documents[i].name / tags
 //  - _legacy      → plan.metadata.legacyDocTitle / legacyDocTags
-//  - signing_*    → API authentifiée (override, collection token-keyed)
 
 import React, { useState } from "react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { X, Check, Loader2, Plus, Tag } from "lucide-react";
 import { doc, updateDoc, getDoc } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase/index";
+import { db } from "@/lib/firebase/index";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 
@@ -44,16 +43,6 @@ export default function EditVaultDocDrawer({ isOpen, onClose, clientUid, docItem
   const persist = async (id: string, name: string, finalTags: string[]) => {
     if (docItem.source === "vault" && docItem.vaultDocId) {
       await updateDoc(doc(db, "clients", clientUid, "documents", docItem.vaultDocId), { name, tags: finalTags });
-      return;
-    }
-    if (id.startsWith("signing_")) {
-      const jwt = await auth.currentUser?.getIdToken();
-      const res = await fetch("/api/client/signed-documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
-        body: JSON.stringify({ docId: docItem.signingDocId || id.replace(/^signing_/, ""), title: name, tags: finalTags }),
-      });
-      if (!res.ok) throw new Error("signing update failed");
       return;
     }
     if (docItem.planId && id.endsWith("_source")) {

@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { db, auth, storage } from "@/lib/firebase/index"; // 👈 Modifié pour correspondre à ton alias si besoin (app/lib -> @/lib)
+import { db, storage } from "@/lib/firebase/index"; // 👈 Modifié pour correspondre à ton alias si besoin (app/lib -> @/lib)
 import { buildSourceDocTitle } from "@/lib/core/documentTypes";
 import { collection, onSnapshot, doc, deleteDoc } from "firebase/firestore";
 import { ref, deleteObject } from "firebase/storage";
@@ -36,8 +36,6 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
   const dateLocale = locale === 'de' ? de : frCH;
 
   const [documents, setDocuments] = useState<any[]>([]);
-  // Documents signés hors `plans` (transferts 3a / résiliations 3b), via API authentifiée.
-  const [extraDocs, setExtraDocs] = useState<any[]>([]);
   // Documents libres ajoutés par le client (clients/{uid}/documents).
   const [vaultDocs, setVaultDocs] = useState<any[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -184,62 +182,15 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
     }
   };
 
-  // 1bis. Documents signés hors `plans` (transferts 3a / résiliations 3b),
-  //       récupérés via API authentifiée (collection top-level `signing_requests`).
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const user = auth.currentUser;
-        if (!user) return;
-        const jwt = await user.getIdToken();
-        const res = await fetch("/api/client/signed-documents", {
-          headers: { Authorization: `Bearer ${jwt}` },
-        });
-        if (!res.ok) return;
-        const { documents: signed = [] } = await res.json();
-        if (cancelled) return;
-
-        const mapped = signed.map((s: any) => {
-          const is3b = s.pillarType === "3b";
-          const baseName = is3b ? t("signed_3b_name") : t("signed_3a_name");
-          const defaultName = s.institution ? `${baseName} – ${s.institution}` : baseName;
-          const parsed = s.signedAt ? new Date(s.signedAt) : new Date();
-          return {
-            id: s.id,
-            signingDocId: s.signingDocId, // pour l'édition (override via API)
-            name: s.titleOverride || defaultName,
-            url: "",
-            path: s.path, // le proxy régénère l'accès via l'Admin SDK
-            origin: "CreditX",
-            types: [is3b ? t("signed_type_termination") : t("signed_type_transfer")],
-            tags: Array.isArray(s.tagsOverride) && s.tagsOverride.length ? s.tagsOverride : [t("signed_tag")],
-            isSigned: true,
-            isFinalDoc: true,
-            planName: s.institution || t("fallback_contract"),
-            planType: is3b ? "RESILIATION_3B" : "TRANSFERT_3A",
-            parsedDate: parsed,
-          };
-        });
-        setExtraDocs(mapped);
-      } catch {
-        /* source secondaire : on n'interrompt pas le coffre si elle échoue */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [clientUid, t]);
-
-  // Fusion : plans + documents signés externes + documents libres du client.
+  // Fusion : plans + documents libres du client.
   const allDocuments = useMemo(() => {
-    const combined = [...documents, ...extraDocs, ...vaultDocs];
+    const combined = [...documents, ...vaultDocs];
     const ts = (d: any) => {
       const v = d?.parsedDate instanceof Date ? d.parsedDate.getTime() : NaN;
       return Number.isFinite(v) ? v : 0;
     };
     return combined.sort((a, b) => ts(b) - ts(a));
-  }, [documents, extraDocs, vaultDocs]);
+  }, [documents, vaultDocs]);
 
   // 2. Extraction dynamique des filtres disponibles
   const availableTypes = useMemo(() => {
