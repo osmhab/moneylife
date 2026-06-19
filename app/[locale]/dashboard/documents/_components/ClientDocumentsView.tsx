@@ -2,10 +2,13 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { db, auth } from "@/lib/firebase/index"; // 👈 Modifié pour correspondre à ton alias si besoin (app/lib -> @/lib)
+import { db, auth, storage } from "@/lib/firebase/index"; // 👈 Modifié pour correspondre à ton alias si besoin (app/lib -> @/lib)
 import { buildSourceDocTitle } from "@/lib/core/documentTypes";
-import { collection, onSnapshot } from "firebase/firestore";
-import { Search, FileText, Download, ExternalLink, Filter, Tag, ShieldCheck, Landmark, Building2, Calendar, FileCheck, Info, Share2, X } from "lucide-react";
+import { collection, onSnapshot, doc, deleteDoc } from "firebase/firestore";
+import { ref, deleteObject } from "firebase/storage";
+import { Search, FileText, Download, ExternalLink, Filter, Tag, ShieldCheck, Landmark, Building2, Calendar, FileCheck, Info, Share2, X, Plus, Trash2, Pencil } from "lucide-react";
+import AddDocumentDrawer from "./AddDocumentDrawer";
+import EditVaultDocDrawer from "./EditVaultDocDrawer";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { frCH, de } from "date-fns/locale";
@@ -20,6 +23,10 @@ interface ClientDocumentsViewProps {
   isAdmin?: boolean;
 }
 
+// Normalise une chaîne pour la recherche : minuscules + accents retirés.
+const norm = (s: string) =>
+  (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
 export default function ClientDocumentsView({ clientUid, isAdmin = false }: ClientDocumentsViewProps) {
   const searchParams = useSearchParams();
   
@@ -31,6 +38,10 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
   const [documents, setDocuments] = useState<any[]>([]);
   // Documents signés hors `plans` (transferts 3a / résiliations 3b), via API authentifiée.
   const [extraDocs, setExtraDocs] = useState<any[]>([]);
+  // Documents libres ajoutés par le client (clients/{uid}/documents).
+  const [vaultDocs, setVaultDocs] = useState<any[]>([]);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingDoc, setEditingDoc] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Filtres
@@ -102,13 +113,16 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
           const typeName = isLPP ? t("fallback_lpp") : isBank ? t("fallback_bank") : t("fallback_insurance");
           const defaultName = `${typeName} - ${plan.institutionName || t("fallback_external")}`;
           
+          const legacyTags = Array.isArray(plan.metadata?.legacyDocTags) && plan.metadata.legacyDocTags.length
+            ? plan.metadata.legacyDocTags
+            : [t("fallback_imported")];
           allDocs.push({
             id: `${docSnap.id}_legacy`,
-            name: planData.fileName || plan.fileName || defaultName,
+            name: plan.metadata?.legacyDocTitle || planData.fileName || plan.fileName || defaultName,
             url: legacyFileUrl,
             origin: t("fallback_external"),
             types: [typeName],
-            tags: [t("fallback_imported")],
+            tags: legacyTags,
             isSigned: false,
             isFinalDoc: true,
             planId: docSnap.id,
@@ -133,6 +147,43 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
     return () => unsub();
   }, [clientUid, t]);
 
+  // 1ter. Documents libres ajoutés par le client dans le coffre.
+  useEffect(() => {
+    if (!clientUid) return;
+    const unsub = onSnapshot(collection(db, "clients", clientUid, "documents"), (snap) => {
+      const docs = snap.docs.map((d) => {
+        const data: any = d.data();
+        return {
+          ...data,
+          id: `vault_${d.id}`,
+          vaultDocId: d.id, // id Firestore réel (pour suppression)
+          source: "vault",
+          planName: t("vault_own_docs"),
+          planType: data.types?.[0] || "",
+          parsedDate: data.uploadedAt?.toDate ? data.uploadedAt.toDate() : new Date(data.uploadedAt || Date.now()),
+        };
+      });
+      setVaultDocs(docs);
+    });
+    return () => unsub();
+  }, [clientUid, t]);
+
+  // Suppression d'un document libre (Firestore + fichier Storage).
+  const handleDeleteVaultDoc = async (docToDelete: any) => {
+    if (!clientUid || !docToDelete?.vaultDocId) return;
+    if (!confirm(t("confirm_delete"))) return;
+    try {
+      await deleteDoc(doc(db, "clients", clientUid, "documents", docToDelete.vaultDocId));
+      if (docToDelete.path) {
+        await deleteObject(ref(storage, docToDelete.path)).catch(() => {}); // fichier déjà absent : on ignore
+      }
+      toast.success(t("toast_deleted"));
+    } catch (e) {
+      console.error(e);
+      toast.error(t("toast_delete_err"));
+    }
+  };
+
   // 1bis. Documents signés hors `plans` (transferts 3a / résiliations 3b),
   //       récupérés via API authentifiée (collection top-level `signing_requests`).
   useEffect(() => {
@@ -151,17 +202,18 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
 
         const mapped = signed.map((s: any) => {
           const is3b = s.pillarType === "3b";
-          const name = is3b ? t("signed_3b_name") : t("signed_3a_name");
-          const fullName = s.institution ? `${name} – ${s.institution}` : name;
+          const baseName = is3b ? t("signed_3b_name") : t("signed_3a_name");
+          const defaultName = s.institution ? `${baseName} – ${s.institution}` : baseName;
           const parsed = s.signedAt ? new Date(s.signedAt) : new Date();
           return {
             id: s.id,
-            name: fullName,
+            signingDocId: s.signingDocId, // pour l'édition (override via API)
+            name: s.titleOverride || defaultName,
             url: "",
             path: s.path, // le proxy régénère l'accès via l'Admin SDK
             origin: "CreditX",
             types: [is3b ? t("signed_type_termination") : t("signed_type_transfer")],
-            tags: [t("signed_tag")],
+            tags: Array.isArray(s.tagsOverride) && s.tagsOverride.length ? s.tagsOverride : [t("signed_tag")],
             isSigned: true,
             isFinalDoc: true,
             planName: s.institution || t("fallback_contract"),
@@ -179,15 +231,15 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
     };
   }, [clientUid, t]);
 
-  // Fusion des plans + documents signés externes (dédupliqués par id, plus récent d'abord).
+  // Fusion : plans + documents signés externes + documents libres du client.
   const allDocuments = useMemo(() => {
-    const combined = [...documents, ...extraDocs];
+    const combined = [...documents, ...extraDocs, ...vaultDocs];
     const ts = (d: any) => {
       const v = d?.parsedDate instanceof Date ? d.parsedDate.getTime() : NaN;
       return Number.isFinite(v) ? v : 0;
     };
     return combined.sort((a, b) => ts(b) - ts(a));
-  }, [documents, extraDocs]);
+  }, [documents, extraDocs, vaultDocs]);
 
   // 2. Extraction dynamique des filtres disponibles
   const availableTypes = useMemo(() => {
@@ -210,12 +262,19 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
 
   // 3. Application des filtres
   const filteredDocuments = useMemo(() => {
+    // Tous les termes de la recherche doivent matcher (AND), sur l'ensemble des
+    // métadonnées (nom, type, tags, origine, plan), accents/casse ignorés.
+    const terms = norm(searchQuery).split(/\s+/).filter(Boolean);
     return allDocuments.filter(doc => {
-      // Recherche textuelle
-      const searchMatch = !searchQuery || 
-        doc.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        doc.planName?.toLowerCase().includes(searchQuery.toLowerCase());
-      
+      const haystack = norm([
+        doc.name,
+        doc.planName,
+        doc.origin,
+        ...(doc.types || []),
+        ...(doc.tags || []),
+      ].filter(Boolean).join(" "));
+      const searchMatch = terms.every(term => haystack.includes(term));
+
       // Filtres
       const typeMatch = !selectedType || doc.types?.includes(selectedType);
       const originMatch = !selectedOrigin || doc.origin === selectedOrigin;
@@ -270,17 +329,26 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
       
       {/* MOTEUR DE RECHERCHE & FILTRES */}
       <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-100 space-y-6">
-        <div className="relative group">
-          <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
-            <Search size={24} />
+        <div className="flex items-center gap-3">
+          <div className="relative group flex-1">
+            <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors">
+              <Search size={24} />
+            </div>
+            <input
+              type="text"
+              placeholder={t("search_placeholder")}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-100 rounded-full py-5 pl-16 pr-6 font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-lg"
+            />
           </div>
-          <input 
-            type="text" 
-            placeholder={t("search_placeholder")}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-100 rounded-full py-5 pl-16 pr-6 font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-lg"
-          />
+          <button
+            onClick={() => setIsAddOpen(true)}
+            className="shrink-0 flex items-center gap-2 bg-slate-900 hover:bg-black text-white rounded-full px-5 sm:px-6 py-5 font-black text-sm uppercase tracking-widest shadow-lg active:scale-95 transition-all"
+          >
+            <Plus size={20} />
+            <span className="hidden sm:inline">{t("btn_add_doc")}</span>
+          </button>
         </div>
 
         <div className="flex flex-wrap gap-4 pt-2 border-t border-slate-50">
@@ -411,12 +479,45 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
                 >
                   {t("btn_open")} <ExternalLink size={16} />
                 </a>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setEditingDoc(doc); }}
+                  aria-label={t("btn_edit")}
+                  className="flex items-center justify-center px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-colors"
+                >
+                  <Pencil size={16} />
+                </button>
+                {doc.source === "vault" && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteVaultDoc(doc); }}
+                    aria-label={t("btn_delete")}
+                    className="flex items-center justify-center px-4 py-3 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl transition-colors"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
 
             </div>
           );
         })}
         </div>
+      )}
+
+      {isAddOpen && (
+        <AddDocumentDrawer
+          isOpen={isAddOpen}
+          onClose={() => setIsAddOpen(false)}
+          clientUid={clientUid}
+        />
+      )}
+
+      {editingDoc && (
+        <EditVaultDocDrawer
+          isOpen={!!editingDoc}
+          onClose={() => setEditingDoc(null)}
+          clientUid={clientUid}
+          docItem={editingDoc}
+        />
       )}
 
       {/* Barre d'action flottante de partage */}

@@ -148,7 +148,23 @@
     "signed_3b_name": "Résiliation 3b (signée)",
     "signed_type_transfer": "Transfert",
     "signed_type_termination": "Résiliation",
-    "signed_tag": "Signé"
+    "signed_tag": "Signé",
+    "btn_add_doc": "Ajouter",
+    "btn_delete": "Supprimer",
+    "vault_own_docs": "Mes documents",
+    "confirm_delete": "Supprimer définitivement ce document ?",
+    "toast_deleted": "Document supprimé",
+    "toast_delete_err": "Erreur lors de la suppression",
+    "btn_edit": "Modifier",
+    "edit_title": "Modifier le document",
+    "lbl_doc_title": "Titre",
+    "ph_doc_title": "Titre du document",
+    "lbl_tags": "Tags",
+    "ph_new_tag": "Ajouter un tag…",
+    "btn_save": "Enregistrer",
+    "btn_saving": "Enregistrement…",
+    "toast_doc_updated": "Document mis à jour",
+    "toast_doc_update_err": "Erreur lors de la mise à jour"
   },
   "DocumentsPage": {
     "secure_space": "Espace Sécurisé",
@@ -1520,5 +1536,28 @@
     "toast_saved": "Document mis à jour",
     "toast_err": "Erreur lors de la mise à jour",
     "type_fallback": "Document"
+  },
+  "AddDocumentDrawer": {
+    "title": "Ajouter un document",
+    "upload_instruction": "Scanner ou importer un document",
+    "upload_hint": "Photos (plusieurs pages) ou PDF",
+    "pages_count": "{count} fichier(s) sélectionné(s)",
+    "add_more": "Ajouter une page",
+    "ai_hint": "Document analysé par l'IA — vérifiez et ajustez si besoin.",
+    "lbl_title": "Titre du document",
+    "ph_title": "Ex. Police assurance maladie - Assura",
+    "lbl_type": "Type de document",
+    "ph_custom_type": "Ou saisir un type personnalisé…",
+    "lbl_tags": "Tags",
+    "ph_new_tag": "Ajouter un tag…",
+    "btn_analyze": "Analyser",
+    "btn_analyzing": "Analyse en cours…",
+    "btn_save": "Enregistrer",
+    "btn_saving": "Enregistrement…",
+    "toast_analyzing": "Analyse du document…",
+    "toast_analyzed": "Document analysé",
+    "toast_saved": "Document ajouté au coffre-fort",
+    "toast_err_upload": "Erreur lors de l'envoi du document",
+    "toast_err_save": "Erreur lors de l'enregistrement"
   }
 }

@@ -148,7 +148,23 @@
     "signed_3b_name": "Kündigung Säule 3b (unterzeichnet)",
     "signed_type_transfer": "Übertrag",
     "signed_type_termination": "Kündigung",
-    "signed_tag": "Unterzeichnet"
+    "signed_tag": "Unterzeichnet",
+    "btn_add_doc": "Hinzufügen",
+    "btn_delete": "Löschen",
+    "vault_own_docs": "Meine Dokumente",
+    "confirm_delete": "Dieses Dokument endgültig löschen?",
+    "toast_deleted": "Dokument gelöscht",
+    "toast_delete_err": "Fehler beim Löschen",
+    "btn_edit": "Bearbeiten",
+    "edit_title": "Dokument bearbeiten",
+    "lbl_doc_title": "Titel",
+    "ph_doc_title": "Dokumenttitel",
+    "lbl_tags": "Tags",
+    "ph_new_tag": "Tag hinzufügen…",
+    "btn_save": "Speichern",
+    "btn_saving": "Speichern…",
+    "toast_doc_updated": "Dokument aktualisiert",
+    "toast_doc_update_err": "Fehler bei der Aktualisierung"
   },
   "DocumentsPage": {
     "secure_space": "Sicherer Bereich",
@@ -1520,5 +1536,28 @@
     "toast_saved": "Dokument aktualisiert",
     "toast_err": "Fehler bei der Aktualisierung",
     "type_fallback": "Dokument"
+  },
+  "AddDocumentDrawer": {
+    "title": "Dokument hinzufügen",
+    "upload_instruction": "Dokument scannen oder importieren",
+    "upload_hint": "Fotos (mehrere Seiten) oder PDF",
+    "pages_count": "{count} Datei(en) ausgewählt",
+    "add_more": "Seite hinzufügen",
+    "ai_hint": "Dokument von der KI analysiert — bitte prüfen und anpassen.",
+    "lbl_title": "Dokumenttitel",
+    "ph_title": "Z. B. Krankenversicherungspolice - Assura",
+    "lbl_type": "Dokumenttyp",
+    "ph_custom_type": "Oder eigenen Typ eingeben…",
+    "lbl_tags": "Tags",
+    "ph_new_tag": "Tag hinzufügen…",
+    "btn_analyze": "Analysieren",
+    "btn_analyzing": "Wird analysiert…",
+    "btn_save": "Speichern",
+    "btn_saving": "Speichern…",
+    "toast_analyzing": "Dokument wird analysiert…",
+    "toast_analyzed": "Dokument analysiert",
+    "toast_saved": "Dokument zum Tresor hinzugefügt",
+    "toast_err_upload": "Fehler beim Hochladen des Dokuments",
+    "toast_err_save": "Fehler beim Speichern"
   }
 }

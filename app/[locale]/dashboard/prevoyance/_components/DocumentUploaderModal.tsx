@@ -137,7 +137,7 @@ export default function DocumentUploaderModal({ isOpen, onClose, clientUid, onUp
 
   return (
     <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DrawerContent className="bg-[#F8F9FB] rounded-t-[32px] px-6 pb-12 outline-none h-[90vh]">
+      <DrawerContent className="bg-[#F8F9FB] rounded-t-[32px] px-6 pb-4 outline-none h-[90vh] flex flex-col">
         <div className="mx-auto w-12 h-1.5 rounded-full bg-slate-200 mt-4 mb-6" />
         
         <div className="flex justify-between items-center mb-6">
@@ -147,7 +147,7 @@ export default function DocumentUploaderModal({ isOpen, onClose, clientUid, onUp
             </button>
         </div>
         
-        <div className="overflow-y-auto pr-2 space-y-8 pb-32">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-8 pb-4">
           
           {/* UPLOAD FILE */}
           <div 
@@ -271,7 +271,7 @@ export default function DocumentUploaderModal({ isOpen, onClose, clientUid, onUp
           </div>
         </div>
 
-        <div className="absolute bottom-0 left-0 w-full p-6 bg-white border-t border-slate-100 shrink-0 z-10">
+        <div className="shrink-0 -mx-6 px-6 pt-4 bg-white border-t border-slate-100">
           <Button 
             onClick={handleUpload}
             disabled={uploading || !file || !name || selectedTypeKeys.length === 0}

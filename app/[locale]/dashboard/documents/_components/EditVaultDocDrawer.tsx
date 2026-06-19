@@ -1,45 +1,35 @@
-//app/[locale]/dashboard/prevoyance/_components/EditSourceDocDrawer.tsx
+//app/[locale]/dashboard/documents/_components/EditVaultDocDrawer.tsx
 "use client";
 
-// Édition de la classification du document SCANNÉ (source) d'un plan :
-// titre affiché, type (taxonomie canonique + libre), tags. Écrit dans
-// plan.metadata.sourceDocTitle / sourceDocType / sourceDocTags. Présenté au
-// client juste après son scan (et à l'admin) depuis PlanDetailsView.
+// Édition du TITRE et des TAGS de n'importe quel document du coffre-fort.
+// La sauvegarde est routée selon l'origine du document (docItem.id / .source) :
+//  - vault        → clients/{uid}/documents/{id}
+//  - _source      → plan.metadata.sourceDocTitle / sourceDocTags
+//  - _doc_{i}     → plan.documents[i].name / tags
+//  - _legacy      → plan.metadata.legacyDocTitle / legacyDocTags
+//  - signing_*    → API authentifiée (override, collection token-keyed)
 
 import React, { useState } from "react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { X, Check, Loader2, Plus, Tag } from "lucide-react";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/index";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
-import { DOCUMENT_TYPES } from "@/lib/core/documentTypes";
 
-interface EditSourceDocDrawerProps {
+interface EditVaultDocDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  planId: string;
-  adminUid?: string;
-  initialTitle: string;
-  initialType: string;
-  initialTags: string[];
+  clientUid: string;
+  docItem: any;
 }
 
-export default function EditSourceDocDrawer({
-  isOpen,
-  onClose,
-  planId,
-  adminUid,
-  initialTitle,
-  initialType,
-  initialTags,
-}: EditSourceDocDrawerProps) {
-  const t = useTranslations("EditSourceDocDrawer");
+export default function EditVaultDocDrawer({ isOpen, onClose, clientUid, docItem }: EditVaultDocDrawerProps) {
+  const t = useTranslations("ClientDocuments");
 
-  const [title, setTitle] = useState(initialTitle);
-  const [type, setType] = useState(initialType);
-  const [tags, setTags] = useState<string[]>(initialTags || []);
+  const [title, setTitle] = useState<string>(docItem?.name || "");
+  const [tags, setTags] = useState<string[]>(Array.isArray(docItem?.tags) ? docItem.tags : []);
   const [newTag, setNewTag] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -50,22 +40,60 @@ export default function EditSourceDocDrawer({
   };
   const removeTag = (tag: string) => setTags(tags.filter((x) => x !== tag));
 
+  // Persiste selon l'origine du document.
+  const persist = async (id: string, name: string, finalTags: string[]) => {
+    if (docItem.source === "vault" && docItem.vaultDocId) {
+      await updateDoc(doc(db, "clients", clientUid, "documents", docItem.vaultDocId), { name, tags: finalTags });
+      return;
+    }
+    if (id.startsWith("signing_")) {
+      const jwt = await auth.currentUser?.getIdToken();
+      const res = await fetch("/api/client/signed-documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+        body: JSON.stringify({ docId: docItem.signingDocId || id.replace(/^signing_/, ""), title: name, tags: finalTags }),
+      });
+      if (!res.ok) throw new Error("signing update failed");
+      return;
+    }
+    if (docItem.planId && id.endsWith("_source")) {
+      await updateDoc(doc(db, "clients", clientUid, "plans", docItem.planId), {
+        "metadata.sourceDocTitle": name,
+        "metadata.sourceDocTags": finalTags,
+      });
+      return;
+    }
+    if (docItem.planId && id.includes("_doc_")) {
+      const idx = parseInt(id.split("_doc_")[1], 10);
+      const planRef = doc(db, "clients", clientUid, "plans", docItem.planId);
+      const snap = await getDoc(planRef);
+      const arr = [...(((snap.data() as any)?.documents) || [])];
+      if (arr[idx]) {
+        arr[idx] = { ...arr[idx], name, tags: finalTags };
+        await updateDoc(planRef, { documents: arr });
+      }
+      return;
+    }
+    if (docItem.planId && id.endsWith("_legacy")) {
+      await updateDoc(doc(db, "clients", clientUid, "plans", docItem.planId), {
+        "metadata.legacyDocTitle": name,
+        "metadata.legacyDocTags": finalTags,
+      });
+      return;
+    }
+    throw new Error("not editable");
+  };
+
   const handleSave = async () => {
-    const targetUid = adminUid || auth.currentUser?.uid;
-    if (!targetUid || !planId) return;
+    if (!title.trim()) return;
     setSaving(true);
     try {
-      await updateDoc(doc(db, "clients", targetUid, "plans", planId), {
-        "metadata.sourceDocTitle": title.trim(),
-        "metadata.sourceDocType": (type || "").trim() || t("type_fallback"),
-        "metadata.sourceDocTags": tags,
-        "metadata.updatedAt": new Date(),
-      });
-      toast.success(t("toast_saved"));
+      await persist(docItem.id || "", title.trim(), tags);
+      toast.success(t("toast_doc_updated"));
       onClose();
     } catch (e) {
       console.error(e);
-      toast.error(t("toast_err"));
+      toast.error(t("toast_doc_update_err"));
     } finally {
       setSaving(false);
     }
@@ -75,9 +103,8 @@ export default function EditSourceDocDrawer({
     <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DrawerContent className="bg-[#F8F9FB] rounded-t-[32px] px-6 pb-4 outline-none h-[90vh] flex flex-col">
         <div className="mx-auto w-12 h-1.5 rounded-full bg-slate-200 mt-4 mb-6" />
-
         <div className="flex justify-between items-center mb-6">
-          <DrawerTitle className="text-2xl font-black text-slate-900">{t("title")}</DrawerTitle>
+          <DrawerTitle className="text-2xl font-black text-slate-900">{t("edit_title")}</DrawerTitle>
           <button onClick={onClose} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200">
             <X size={20} />
           </button>
@@ -86,38 +113,12 @@ export default function EditSourceDocDrawer({
         <div className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-6 pb-4">
           {/* TITRE */}
           <div className="space-y-2 bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm">
-            <label className="text-[11px] font-black uppercase text-slate-400 tracking-widest">{t("lbl_title")}</label>
+            <label className="text-[11px] font-black uppercase text-slate-400 tracking-widest">{t("lbl_doc_title")}</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={t("ph_title")}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-500"
-            />
-          </div>
-
-          {/* TYPE */}
-          <div className="space-y-3 bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm">
-            <label className="text-[11px] font-black uppercase text-slate-400 tracking-widest">{t("lbl_type")}</label>
-            <div className="flex flex-wrap gap-2">
-              {DOCUMENT_TYPES.map((dt) => (
-                <button
-                  key={dt}
-                  onClick={() => setType(dt)}
-                  className={`text-[11px] px-3 py-1.5 rounded-md font-bold transition-colors ${
-                    type === dt ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                  }`}
-                >
-                  {dt}
-                </button>
-              ))}
-            </div>
-            {/* Type personnalisé (si l'IA en a créé un hors taxonomie) */}
-            <input
-              type="text"
-              value={DOCUMENT_TYPES.includes(type as any) ? "" : type}
-              onChange={(e) => setType(e.target.value)}
-              placeholder={t("ph_custom_type")}
+              placeholder={t("ph_doc_title")}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-500"
             />
           </div>
