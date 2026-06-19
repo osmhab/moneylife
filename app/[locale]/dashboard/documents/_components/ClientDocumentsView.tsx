@@ -347,15 +347,15 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
             >
               
               {/* Checkbox, Icône & Titre */}
-              <div className="flex items-center gap-4 flex-1 min-w-0">
+              <div className="flex items-center gap-4 flex-1 min-w-0 w-full md:w-auto">
                 <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-300 text-transparent group-hover:border-blue-300'}`}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </div>
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${doc.isSigned ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
                   {doc.isSigned ? <FileCheck size={24} /> : <FileText size={24} />}
                 </div>
-                <div className="min-w-0">
-                  <h3 className="font-black text-slate-900 text-base line-clamp-2 break-words pr-4">{doc.name}</h3>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-black text-slate-900 text-base line-clamp-2 break-all pr-4">{doc.name}</h3>
                   <div className="flex items-center gap-2 mt-1 text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                     <span className="flex items-center gap-1">
                       {doc.planType?.includes('BANK') ? <Landmark size={12}/> : <ShieldCheck size={12}/>}
