@@ -67,4 +67,8 @@ CLASSIFICATION DU DOCUMENT (obligatoire) :
 - "suggestedTags" : tableau de 1 à 3 mots-clés courts en français qui aident à
   identifier le document d'un coup d'œil (ex. l'année "2026", "Important",
   le nom de la compagnie, "Fiscal"). Pas de phrase, juste des mots-clés.
+- "keywords" : tableau de mots-clés ISSUS DU CONTENU du document, pour une
+  recherche fine ultérieure : noms de personnes/sociétés, numéros de
+  contrat/police, dates, montants, produits/assurances, bénéficiaires,
+  institutions, références. 10 à 30 termes COURTS, sans phrases ni doublons.
 `.trim();

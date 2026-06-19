@@ -107,16 +107,30 @@ export default function DocumentUploaderModal({ isOpen, onClose, clientUid, onUp
       // Les clés SONT déjà les libellés canoniques (taxonomie partagée).
       const finalTypes = selectedTypeKeys;
 
-      const newDoc = { 
-        name, 
-        url: downloadURL, 
-        path: storagePath, 
+      // Extraction des mots-clés du contenu par l'IA (best-effort, non bloquant)
+      // pour la recherche fine — la saisie manuelle de l'admin est conservée.
+      let keywords: string[] = [];
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/documents/classify", { method: "POST", body: fd });
+        const json = await res.json();
+        if (res.ok && Array.isArray(json?.data?.keywords)) keywords = json.data.keywords;
+      } catch {
+        /* recherche par contenu indisponible : on n'empêche pas l'ajout */
+      }
+
+      const newDoc = {
+        name,
+        url: downloadURL,
+        path: storagePath,
         uploadedAt: new Date(),
         origin: finalOrigin,
         types: finalTypes,
         tags: tags,
-        isSigned: false, 
-        isFinalDoc: true 
+        keywords, // mots-clés du contenu (recherche)
+        isSigned: false,
+        isFinalDoc: true
       };
       
       onUploadSuccess(newDoc);

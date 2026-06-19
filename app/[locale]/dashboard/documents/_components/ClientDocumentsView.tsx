@@ -94,6 +94,7 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
             origin: plan.origin === "creditx" ? "CreditX" : "Upload",
             types: [docType],
             tags: docTags,
+            keywords: Array.isArray(plan.metadata?.sourceDocKeywords) ? plan.metadata.sourceDocKeywords : [],
             isSigned: false,
             isFinalDoc: false,
             planId: docSnap.id,
@@ -223,6 +224,7 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
         doc.origin,
         ...(doc.types || []),
         ...(doc.tags || []),
+        ...(doc.keywords || []), // mots-clés du contenu extraits par l'IA
       ].filter(Boolean).join(" "));
       const searchMatch = terms.every(term => haystack.includes(term));
 

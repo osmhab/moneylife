@@ -9,7 +9,7 @@ import { DOCUMENT_CLASSIFICATION_PROMPT } from "app/lib/core/documentTypes";
 
 // Clés de classification renvoyées par l'IA mais qui ne sont PAS des champs de
 // formulaire (on les stocke à part, pas dans clientMappedData / plan.data).
-const CLASSIFICATION_KEYS = ["documentType", "suggestedTags"];
+const CLASSIFICATION_KEYS = ["documentType", "suggestedTags", "keywords"];
 
 const TEXT_FIELDS = [
   "Enter_anneeCertificat", "Enter_prenom", "Enter_nom", "Enter_noAVS", 
@@ -41,7 +41,8 @@ function getGeminiJsonSchema() {
     fileUrl: { type: "STRING" },
     // Classification du document scanné (cf. DOCUMENT_CLASSIFICATION_PROMPT).
     documentType: { type: "STRING", description: "Type du document scanné" },
-    suggestedTags: { type: "ARRAY", items: { type: "STRING" }, description: "1-3 mots-clés courts" }
+    suggestedTags: { type: "ARRAY", items: { type: "STRING" }, description: "1-3 mots-clés courts" },
+    keywords: { type: "ARRAY", items: { type: "STRING" }, description: "10-30 mots-clés issus du contenu" }
   };
 
   // Ajout des champs textes
@@ -236,6 +237,9 @@ ${DOCUMENT_CLASSIFICATION_PROMPT}`;
     const suggestedTags = Array.isArray(geminiParsed.suggestedTags)
       ? geminiParsed.suggestedTags.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 3)
       : [];
+    const keywords = Array.isArray(geminiParsed.keywords)
+      ? geminiParsed.keywords.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 30)
+      : [];
 
     // 7. Persistance Firestore
     await jobRef.update({
@@ -244,6 +248,7 @@ ${DOCUMENT_CLASSIFICATION_PROMPT}`;
       institutionName: detectedInstitution,
       documentType,
       suggestedTags,
+      keywords,
       warnings,
       confidenceGlobal,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()

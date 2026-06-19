@@ -364,6 +364,7 @@ export function PrevoyanceDashboardView({ adminUid }: { adminUid?: string }) {
                   // Classification IA du document scanné (affichée/éditable dans le coffre)
                   sourceDocType: data.documentType || "Certificat LPP",
                   sourceDocTags: Array.isArray(data.suggestedTags) ? data.suggestedTags : [],
+                  sourceDocKeywords: Array.isArray(data.keywords) ? data.keywords : [],
                   sourceDocTitle: buildSourceDocTitle("LPP_BASE", data.institutionName),
                 }
               });

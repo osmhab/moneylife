@@ -51,9 +51,10 @@ export function AddInsurancePlanView({ onClose, adminUid }: { onClose: () => voi
   const [showInvest, setShowInvest] = useState(false);
   const [clientAge, setClientAge] = useState(35);
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
-  // Classification IA du document scanné (type + tags), persistée à la sauvegarde.
+  // Classification IA du document scanné (type + tags + mots-clés), persistée à la sauvegarde.
   const [scanDocType, setScanDocType] = useState<string | null>(null);
   const [scanDocTags, setScanDocTags] = useState<string[]>([]);
+  const [scanDocKeywords, setScanDocKeywords] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     typeContrat: "3a" as "3a" | "3b", 
@@ -224,6 +225,11 @@ export function AddInsurancePlanView({ onClose, adminUid }: { onClose: () => voi
             ? scannedData.suggestedTags.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 3)
             : []
         );
+        setScanDocKeywords(
+          Array.isArray(scannedData.keywords)
+            ? scannedData.keywords.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 30)
+            : []
+        );
 
         toast.success(t("toast_scan_success"), { id: toastId });
       } else {
@@ -270,6 +276,7 @@ export function AddInsurancePlanView({ onClose, adminUid }: { onClose: () => voi
           ...(uploadedFileUrl ? {
             sourceDocType: scanDocType || "Police 3e pilier",
             sourceDocTags: scanDocTags,
+            sourceDocKeywords: scanDocKeywords,
             sourceDocTitle: buildSourceDocTitle(
               formData.typeContrat === "3a" ? "PILIER_3A_POLICE" : "PILIER_3B",
               formData.compagnie

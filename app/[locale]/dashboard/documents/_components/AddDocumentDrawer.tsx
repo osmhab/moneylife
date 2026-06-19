@@ -41,6 +41,8 @@ export default function AddDocumentDrawer({ isOpen, onClose, clientUid }: AddDoc
   const [type, setType] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState("");
+  // Mots-clés du contenu extraits par l'IA — invisibles dans l'UI, utilisés pour la recherche.
+  const [keywords, setKeywords] = useState<string[]>([]);
 
   const reset = () => {
     setStep("select");
@@ -52,6 +54,7 @@ export default function AddDocumentDrawer({ isOpen, onClose, clientUid }: AddDoc
     setType("");
     setTags([]);
     setNewTag("");
+    setKeywords([]);
   };
 
   const handleClose = () => {
@@ -125,6 +128,7 @@ export default function AddDocumentDrawer({ isOpen, onClose, clientUid }: AddDoc
           setTitle(d.documentTitle || files[0].name.replace(/\.[^/.]+$/, ""));
           setType(d.documentType || "");
           setTags(Array.isArray(d.suggestedTags) ? d.suggestedTags : []);
+          setKeywords(Array.isArray(d.keywords) ? d.keywords : []);
         } else {
           setTitle(files[0].name.replace(/\.[^/.]+$/, ""));
         }
@@ -152,6 +156,7 @@ export default function AddDocumentDrawer({ isOpen, onClose, clientUid }: AddDoc
         path: uploaded.path,
         types: type.trim() ? [type.trim()] : [],
         tags,
+        keywords, // mots-clés du contenu (recherche)
         origin: "Client",
         source: "vault",
         isSigned: false,

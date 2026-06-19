@@ -24,8 +24,13 @@ export async function POST(req: NextRequest) {
 (assurance maladie, document fiscal, relevé bancaire, prévoyance, contrat, facture, etc.).
 RETOURNE STRICTEMENT UN JSON VALIDE avec EXACTEMENT ces champs :
 - "documentTitle" : titre COURT et clair en français qui identifie le document d'un coup d'œil.
-  Inclus l'émetteur/compagnie et l'année s'ils sont visibles. Max ~6 mots.
-  Ex. "Police assurance maladie - Assura", "Déclaration d'impôts 2024", "Relevé bancaire UBS 2025".
+  Inclus l'émetteur/compagnie et l'année s'ils sont visibles. Max ~7 mots.
+  ⚠️ DOCUMENTS PÉRIODIQUES / RÉCURRENTS (fiche de salaire, relevé bancaire, facture, décompte,
+  cotisation) : il peut y en avoir plusieurs (ex. 12 à 13 fiches de salaire par an). Tu DOIS
+  TOUJOURS inclure la PÉRIODE exacte du document dans le titre — le MOIS et l'ANNÉE s'ils sont
+  présents (et "13e mois" / "bonus" le cas échéant) — pour qu'on puisse distinguer les exemplaires.
+  Ex. "Fiche de salaire - Janvier 2026", "Fiche de salaire - 13e mois 2025",
+  "Relevé bancaire UBS - Mars 2025", "Déclaration d'impôts 2024", "Police assurance maladie - Assura".
 - "documentType" : (voir ci-dessous).
 - "suggestedTags" : (voir ci-dessous).
 
@@ -57,6 +62,9 @@ ${DOCUMENT_CLASSIFICATION_PROMPT}`;
         documentType: typeof data.documentType === "string" ? data.documentType.trim() : "",
         suggestedTags: Array.isArray(data.suggestedTags)
           ? data.suggestedTags.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 4)
+          : [],
+        keywords: Array.isArray(data.keywords)
+          ? data.keywords.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 30)
           : [],
       },
     });
