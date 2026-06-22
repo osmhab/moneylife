@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/firebase/admin";
 import { generateOtp, hashOtp, baseUrlFromRequest } from "@/lib/server/share";
 import { sendShareCodeEmail } from "lib/mail/creditx-mailer";
+import { sendSms } from "@/lib/server/twilio";
 
 export const runtime = "nodejs";
 
@@ -35,7 +36,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     },
   });
 
-  await sendShareCodeEmail({ to: d.recipientEmail, code, shareUrl: `${baseUrlFromRequest(req)}/fr/share/${id}` });
+  if (d.channel === "sms" && d.recipientPhone) {
+    await sendSms(d.recipientPhone, `CreditX : votre code de vérification est ${code} (valable 15 min). Ne le partagez pas.`);
+  } else {
+    await sendShareCodeEmail({ to: d.recipientEmail, code, shareUrl: `${baseUrlFromRequest(req)}/fr/share/${id}` });
+  }
 
   return NextResponse.json({ ok: true });
 }

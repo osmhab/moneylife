@@ -51,9 +51,11 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
   // État pour les documents sélectionnés
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
 
-  // Partage sécurisé (invitation e-mail + OTP)
+  // Partage sécurisé (invitation e-mail/SMS + OTP)
   const [isShareOpen, setIsShareOpen] = useState(false);
+  const [shareChannel, setShareChannel] = useState<"email" | "sms">("email");
   const [shareEmail, setShareEmail] = useState("");
+  const [sharePhone, setSharePhone] = useState("");
   const [shareSending, setShareSending] = useState(false);
   const [shareSent, setShareSent] = useState(false);
   const [shareError, setShareError] = useState("");
@@ -260,17 +262,27 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
   const closeShare = () => {
     setIsShareOpen(false);
     setShareEmail("");
+    setSharePhone("");
     setShareSent(false);
     setShareError("");
   };
 
-  // Partage sécurisé : le serveur envoie une invitation e-mail + code OTP.
+  // Partage sécurisé : le serveur envoie une invitation (e-mail OU SMS) + code OTP.
   // Le document n'est jamais joint ; accès via la page CreditX après code.
   const submitShare = async () => {
     const docsToShare = filteredDocuments.filter(d => selectedDocIds.includes(d.id));
-    const email = shareEmail.trim().toLowerCase();
     if (docsToShare.length === 0) return;
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setShareError(t("share_email_invalid")); return; }
+
+    const payload: any = { channel: shareChannel, documents: docsToShare.map(d => ({ name: d.name, url: d.url, path: d.path })) };
+    if (shareChannel === "email") {
+      const email = shareEmail.trim().toLowerCase();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setShareError(t("share_email_invalid")); return; }
+      payload.recipientEmail = email;
+    } else {
+      const phone = sharePhone.trim();
+      if (phone.replace(/[^\d]/g, "").length < 8) { setShareError(t("share_phone_invalid")); return; }
+      payload.recipientPhone = phone;
+    }
 
     setShareSending(true);
     setShareError("");
@@ -281,10 +293,7 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
       const res = await fetch("/api/share/create", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
-        body: JSON.stringify({
-          recipientEmail: email,
-          documents: docsToShare.map(d => ({ name: d.name, url: d.url, path: d.path })),
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -530,15 +539,44 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
                   {t("share_count", { count: selectedDocIds.length })} · {t("share_secure_desc")}
                 </p>
 
-                <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mt-6 mb-2">{t("share_email_label")}</label>
-                <input
-                  type="email" inputMode="email" autoFocus
-                  value={shareEmail}
-                  onChange={(e) => setShareEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && submitShare()}
-                  placeholder={t("share_email_placeholder")}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
-                />
+                {/* Sélecteur de canal */}
+                <div className="flex gap-2 mt-6 p-1 bg-slate-100 rounded-2xl">
+                  {(["email", "sms"] as const).map((ch) => (
+                    <button
+                      key={ch}
+                      onClick={() => { setShareChannel(ch); setShareError(""); }}
+                      className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-colors ${shareChannel === ch ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                    >
+                      {ch === "email" ? t("share_channel_email") : t("share_channel_sms")}
+                    </button>
+                  ))}
+                </div>
+
+                {shareChannel === "email" ? (
+                  <>
+                    <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mt-5 mb-2">{t("share_email_label")}</label>
+                    <input
+                      type="email" inputMode="email" autoFocus
+                      value={shareEmail}
+                      onChange={(e) => setShareEmail(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && submitShare()}
+                      placeholder={t("share_email_placeholder")}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mt-5 mb-2">{t("share_phone_label")}</label>
+                    <input
+                      type="tel" inputMode="tel" autoFocus
+                      value={sharePhone}
+                      onChange={(e) => setSharePhone(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && submitShare()}
+                      placeholder={t("share_phone_placeholder")}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                    />
+                  </>
+                )}
                 {shareError && <p className="text-sm font-bold text-rose-500 mt-3">{shareError}</p>}
 
                 <button
@@ -555,7 +593,7 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
                   <FileCheck size={28} />
                 </div>
                 <h3 className="text-xl font-black text-slate-900">{t("share_sent_title")}</h3>
-                <p className="text-sm font-medium text-slate-500 mt-2 leading-relaxed">{t("share_sent_desc", { email: shareEmail })}</p>
+                <p className="text-sm font-medium text-slate-500 mt-2 leading-relaxed">{t("share_sent_desc", { email: shareChannel === "email" ? shareEmail : sharePhone })}</p>
                 <button onClick={() => { closeShare(); setSelectedDocIds([]); }} className="mt-6 w-full py-3.5 rounded-2xl bg-slate-900 hover:bg-black text-white font-black text-sm uppercase tracking-widest transition-colors">
                   {t("share_done")}
                 </button>

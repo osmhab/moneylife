@@ -171,7 +171,12 @@
     "share_sent_title": "Invitation envoyée",
     "share_sent_desc": "{email} recevra un e-mail pour accéder aux documents, sécurisé par un code.",
     "share_done": "Terminé",
-    "share_error": "Erreur lors de l'envoi. Réessayez."
+    "share_error": "Erreur lors de l'envoi. Réessayez.",
+    "share_channel_email": "E-mail",
+    "share_channel_sms": "SMS",
+    "share_phone_label": "Numéro du destinataire",
+    "share_phone_placeholder": "+41 79 123 45 67",
+    "share_phone_invalid": "Numéro invalide"
   },
   "DocumentsPage": {
     "secure_space": "Espace Sécurisé",

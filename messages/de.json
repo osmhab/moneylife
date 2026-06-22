@@ -171,7 +171,12 @@
     "share_sent_title": "Einladung gesendet",
     "share_sent_desc": "{email} erhält eine E-Mail für den Zugriff auf die Dokumente, gesichert per Code.",
     "share_done": "Fertig",
-    "share_error": "Fehler beim Senden. Bitte erneut versuchen."
+    "share_error": "Fehler beim Senden. Bitte erneut versuchen.",
+    "share_channel_email": "E-Mail",
+    "share_channel_sms": "SMS",
+    "share_phone_label": "Nummer des Empfängers",
+    "share_phone_placeholder": "+41 79 123 45 67",
+    "share_phone_invalid": "Ungültige Nummer"
   },
   "DocumentsPage": {
     "secure_space": "Sicherer Bereich",

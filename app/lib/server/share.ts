@@ -58,3 +58,19 @@ export function maskEmail(email: string): string {
   const tail = local.length > 1 ? local.slice(-1) : "";
   return `${head}${"•".repeat(Math.max(1, local.length - 2))}${tail}@${domain}`;
 }
+
+/** Normalise un numéro vers le format E.164 (+41…). null si invalide. Défaut Suisse. */
+export function normalizePhone(raw: string): string | null {
+  let s = String(raw).replace(/[\s\-().]/g, "");
+  if (s.startsWith("00")) s = "+" + s.slice(2);
+  else if (s.startsWith("0")) s = "+41" + s.slice(1); // numéro local suisse
+  else if (!s.startsWith("+")) s = "+" + s;
+  return /^\+[1-9]\d{6,14}$/.test(s) ? s : null;
+}
+
+/** Masque un numéro pour l'affichage : +41 •• •• 67. */
+export function maskPhone(p: string): string {
+  const s = String(p);
+  if (s.length < 5) return "•••";
+  return `${s.slice(0, 3)}${"•".repeat(Math.max(2, s.length - 5))}${s.slice(-2)}`;
+}
