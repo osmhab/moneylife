@@ -11,11 +11,13 @@ import { Loader2, ShieldCheck, FileText, ExternalLink, Lock } from "lucide-react
 interface Props { shareId: string }
 type Phase = "loading" | "intro" | "code" | "unlocked" | "dead";
 
-interface Info { senderName: string; count: number; recipientHint: string; expired: boolean }
+interface Info { senderName: string; count: number; recipientHint: string; expired: boolean; channel?: "email" | "sms" }
 interface Doc { name: string; idx: number }
 
 export default function ShareClient({ shareId }: Props) {
   const t = useTranslations("SharePage");
+  // Mot du canal (SMS / e-mail) pour adapter les messages à l'envoi réel.
+  const method = (info?: Info | null) => t(info?.channel === "sms" ? "method_sms" : "method_email");
   const [phase, setPhase] = useState<Phase>("loading");
   const [info, setInfo] = useState<Info | null>(null);
   const [busy, setBusy] = useState(false);
@@ -104,7 +106,7 @@ export default function ShareClient({ shareId }: Props) {
               <h1 className="text-xl font-black text-slate-900 leading-snug">
                 {t("wants_to_share", { name: info.senderName, count: info.count })}
               </h1>
-              <p className="text-sm font-medium text-slate-500 mt-3 leading-relaxed">{t("intro")}</p>
+              <p className="text-sm font-medium text-slate-500 mt-3 leading-relaxed">{t("intro", { method: method(info) })}</p>
               <button
                 onClick={sendCode} disabled={busy}
                 className="mt-7 w-full py-4 rounded-2xl bg-slate-900 hover:bg-black text-white font-black text-sm uppercase tracking-widest transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
@@ -119,7 +121,7 @@ export default function ShareClient({ shareId }: Props) {
           {phase === "code" && info && (
             <div className="text-center">
               <h1 className="text-lg font-black text-slate-900">{t("enter_code")}</h1>
-              <p className="text-sm font-medium text-slate-500 mt-2">{t("code_sent", { hint: info.recipientHint })}</p>
+              <p className="text-sm font-medium text-slate-500 mt-2">{t("code_sent", { hint: info.recipientHint, method: method(info) })}</p>
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
