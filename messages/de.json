@@ -159,7 +159,19 @@
     "btn_save": "Speichern",
     "btn_saving": "Speichern…",
     "toast_doc_updated": "Dokument aktualisiert",
-    "toast_doc_update_err": "Fehler bei der Aktualisierung"
+    "toast_doc_update_err": "Fehler bei der Aktualisierung",
+    "share_secure_title": "Sichere Freigabe",
+    "share_secure_desc": "Der Empfänger erhält eine E-Mail und anschliessend einen 6-stelligen Code, um die Dokumente zu öffnen. Das Dokument wird nie an die Nachricht angehängt.",
+    "share_count": "{count} Dokument(e)",
+    "share_email_label": "E-Mail des Empfängers",
+    "share_email_placeholder": "name@beispiel.ch",
+    "share_email_invalid": "Ungültige E-Mail",
+    "share_send": "Einladung senden",
+    "share_sending": "Senden…",
+    "share_sent_title": "Einladung gesendet",
+    "share_sent_desc": "{email} erhält eine E-Mail für den Zugriff auf die Dokumente, gesichert per Code.",
+    "share_done": "Fertig",
+    "share_error": "Fehler beim Senden. Bitte erneut versuchen."
   },
   "DocumentsPage": {
     "secure_space": "Sicherer Bereich",

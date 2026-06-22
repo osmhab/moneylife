@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { db, storage } from "@/lib/firebase/index"; // 👈 Modifié pour correspondre à ton alias si besoin (app/lib -> @/lib)
+import { db, storage, auth } from "@/lib/firebase/index"; // 👈 Modifié pour correspondre à ton alias si besoin (app/lib -> @/lib)
 import { buildSourceDocTitle } from "@/lib/core/documentTypes";
 import { collection, onSnapshot, doc, deleteDoc } from "firebase/firestore";
 import { ref, deleteObject } from "firebase/storage";
@@ -50,6 +50,13 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
 
   // État pour les documents sélectionnés
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
+
+  // Partage sécurisé (invitation e-mail + OTP)
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [shareEmail, setShareEmail] = useState("");
+  const [shareSending, setShareSending] = useState(false);
+  const [shareSent, setShareSent] = useState(false);
+  const [shareError, setShareError] = useState("");
 
   // 1. Récupération des documents de tous les plans
   useEffect(() => {
@@ -250,26 +257,45 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
     return `${baseUrl}/api/document?url=${encodeURIComponent(docUrl || "")}&name=${encodeURIComponent(docName)}${pathPart}`;
   };
 
-  const handleShare = async () => {
+  const closeShare = () => {
+    setIsShareOpen(false);
+    setShareEmail("");
+    setShareSent(false);
+    setShareError("");
+  };
+
+  // Partage sécurisé : le serveur envoie une invitation e-mail + code OTP.
+  // Le document n'est jamais joint ; accès via la page CreditX après code.
+  const submitShare = async () => {
     const docsToShare = filteredDocuments.filter(d => selectedDocIds.includes(d.id));
+    const email = shareEmail.trim().toLowerCase();
     if (docsToShare.length === 0) return;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setShareError(t("share_email_invalid")); return; }
 
-    const text = docsToShare.map(d => `- ${d.name}\n  ${t("share_link")} ${getCreditXLink(d.url, d.name, d.path)}`).join("\n\n");
-    const shareContent = {
-      title: t("share_title"),
-      text: t("share_intro") + text,
-    };
-
-    if (navigator.share) {
-      try {
-        await navigator.share(shareContent);
-      } catch (err) {
-        console.log("Partage annulé ou échoué", err);
+    setShareSending(true);
+    setShareError("");
+    try {
+      const user = auth.currentUser;
+      if (!user) { setShareError(t("share_error")); return; }
+      const jwt = await user.getIdToken();
+      const res = await fetch("/api/share/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+        body: JSON.stringify({
+          recipientEmail: email,
+          documents: docsToShare.map(d => ({ name: d.name, url: d.url, path: d.path })),
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setShareError(j.error || t("share_error"));
+        return;
       }
-    } else {
-      // Fallback si l'API native n'est pas supportée
-      await navigator.clipboard.writeText(shareContent.text);
-      toast.success(t("toast_copy_success"));
+      setShareSent(true);
+    } catch {
+      setShareError(t("share_error"));
+    } finally {
+      setShareSending(false);
     }
   };
 
@@ -480,13 +506,62 @@ export default function ClientDocumentsView({ clientUid, isAdmin = false }: Clie
           
           <div className="w-px h-6 bg-slate-700"></div>
 
-          <button onClick={handleShare} className="flex items-center gap-2 bg-blue-500 hover:bg-blue-400 px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-500/30">
+          <button onClick={() => setIsShareOpen(true)} className="flex items-center gap-2 bg-blue-500 hover:bg-blue-400 px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest transition-colors shadow-lg shadow-blue-500/30">
             <Share2 size={16} /> {t("btn_share")}
           </button>
-          
+
           <button onClick={() => setSelectedDocIds([])} className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white">
             <X size={18} />
           </button>
+        </div>
+      )}
+
+      {/* Modale de partage sécurisé */}
+      {isShareOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-5 bg-black/40 backdrop-blur-sm" onClick={closeShare}>
+          <div className="bg-white rounded-[28px] shadow-2xl border border-slate-100 w-full max-w-md p-7" onClick={(e) => e.stopPropagation()}>
+            {!shareSent ? (
+              <>
+                <div className="flex items-start justify-between mb-1">
+                  <h3 className="text-xl font-black text-slate-900">{t("share_secure_title")}</h3>
+                  <button onClick={closeShare} className="p-2 -mr-2 -mt-1 text-slate-400 hover:text-slate-700"><X size={20} /></button>
+                </div>
+                <p className="text-sm font-medium text-slate-500 leading-relaxed">
+                  {t("share_count", { count: selectedDocIds.length })} · {t("share_secure_desc")}
+                </p>
+
+                <label className="block text-[11px] font-black uppercase tracking-widest text-slate-400 mt-6 mb-2">{t("share_email_label")}</label>
+                <input
+                  type="email" inputMode="email" autoFocus
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitShare()}
+                  placeholder={t("share_email_placeholder")}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                />
+                {shareError && <p className="text-sm font-bold text-rose-500 mt-3">{shareError}</p>}
+
+                <button
+                  onClick={submitShare}
+                  disabled={shareSending}
+                  className="mt-6 w-full py-4 rounded-2xl bg-slate-900 hover:bg-black text-white font-black text-sm uppercase tracking-widest transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Share2 size={16} /> {shareSending ? t("share_sending") : t("share_send")}
+                </button>
+              </>
+            ) : (
+              <div className="text-center py-2">
+                <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-4 text-emerald-600">
+                  <FileCheck size={28} />
+                </div>
+                <h3 className="text-xl font-black text-slate-900">{t("share_sent_title")}</h3>
+                <p className="text-sm font-medium text-slate-500 mt-2 leading-relaxed">{t("share_sent_desc", { email: shareEmail })}</p>
+                <button onClick={() => { closeShare(); setSelectedDocIds([]); }} className="mt-6 w-full py-3.5 rounded-2xl bg-slate-900 hover:bg-black text-white font-black text-sm uppercase tracking-widest transition-colors">
+                  {t("share_done")}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

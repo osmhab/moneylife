@@ -159,7 +159,19 @@
     "btn_save": "Enregistrer",
     "btn_saving": "Enregistrement…",
     "toast_doc_updated": "Document mis à jour",
-    "toast_doc_update_err": "Erreur lors de la mise à jour"
+    "toast_doc_update_err": "Erreur lors de la mise à jour",
+    "share_secure_title": "Partage sécurisé",
+    "share_secure_desc": "Le destinataire recevra un e-mail puis un code à 6 chiffres pour ouvrir les documents. Le document n'est jamais joint au message.",
+    "share_count": "{count} document(s)",
+    "share_email_label": "E-mail du destinataire",
+    "share_email_placeholder": "nom@exemple.ch",
+    "share_email_invalid": "E-mail invalide",
+    "share_send": "Envoyer l'invitation",
+    "share_sending": "Envoi…",
+    "share_sent_title": "Invitation envoyée",
+    "share_sent_desc": "{email} recevra un e-mail pour accéder aux documents, sécurisé par un code.",
+    "share_done": "Terminé",
+    "share_error": "Erreur lors de l'envoi. Réessayez."
   },
   "DocumentsPage": {
     "secure_space": "Espace Sécurisé",
