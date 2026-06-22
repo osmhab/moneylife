@@ -1554,5 +1554,20 @@
     "toast_saved": "Dokument zum Tresor hinzugefügt",
     "toast_err_upload": "Fehler beim Hochladen des Dokuments",
     "toast_err_save": "Fehler beim Speichern"
+  },
+  "SharePage": {
+    "secure_space": "Sicherer Bereich",
+    "wants_to_share": "{name} möchte {count} Dokument(e) mit Ihnen teilen",
+    "intro": "Zur Sicherheit wird Ihnen ein Bestätigungscode per E-Mail zugesendet.",
+    "get_code": "Code erhalten",
+    "enter_code": "Code eingeben",
+    "code_sent": "Ein Code wurde an {hint} gesendet. Geben Sie ihn unten ein (15 Min. gültig).",
+    "verify": "Bestätigen",
+    "resend": "Code erneut senden",
+    "unlocked_title": "Ihre Dokumente",
+    "expired": "Dieser Freigabelink ist abgelaufen.",
+    "not_found": "Ungültiger Freigabelink.",
+    "error_generic": "Ein Fehler ist aufgetreten. Bitte erneut versuchen.",
+    "footer": "Sichere CreditX-Freigabe. Geben Sie Ihren Code niemals an Dritte weiter."
   }
 }

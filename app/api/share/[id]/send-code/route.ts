@@ -1,0 +1,42 @@
+// app/api/share/[id]/send-code/route.ts
+//
+// Génère et envoie un code OTP (6 chiffres, 15 min) au destinataire du partage.
+// Public, mais avec un cooldown anti-spam.
+
+import { NextResponse } from "next/server";
+import { db } from "@/lib/firebase/admin";
+import { generateOtp, hashOtp } from "@/lib/server/share";
+import { sendShareCodeEmail } from "lib/mail/creditx-mailer";
+
+export const runtime = "nodejs";
+
+export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const ref = db.collection("shares").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+
+  const d = snap.data()!;
+  if (Date.now() > (d.expiresAt || 0)) return NextResponse.json({ error: "EXPIRED" }, { status: 410 });
+
+  // Cooldown : 1 envoi / 30 s.
+  const lastSentAt = d.otp?.lastSentAt || 0;
+  if (Date.now() - lastSentAt < 30_000) {
+    return NextResponse.json({ error: "Veuillez patienter avant de redemander un code." }, { status: 429 });
+  }
+
+  const code = generateOtp();
+  await ref.update({
+    otp: {
+      hash: hashOtp(id, code),
+      expiresAt: Date.now() + 15 * 60 * 1000,
+      attempts: 0,
+      lastSentAt: Date.now(),
+    },
+  });
+
+  const base = (process.env.NEXT_PUBLIC_APP_URL || "https://creditx.ch").replace(/\/$/, "");
+  await sendShareCodeEmail({ to: d.recipientEmail, code, shareUrl: `${base}/fr/share/${id}` });
+
+  return NextResponse.json({ ok: true });
+}

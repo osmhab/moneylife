@@ -1554,5 +1554,20 @@
     "toast_saved": "Document ajouté au coffre-fort",
     "toast_err_upload": "Erreur lors de l'envoi du document",
     "toast_err_save": "Erreur lors de l'enregistrement"
+  },
+  "SharePage": {
+    "secure_space": "Espace sécurisé",
+    "wants_to_share": "{name} souhaite partager {count} document(s) avec vous",
+    "intro": "Pour garantir la confidentialité, un code de vérification va vous être envoyé par e-mail.",
+    "get_code": "Recevoir mon code",
+    "enter_code": "Entrez votre code",
+    "code_sent": "Un code a été envoyé à {hint}. Saisissez-le ci-dessous (valable 15 min).",
+    "verify": "Vérifier",
+    "resend": "Renvoyer le code",
+    "unlocked_title": "Vos documents",
+    "expired": "Ce lien de partage a expiré.",
+    "not_found": "Lien de partage invalide.",
+    "error_generic": "Une erreur est survenue. Réessayez.",
+    "footer": "Partage sécurisé CreditX. Ne transmettez jamais votre code à un tiers."
   }
 }
