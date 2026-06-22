@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "ignoreDeprecations": "5.0",
+    "baseUrl": ".",
     "target": "ES2022",
     "lib": [
       "dom",
@@ -9,7 +11,6 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "baseUrl": ".",
     "paths": {
       "@/*": [
         "app/*"
@@ -19,13 +20,11 @@
       ],
       "@/components/*": [
         "components/*"
-      ], // ✅ déjà présent
+      ],
       "@/lib/*": [
         "app/lib/*"
       ]
     },
-    /* types locaux (optionnel) */
-// "typeRoots": ["./app/types"],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
@@ -51,7 +50,8 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-  "node_modules",
-  "app/lib/legacy/functions/**"
-]
+    "node_modules",
+    "app/lib/legacy/functions/**",
+    "engine"
+  ]
 }
