@@ -35,6 +35,21 @@ export function storagePathFromUrl(raw: string): string | null {
   return null;
 }
 
+/**
+ * Base URL publique pour les liens des e-mails : on suit le domaine de la
+ * requête entrante (ex. creditx.ch via le tunnel) — robuste sans dépendre d'une
+ * variable d'env qui pourrait valoir localhost. Repli sur NEXT_PUBLIC_APP_URL.
+ */
+export function baseUrlFromRequest(req: Request): string {
+  const h = (k: string) => req.headers.get(k) || "";
+  const host = h("x-forwarded-host") || h("host");
+  const proto = h("x-forwarded-proto") || "https";
+  if (host && !host.startsWith("localhost") && !host.startsWith("127.0.0.1")) {
+    return `${proto}://${host}`;
+  }
+  return (process.env.NEXT_PUBLIC_APP_URL || "https://creditx.ch").replace(/\/$/, "");
+}
+
 /** Masque un e-mail pour l'affichage : j***n@gmail.com. */
 export function maskEmail(email: string): string {
   const [local, domain] = String(email).split("@");

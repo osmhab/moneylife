@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase/admin";
 import { requireAuth } from "@/lib/server/requireAuth";
-import { storagePathFromUrl } from "@/lib/server/share";
+import { storagePathFromUrl, baseUrlFromRequest } from "@/lib/server/share";
 import { sendShareInvitationEmail } from "lib/mail/creditx-mailer";
 
 export const runtime = "nodejs";
@@ -67,8 +67,7 @@ export async function POST(req: NextRequest) {
       sessionExpiresAt: null,
     });
 
-    const base = (process.env.NEXT_PUBLIC_APP_URL || "https://creditx.ch").replace(/\/$/, "");
-    const shareUrl = `${base}/fr/share/${ref.id}`;
+    const shareUrl = `${baseUrlFromRequest(req)}/fr/share/${ref.id}`;
     await sendShareInvitationEmail({ to: email, senderName, count: docs.length, shareUrl });
 
     return NextResponse.json({ ok: true });

@@ -5,12 +5,12 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/firebase/admin";
-import { generateOtp, hashOtp } from "@/lib/server/share";
+import { generateOtp, hashOtp, baseUrlFromRequest } from "@/lib/server/share";
 import { sendShareCodeEmail } from "lib/mail/creditx-mailer";
 
 export const runtime = "nodejs";
 
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const ref = db.collection("shares").doc(id);
   const snap = await ref.get();
@@ -35,8 +35,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     },
   });
 
-  const base = (process.env.NEXT_PUBLIC_APP_URL || "https://creditx.ch").replace(/\/$/, "");
-  await sendShareCodeEmail({ to: d.recipientEmail, code, shareUrl: `${base}/fr/share/${id}` });
+  await sendShareCodeEmail({ to: d.recipientEmail, code, shareUrl: `${baseUrlFromRequest(req)}/fr/share/${id}` });
 
   return NextResponse.json({ ok: true });
 }
