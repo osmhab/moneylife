@@ -25,7 +25,7 @@ function baseSituation(overrides: Partial<SituationAnalysis> = {}): SituationAna
     invaliditeMaladie: { ...card },
     invaliditeAccident: { ...card },
     deces: { ...card },
-    fiscal: { investi3aAnnuel: 0, plafond3a: 7258, pourcentUtilise: 0, gainFiscalAnnuel: 0 },
+    fiscal: { investi3aAnnuel: 0, plafond3a: 7258, pourcentUtilise: 0, gainFiscalAnnuel: 0, tauxMarginal: 0.25 },
     ...overrides,
   };
 }
@@ -129,7 +129,7 @@ describe("computeNew3aOffer", () => {
   it("répartit sur le 3a jusqu'au plafond restant puis le 3b", () => {
     const s = baseSituation({
       capManquantRetraite: 100000,
-      fiscal: { investi3aAnnuel: 7200, plafond3a: 7258, pourcentUtilise: 99, gainFiscalAnnuel: 0 },
+      fiscal: { investi3aAnnuel: 7200, plafond3a: 7258, pourcentUtilise: 99, gainFiscalAnnuel: 0, tauxMarginal: 0.25 },
     });
     const offre = computeNew3aOffer({ wizard: wizard(), situation: s, clientAge: 40, clientGender: "M", benchmarks: [benchmark("A")] });
     // plafond restant = 58/an < 50/mois → tout en 3b, pas de gain fiscal

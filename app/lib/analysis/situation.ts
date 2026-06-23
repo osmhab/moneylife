@@ -53,6 +53,7 @@ export interface SituationAnalysis {
     plafond3a: number;
     pourcentUtilise: number;
     gainFiscalAnnuel: number;
+    tauxMarginal: number;
   };
 }
 
@@ -234,6 +235,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
       plafond3a: PLAFOND_3A_ANNUEL,
       pourcentUtilise: Math.round((montantDeductible / PLAFOND_3A_ANNUEL) * 100),
       gainFiscalAnnuel: montantDeductible * tauxFisc,
+      tauxMarginal: tauxFisc,
     },
   };
 }
