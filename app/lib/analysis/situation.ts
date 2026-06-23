@@ -30,11 +30,22 @@ export interface SituationInput {
   isSmoothingIG?: boolean;
 }
 
+/** Une couche de prestation composant la couverture (AVS, LPP, LAA, 3e pilier…). */
+export interface BenefitLayer {
+  /** Clé stable pour le mapping couleur côté client. */
+  key: "avs" | "lpp" | "laa" | "3a";
+  label: string;
+  /** Même unité que besoin/couverture de la carte (mensuel pour rentes, capital pour décès). */
+  amount: number;
+}
+
 export interface RiskCard {
   besoin: number;
   couverture: number;
   lacune: number;
   score: number;
+  /** Décomposition de la couverture par pilier (somme ≈ couverture). Pour le graphique en couches. */
+  layers: BenefitLayer[];
 }
 
 export interface SituationAnalysis {
@@ -73,7 +84,9 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
 
   // ---- RETRAITE ----
   const cibleRetAnnuelle = salaireAnnuel * 0.8;
-  const prestationsRetAnnuelle = getVal(retProj, "AVS/AI") + getVal(retProj, "LPP");
+  const retAvsAnnuelle = getVal(retProj, "AVS/AI");
+  const retLppAnnuelle = getVal(retProj, "LPP");
+  const prestationsRetAnnuelle = retAvsAnnuelle + retLppAnnuelle;
 
   const listePlans3a = plans.filter((p: any) => {
     const type = (p.type || "").toLowerCase();
@@ -109,7 +122,12 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   // ---- INVALIDITÉ (helper commun maladie/accident) ----
   const cibleIGMensuelle = (salaireAnnuel * 0.9) / 12;
 
-  function analyseIG(proj: any): { lacune: number; score: number } {
+  function analyseIG(proj: any): {
+    lacune: number;
+    score: number;
+    couverture: number;
+    layers: BenefitLayer[];
+  } {
     const annees = proj?.headerYears || [];
     let reserveSurplus = 0;
     let nbAnneesLacune = 0;
@@ -126,24 +144,44 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
 
     const bonusLissage = isSmoothingIG && nbAnneesLacune > 0 ? reserveSurplus / nbAnneesLacune / 12 : 0;
 
-    const periodes: { lacune: number }[] = [];
+    // Période CONTRAIGNANTE = couverture mensuelle minimale (qu'il y ait lacune ou non).
+    // C'est elle qui définit la lacune affichée ET dont on expose la décomposition par pilier.
+    type Periode = { apres: number; avs: number; lpp: number; laa: number; a3: number };
+    let binding: Periode | null = null;
     annees.forEach((_: number, idx: number) => {
       if (idx < 2) return;
-      const rentesM =
-        (getVal(proj, "AVS/AI", idx) + getVal(proj, "LPP", idx) + getVal(proj, "LAA", idx) + rente3a) / 12;
+      const avs = getVal(proj, "AVS/AI", idx) / 12;
+      const lpp = getVal(proj, "LPP", idx) / 12;
+      const laa = getVal(proj, "LAA", idx) / 12;
+      const a3 = rente3a / 12;
+      const rentesM = avs + lpp + laa + a3;
       const apres = isSmoothingIG
         ? rentesM > cibleIGMensuelle
           ? cibleIGMensuelle
           : rentesM + bonusLissage
         : rentesM;
-      const lacM = Math.max(0, cibleIGMensuelle - apres);
-      if (lacM > 10) periodes.push({ lacune: lacM });
+      if (!binding || apres < binding.apres) binding = { apres, avs, lpp, laa, a3 };
     });
 
-    const maxLacune = periodes.length > 0 ? Math.max(...periodes.map((p) => p.lacune)) : 0;
+    const b = binding as Periode | null;
+    const maxLacune = b ? Math.max(0, cibleIGMensuelle - b.apres) : 0;
     const revenuTotal = cibleIGMensuelle - maxLacune;
     const score = Math.round((revenuTotal / (salaireAnnuel / 12)) * 100);
-    return { lacune: maxLacune, score };
+
+    const layers: BenefitLayer[] = b
+      ? ([
+          { key: "avs", label: "AVS / AI", amount: b.avs },
+          { key: "lpp", label: "LPP (2e pilier)", amount: b.lpp },
+          { key: "laa", label: "LAA (accident)", amount: b.laa },
+          { key: "3a", label: "3e pilier", amount: b.a3 },
+        ] as BenefitLayer[]).filter((l) => l.amount > 0)
+      : [];
+
+    // Couverture RÉELLE = ce que paient les piliers à la pire période (= somme des
+    // couches). Non plafonnée à la cible → cohérente avec le graphique en couches.
+    const couverture = b ? b.avs + b.lpp + b.laa + b.a3 : 0;
+
+    return { lacune: maxLacune, score, couverture, layers };
   }
 
   const igMaladie = analyseIG(invM);
@@ -165,8 +203,8 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   const besoinConjoint = estMarie ? salaireDeces * 3 : 0;
   const besoinDecesTotal = besoinConjoint + besoinEnfants || 20000;
 
-  const capExistants =
-    getVal(decM, "Prestations en capital / indemnité unique") + garantiesSaisies3a.capitalDeces;
+  const capDecesLppLaa = getVal(decM, "Prestations en capital / indemnité unique");
+  const capExistants = capDecesLppLaa + garantiesSaisies3a.capitalDeces;
   const lacuneDeces = Math.max(0, besoinDecesTotal - capExistants);
   const scoreDecLocal = besoinDecesTotal > 0 ? Math.round((capExistants / besoinDecesTotal) * 100) : 100;
   const scoreDecFinal = lacuneDeces > 50000 ? Math.min(scoreDecLocal, 65) : scoreDecLocal;
@@ -211,24 +249,35 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
       couverture: renteTotaleAffichee,
       lacune: lacuneRetraiteMensuelle,
       score: scoreRetraiteLocal,
+      layers: ([
+        { key: "avs", label: "AVS / AI", amount: retAvsAnnuelle / 12 },
+        { key: "lpp", label: "LPP (2e pilier)", amount: retLppAnnuelle / 12 },
+        { key: "3a", label: "3e pilier", amount: renteIssueDu3a },
+      ] as BenefitLayer[]).filter((l) => l.amount > 0),
     },
     invaliditeMaladie: {
       besoin: cibleIGMensuelle,
-      couverture: Math.max(0, cibleIGMensuelle - igMaladie.lacune),
+      couverture: igMaladie.couverture,
       lacune: igMaladie.lacune,
       score: igMaladie.score,
+      layers: igMaladie.layers,
     },
     invaliditeAccident: {
       besoin: cibleIGMensuelle,
-      couverture: Math.max(0, cibleIGMensuelle - igAccident.lacune),
+      couverture: igAccident.couverture,
       lacune: igAccident.lacune,
       score: igAccident.score,
+      layers: igAccident.layers,
     },
     deces: {
       besoin: besoinDecesTotal,
       couverture: capExistants,
       lacune: lacuneDeces,
       score: scoreDecFinal,
+      layers: ([
+        { key: "lpp", label: "LPP / LAA", amount: capDecesLppLaa },
+        { key: "3a", label: "3e pilier", amount: garantiesSaisies3a.capitalDeces },
+      ] as BenefitLayer[]).filter((l) => l.amount > 0),
     },
     fiscal: {
       investi3aAnnuel: cotisations3a,

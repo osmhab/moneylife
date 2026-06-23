@@ -62,6 +62,26 @@ describe("computeSituationAnalysis", () => {
     expect(r.deces.lacune).toBe(0);
   });
 
+  it("couches : décomposent la couverture par pilier (somme = couverture)", () => {
+    const r = computeSituationAnalysis({ cloudData: cloudData(), plans: [] })!;
+
+    // Retraite : AVS 2000 + LPP 1500 (3a absent → filtré) = 3500 = couverture.
+    expect(r.retraite.layers.map((l) => l.key)).toEqual(["avs", "lpp"]);
+    expect(r.retraite.layers.find((l) => l.key === "avs")!.amount).toBe(2_000);
+    expect(r.retraite.layers.find((l) => l.key === "lpp")!.amount).toBe(1_500);
+    expect(r.retraite.layers.reduce((s, l) => s + l.amount, 0)).toBeCloseTo(r.retraite.couverture);
+
+    // Invalidité : AVS 1000 + LPP 500 (LAA 0 et 3a absents → filtrés) = 1500.
+    expect(r.invaliditeMaladie.layers.map((l) => l.key)).toEqual(["avs", "lpp"]);
+    expect(r.invaliditeMaladie.layers.reduce((s, l) => s + l.amount, 0)).toBeCloseTo(
+      r.invaliditeMaladie.couverture
+    );
+
+    // Décès : capital LPP/LAA 100000 (3a absent → filtré).
+    expect(r.deces.layers.map((l) => l.key)).toEqual(["lpp"]);
+    expect(r.deces.layers[0].amount).toBe(100_000);
+  });
+
   it("score global pondéré (célibataire : 60/40/0) = 54", () => {
     const r = computeSituationAnalysis({ cloudData: cloudData(), plans: [] })!;
     // 70*0.6 + 30*0.4 + scoreDec*0 = 42 + 12 = 54
