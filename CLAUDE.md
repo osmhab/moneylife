@@ -162,3 +162,67 @@ pnpm test           # tests Vitest (moteur de calcul) — une passe
 pnpm test:watch     # tests Vitest en mode watch
 npx tsc --noEmit    # typecheck (filtrer la sortie : migration en cours = bruit possible)
 ```
+
+---
+
+## 7. Système de design — app iOS (Revolut-like)
+
+> **Politique UNIQUE.** Toute nouvelle vue iOS s'y conforme. Ne pas re-débattre écran par écran,
+> et **ne jamais régresser un comportement déjà validé** en ajoutant une fonctionnalité
+> (lister les acquis avant de restructurer une vue). Détails navigation : mémoire
+> `ios-prevoyance-dashboard-model`.
+
+### 7.1 Principes
+- **Inspiration Revolut** : sombre, premium, **verre dépoli**, gros chiffres, **cartes blanches
+  arrondies** flottant sur un **dégradé coloré**.
+- **Translucide, jamais de bloc opaque** : les éléments flottants utilisent `.ultraThinMaterial`
+  (pills, feuilles). Le contenu défile **DERRIÈRE** les éléments translucides (formes capsule),
+  jamais coupé par un rectangle invisible (superposer en `ZStack` + `contentMargins(.top)`).
+- **Jamais de noir pur** : un dégradé démarre sur une **teinte sombre de sa couleur**, pas `.black`
+  (sinon « carré noir » derrière la barre de nav). Les dégradés **couvrent les safe areas**
+  (`.ignoresSafeArea`) — aucune coupure haut/bas.
+
+### 7.2 Dégradés par contexte (haut sombre → couleur)
+LPP = **bleu** · Privé = **fuchsia** · Global = **vert** · Analyse = **indigo/violet**.
+
+### 7.3 Palette
+`blue (0, 0.48, 1)` · `fuchsia (0.85, 0.11, 0.78)` · `green (0.06, 0.72, 0.51)` ·
+`indigo (0.42, 0.36, 0.90)`. Accents risque : `rose (0.96, 0.25, 0.45)` · `orange (0.96, 0.55, 0.10)`.
+
+### 7.4 Composants
+- **Typographie** : police **Inter** partout, via le helper `Font.inter(size, weight)` (police
+  **variable** embarquée `Inter-Variable.ttf`, déclarée dans `Info.plist` → `UIAppFonts` ; famille
+  `"Inter"`). Texte **noir** pour noms/valeurs ; **gris foncé** (`.black.opacity(0.5–0.55)`) pour le
+  secondaire — **jamais** de gris pâle (`.secondary`/`.tertiary`) ni de **couleur de texte décorative**
+  (les couleurs sont réservées aux **icônes/accents**). Gros montants : taille modérée + **semibold**
+  (pas `.black`). Icônes d'action fines (ex. `+` en weight `.light`).
+- **Cartes** : **verre dépoli** (`.ultraThinMaterial` + voile blanc ~0.5 pour la lisibilité sur
+  dégradé sombre), coins ~26-32, ombre douce, `.environment(\.colorScheme, .light)` (texte sombre
+  lisible quel que soit le thème système). Un material seul sur fond sombre = illisible → toujours le voile.
+- **Feuilles (sheets)** — **STANDARD UNIQUE** : **verre dépoli CLAIR translucide façon Revolut** via
+  **`.creditxSheet()`** (source unique : `CreditX/SheetGlass.swift`) = détent `.fraction(0.96)` (quasi-plein
+  écran, petit espace en haut pour le drag) **+** `.ultraThinMaterial` clair + léger **dégradé teinté
+  désaturé** → le fond transparaît en **teintes douces**. ⚠️ **Détent `< .large` obligatoire** (intégré
+  dans `.creditxSheet()`) : à `.large`, iOS met la vue derrière en retrait/assombrie → rendu laiteux où
+  **seul le dégradé reste** (faux translucide). Variante `.creditxSheetGlass()` = fond seul (détent custom). **Jamais de voile blanc** sur le fond (= laiteux quasi-opaque en thème clair)
+  **ni de verre sombre** (tranché par Habib). Texte **sombre**, bouton **X flottant** (cercle clair +
+  croix sombre), **cartes flottantes** via `.creditxSheetCard()` (voile ~0.6 → la teinte transparaît).
+  `Form`/`List` dans une feuille → `.scrollContentBackground(.hidden)`. Feuilles profil/menu : en plus,
+  **X flottant**, **avatar centré**, rangées à icônes (icône dans un carré arrondi teinté + titre + sous-titre).
+  Détail : mémoire `ios-sheet-glass-standard`.
+- **Pills / chips** : capsules **translucides indépendantes** (active teintée), jamais dans un conteneur.
+- **Formulaires** (données perso, souscription) : **`Form` natif**, thème clair, claviers adaptés
+  (`.decimalPad` montants/poids/taille, `.phonePad` tél), **majuscule auto** sur les noms,
+  **sauvegarde à la perte de focus** (pas d'écriture à chaque frappe).
+- **Montants** : `CHF`, séparateur de milliers **apostrophe** (`1'234`) ; primes au format **`0.00`**.
+
+### 7.5 Navigation (dashboard prévoyance)
+- **Pas de barre d'onglets** : navigation au **swipe horizontal** + **dots dynamiques**. Seul le **HAUT**
+  (montant/titre, ou score Analyse) swipe ; la **zone du bas s'adapte** (ne glisse pas). Verticalement,
+  **tout défile ensemble** dans un seul `ScrollView` + rebond (`scrollBounceBehavior(.always)`).
+- **Profil** = avatar en haut à **gauche** · **brouillons** = tray en haut à **droite**.
+
+### 7.6 Vérification
+Builder + lancer sur simulateur et **regarder la capture** avant de valider. `idb` tape mal les boutons
+de **barre de navigation** (limite connue) → vérifier autrement (ouvrir la vue temporairement, ou tester
+sur device réel).
