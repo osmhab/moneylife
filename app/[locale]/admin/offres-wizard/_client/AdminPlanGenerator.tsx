@@ -100,6 +100,9 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
   const [healthLink, setHealthLink] = useState("");
   const [reqRisk, setReqRisk] = useState(false);
   const [riskLink, setRiskLink] = useState("");
+  // Signé en direct (papier) : crée le contrat déjà signé (PENDING_INSURANCE),
+  // sans notifier le client ni lui demander d'action.
+  const [directSign, setDirectSign] = useState(false);
 
   // NOUVEAUX ÉTATS POUR LE COMPARATEUR IA
   const [scannedContract, setScannedContract] = useState<any>(null);
@@ -505,13 +508,17 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
         toast.success("Contrat mis à jour !");
         
       } else {
-        // Mode Création standard
-        planData.status = "PENDING_CLIENT";
+        // Mode Création standard. « Signé en direct » → on saute l'e-signature client :
+        // statut PENDING_INSURANCE (le client n'est PAS notifié et n'a aucune action).
+        planData.status = directSign ? "PENDING_INSURANCE" : "PENDING_CLIENT";
+        if (directSign) planData.metadata.signedInPerson = true;
         planData.linkedRequestId = requestId;
-        planData.metadata.createdAt = serverTimestamp(); 
-        
+        planData.metadata.createdAt = serverTimestamp();
+
         await addDoc(collection(db, `clients/${clientUid}/plans`), planData);
-        toast.success("Contrat ajouté au dossier !");
+        toast.success(directSign
+          ? "Contrat ajouté (signé en direct). Déposez la police puis activez-le."
+          : "Contrat ajouté au dossier !");
       }
 
       onClose();
@@ -769,6 +776,21 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
                     </div>
                 )}
               </div>
+
+              {!editingPlan && (
+                <div className="bg-white rounded-[24px] p-8 shadow-sm border border-emerald-100">
+                  <div className="flex justify-between items-center gap-4">
+                    <div>
+                      <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Mode de signature</h3>
+                      <p className="font-black text-slate-900">Signé en direct (papier)</p>
+                      <p className="text-xs font-bold text-slate-400 mt-1 leading-relaxed">
+                        Le contrat est créé <strong>déjà signé</strong> : le client n'est <strong>pas notifié</strong> et n'a aucune action à faire. Vous déposerez la police et activerez le contrat ensuite.
+                      </p>
+                    </div>
+                    <Switch checked={directSign} onCheckedChange={setDirectSign} className="data-[state=checked]:bg-emerald-600" />
+                  </div>
+                </div>
+              )}
 
               <div className="bg-white rounded-[24px] p-8 shadow-sm border border-slate-100 space-y-6">
                 <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Checklist Onboarding (Tâches Client)</h3>
