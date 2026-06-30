@@ -342,23 +342,40 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
     }
   };
 
-  const handleDeletePlan = async () => {
-    if (!targetUid || !plan.id) return;
-    setIsDeleteModalOpen(false); 
+  const handleDeletePlan = async (reason: string) => {
+    if (!targetUid || !plan.id || !reason) return;
+    setIsDeleteModalOpen(false);
     const toastId = toast.loading(t("toasts.del_loading"));
     try {
-      const { deleteDoc, doc, updateDoc, serverTimestamp } = await import("firebase/firestore");
+      const { deleteDoc, doc, updateDoc, serverTimestamp, addDoc, collection } = await import("firebase/firestore");
       const { db } = await import("@/lib/firebase/index");
       const docRef = doc(db, "clients", targetUid, "plans", plan.id);
       const snap = await getDoc(docRef);
-      
+
       if (snap.exists()) {
+        // 1) Suppression (action principale).
         await deleteDoc(docRef);
         await updateDoc(doc(db, "clients", targetUid, "DonneePersonnelles", "current"), {
           _lastPlanUpdateTrigger: serverTimestamp()
         });
+
+        // 2) Journal d'audit (raison Test/Erreur) — BEST-EFFORT, ne doit jamais
+        //    bloquer la suppression (sous-collection client, comme les notifications).
+        try {
+          await addDoc(collection(db, "clients", targetUid, "plans_deletions"), {
+            planId: plan.id,
+            institutionName: plan.institutionName || "",
+            status: plan.status || "",
+            reason,
+            deletedBy: adminUid || auth.currentUser?.uid || "",
+            deletedAt: serverTimestamp(),
+          });
+        } catch (logErr) {
+          console.warn("Audit plans_deletions non écrit (règles ?) :", logErr);
+        }
+
         toast.success(t("toasts.del_success"), { id: toastId });
-        onClose(); 
+        onClose();
       } else {
         toast.error(t("toasts.del_not_found"), { id: toastId });
       }
@@ -1729,9 +1746,11 @@ function CertifiedWarningModal({ isOpen, onClose, onConfirm, status }: { isOpen:
 // =========================================================================
 // ================== COMPOSANT MODAL SUPPRESSION PLAN =====================
 // =========================================================================
-function DeletePlanModal({ isOpen, onClose, onConfirm, status }: { isOpen: boolean, onClose: () => void, onConfirm: () => void, status: string }) {
+function DeletePlanModal({ isOpen, onClose, onConfirm, status }: { isOpen: boolean, onClose: () => void, onConfirm: (reason: string) => void, status: string }) {
   const t = useTranslations("PlanDetailsView");
-  
+  const [reason, setReason] = useState("");
+  useEffect(() => { if (!isOpen) setReason(""); }, [isOpen]);
+
   if (!isOpen) return null;
 
   const isCertifiedOrPending = status === "COMPLETED" || status === "PENDING";
@@ -1774,10 +1793,26 @@ function DeletePlanModal({ isOpen, onClose, onConfirm, status }: { isOpen: boole
           </div>
         )}
 
+        <div className="relative z-10 mb-6">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3 text-center">Raison de la suppression</p>
+          <div className="flex gap-3">
+            {[{ id: "test", label: "Test" }, { id: "erreur", label: "Erreur" }].map((o) => (
+              <button
+                key={o.id}
+                onClick={() => setReason(o.id)}
+                className={`flex-1 py-3 rounded-2xl font-black text-sm border transition-all ${reason === o.id ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="relative z-10 flex flex-col gap-4">
           <button
-            onClick={onConfirm}
-            className="w-full py-5 bg-red-500 text-white rounded-full font-black uppercase tracking-widest text-[13px] hover:bg-red-600 transition-all active:scale-95 shadow-xl shadow-red-500/20"
+            onClick={() => onConfirm(reason)}
+            disabled={!reason}
+            className={`w-full py-5 rounded-full font-black uppercase tracking-widest text-[13px] transition-all active:scale-95 ${reason ? "bg-red-500 text-white hover:bg-red-600 shadow-xl shadow-red-500/20" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}
           >
             {t("modals.del_btn_confirm")}
           </button>
