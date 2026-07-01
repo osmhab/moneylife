@@ -823,7 +823,12 @@ function CategoryPage({ t, locale, amountLabel, plans, clientAge, gradient, onAd
       acc.deces += Number(d.Enter_CapitalPlusRenteMal) || 0;
     } else {
       acc.current += Number(d.valeurRachatActuelle) || Number(d.soldeActuel) || 0;
-      acc.capital65 += isBank ? computeProjections3aBanque(d, clientAge) : computeProjections3aAssurance(d, clientAge);
+      // Priorité à la projection AFFICHÉE (projection assureur, ou capital projeté
+      // figé/saisi sur l'offre) — comme la carte plan ; calcul auto seulement à défaut.
+      acc.capital65 +=
+        Number(d.projectionAssureur) ||
+        Number(d.capitalRetraiteProjete) ||
+        (isBank ? computeProjections3aBanque(d, clientAge) : computeProjections3aAssurance(d, clientAge));
       acc.epl += Number(d.valeurRachatActuelle) || Number(d.soldeActuel) || 0;
       acc.invalidite += Number(d.renteInvalidite) || 0;
       if (isBank) {
