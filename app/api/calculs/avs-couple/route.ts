@@ -18,6 +18,7 @@ import { requireAuth } from "@/lib/server/requireAuth";
 import { computeAvsCoupleForClient } from "@/lib/calculs/avsAi";
 import { LEGAL_2025 } from "@/lib/core/legal";
 import { Legal_Echelle44_2025_Rows } from "@/lib/registry/echelle44";
+import { findActiveLinkForUid, spouseUidOf } from "@/lib/server/coupleLinks";
 
 export const dynamic = "force-dynamic";
 
@@ -53,8 +54,8 @@ export async function POST(req: NextRequest) {
   }
 
   // `data` explicite prioritaire ; sinon lecture des données perso par uid.
-  let data = parsed.data.data;
-  if (!data || Object.keys(data).length === 0) {
+  let data: Record<string, any> = parsed.data.data ?? {};
+  if (Object.keys(data).length === 0) {
     try {
       const snap = await db.doc(`clients/${uid}/DonneePersonnelles/current`).get();
       data = snap.data() || {};
@@ -63,7 +64,27 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Lien conjoint accepté → on injecte le salaire RÉEL du conjoint (lu côté serveur)
+  // à la place de la saisie manuelle. La donnée brute ne transite jamais vers le client.
+  let conjointLie = false;
+  try {
+    const link = await findActiveLinkForUid(uid);
+    if (link?.status === "accepted") {
+      const spouseUid = spouseUidOf(link, uid);
+      if (spouseUid) {
+        const snap = await db.doc(`clients/${spouseUid}/DonneePersonnelles/current`).get();
+        const salaire = snap.data()?.Enter_salaireAnnuel;
+        if (typeof salaire === "number" && salaire > 0) {
+          data = { ...data, Enter_spouseSalaireAnnuel: salaire };
+          conjointLie = true;
+        }
+      }
+    }
+  } catch {
+    // Lien indisponible → repli silencieux sur la saisie manuelle.
+  }
+
   const couple = computeAvsCoupleForClient(data as never, LEGAL_2025, Legal_Echelle44_2025_Rows);
 
-  return NextResponse.json({ couple });
+  return NextResponse.json({ couple, conjointLie });
 }
