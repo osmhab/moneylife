@@ -13,6 +13,7 @@ import type {
   ClientData,
   Legal_Settings,
   Legal_Echelle44Row,
+  Enter_EtatCivil,
 } from "@/lib/core/types";
 import { normalizeDateMask, isValidDateMask } from "@/lib/core/dates";
 
@@ -149,6 +150,186 @@ export function getLegalRenteMinAvsMensuelle(echelle44: Legal_Echelle44Row[]): n
     (min, row) => Math.min(min, row.Legal_OldAgeInvalidity),
     Number.POSITIVE_INFINITY
   );
+}
+
+/** Récupère la rente AVS maximale mensuelle depuis l'échelle 44 (plus grande OldAgeInvalidity).
+ *  Sert de base au plafond des rentes de couple (150 % du max individuel). */
+export function getLegalRenteMaxAvsMensuelle(echelle44: Legal_Echelle44Row[]): number {
+  if (!echelle44?.length) return 0;
+  return echelle44.reduce(
+    (max, row) => Math.max(max, row.Legal_OldAgeInvalidity),
+    0
+  );
+}
+
+/* =========================================================
+ * Plafonnement des rentes de couple (marié / partenariat enregistré)
+ * ---------------------------------------------------------
+ * Règle AVS : quand les DEUX conjoints touchent une rente vieillesse, la
+ * somme de leurs deux rentes individuelles est plafonnée à 150 % de la rente
+ * maximale individuelle. Si la somme dépasse, chaque rente est réduite
+ * PROPORTIONNELLEMENT à sa part. Le 150 % n'est PAS codé en dur : il dérive du
+ * haut de l'échelle 44 (source unique LEGAL_2025).
+ * =======================================================*/
+
+/** Ratio légal du plafond couple (150 % de la rente max individuelle). */
+export const AVS_COUPLE_CAP_RATIO = 1.5;
+
+export type AvsCoupleResult = {
+  /** Rente mensuelle du conjoint A APRÈS plafonnement. */
+  renteAMensuelle: number;
+  /** Rente mensuelle du conjoint B APRÈS plafonnement. */
+  renteBMensuelle: number;
+  /** Somme mensuelle des deux rentes après plafonnement. */
+  renteCoupleMensuelle: number;
+  /** Plafond mensuel appliqué (150 % du max individuel), ou null si N/A. */
+  plafondMensuel: number | null;
+  /** true si le plafond a effectivement réduit les rentes. */
+  plafonnee: boolean;
+  /** Facteur de réduction appliqué (1 = pas de réduction). */
+  facteurReduction: number;
+};
+
+/**
+ * Applique le plafonnement couple à deux rentes individuelles MENSUELLES.
+ *
+ * @param renteAMensuelle rente individuelle projetée du conjoint A (mensuelle)
+ * @param renteBMensuelle rente individuelle projetée du conjoint B (mensuelle)
+ * @param echelle44 table légale (fournit le max individuel via le haut de la colonne)
+ * @param opts.applyCap si false, ne plafonne pas (ex. un seul conjoint à la retraite).
+ *                      Défaut true (les deux à la retraite, mariés/partenariat).
+ *
+ * Garde anti-`NaN` : les rentes non finies sont ramenées à 0.
+ */
+export function computeAvsCouple(
+  renteAMensuelle: number,
+  renteBMensuelle: number,
+  echelle44: Legal_Echelle44Row[],
+  opts?: { applyCap?: boolean }
+): AvsCoupleResult {
+  // Gardes : jamais de NaN/négatif qui fausserait la proportion.
+  const a = Number.isFinite(renteAMensuelle) ? Math.max(0, renteAMensuelle) : 0;
+  const b = Number.isFinite(renteBMensuelle) ? Math.max(0, renteBMensuelle) : 0;
+  const somme = a + b;
+
+  const maxIndividuel = getLegalRenteMaxAvsMensuelle(echelle44);
+  const plafondMensuel = maxIndividuel > 0 ? maxIndividuel * AVS_COUPLE_CAP_RATIO : null;
+
+  const applyCap = opts?.applyCap ?? true;
+
+  // Pas de plafonnement : un seul retraité, plafond indisponible, ou somme sous le plafond.
+  if (!applyCap || plafondMensuel === null || somme <= plafondMensuel || somme === 0) {
+    return {
+      renteAMensuelle: a,
+      renteBMensuelle: b,
+      renteCoupleMensuelle: somme,
+      plafondMensuel,
+      plafonnee: false,
+      facteurReduction: 1,
+    };
+  }
+
+  // Réduction proportionnelle à la part de chacun.
+  const facteur = plafondMensuel / somme;
+  return {
+    renteAMensuelle: a * facteur,
+    renteBMensuelle: b * facteur,
+    renteCoupleMensuelle: plafondMensuel,
+    plafondMensuel,
+    plafonnee: true,
+    facteurReduction: facteur,
+  };
+}
+
+/** États civils qui déclenchent le plafonnement couple : marié (1) / partenariat (3). */
+export function isCoupleEtatCivil(etatCivil: Enter_EtatCivil | undefined): boolean {
+  return etatCivil === 1 || etatCivil === 3;
+}
+
+/** D'où vient la rente individuelle du conjoint retenue. */
+export type RenteConjointSource = "fournie" | "projetee" | "aucune";
+
+/**
+ * Résout la rente AVS mensuelle individuelle du conjoint selon la stratégie
+ * « les deux » : la rente SAISIE est prioritaire ; à défaut, on la PROJETTE
+ * depuis le salaire annuel du conjoint (hypothèse carrière complète, via la
+ * même échelle 44 que la personne principale).
+ */
+export function resolveRenteConjointMensuelle(
+  client: ClientData,
+  legal: Legal_Settings,
+  echelle44: Legal_Echelle44Row[]
+): { renteMensuelle: number; source: RenteConjointSource } {
+  const fournie = client.Enter_spouseRenteAvsMensuelle;
+  if (typeof fournie === "number" && Number.isFinite(fournie) && fournie > 0) {
+    return { renteMensuelle: fournie, source: "fournie" };
+  }
+
+  const revenu = client.Enter_spouseSalaireAnnuel;
+  if (typeof revenu === "number" && Number.isFinite(revenu) && revenu > 0) {
+    // Conjoint modélisé comme un client minimal (revenu + naissance + sexe) :
+    // carrière complète par défaut (âge début cotisations légal → nbEffectives = 44).
+    const spouseClient: ClientData = {
+      ...client,
+      Enter_salaireAnnuel: revenu,
+      // Fallback sur la personne principale : la rente vieillesse projetée ici ne
+      // dépend ni de la date ni du sexe (elle vient du RAMD/échelle 44), mais le type l'exige.
+      Enter_dateNaissance: client.Enter_spouseDateNaissance ?? client.Enter_dateNaissance,
+      Enter_sexe: client.Enter_spouseSexe ?? client.Enter_sexe,
+      // Carrière pleine côté conjoint : pas de lacunes ni d'âge de début tardif.
+      Enter_ageDebutCotisationsAVS: legal.Legal_AgeLegalCotisationsAVS,
+      Enter_hasAnnesManquantesAVS: false,
+      Enter_anneesManquantesAVS: [],
+    };
+    const { renteRetraiteMensuelle } = computeRetraiteProjection(spouseClient, legal, echelle44);
+    return { renteMensuelle: renteRetraiteMensuelle, source: "projetee" };
+  }
+
+  return { renteMensuelle: 0, source: "aucune" };
+}
+
+export type AvsCoupleForClientResult = AvsCoupleResult & {
+  /** Rente individuelle de la personne principale AVANT plafonnement. */
+  renteIndividuelleMensuelle: number;
+  /** Rente individuelle du conjoint AVANT plafonnement (retenue). */
+  renteConjointMensuelle: number;
+  /** Origine de la rente conjoint : saisie, projetée, ou absente. */
+  sourceConjoint: RenteConjointSource;
+  /** true si l'état civil est marié/partenariat (plafond pertinent). */
+  estCouple: boolean;
+};
+
+/**
+ * Calcul complet du plafonnement couple à partir d'un `ClientData` :
+ * projette la rente de la personne, résout celle du conjoint (fournie sinon
+ * projetée), et applique le plafond 150 % UNIQUEMENT si marié/partenariat.
+ * Source unique branchée sur une rente conjoint saisie manuellement OU projetée.
+ */
+export function computeAvsCoupleForClient(
+  client: ClientData,
+  legal: Legal_Settings,
+  echelle44: Legal_Echelle44Row[]
+): AvsCoupleForClientResult {
+  const { renteRetraiteMensuelle } = computeRetraiteProjection(client, legal, echelle44);
+  const { renteMensuelle: renteConjoint, source } = resolveRenteConjointMensuelle(
+    client,
+    legal,
+    echelle44
+  );
+
+  const estCouple = isCoupleEtatCivil(client.Enter_etatCivil);
+  // Plafond appliqué seulement pour un couple avec deux rentes réelles.
+  const applyCap = estCouple && renteConjoint > 0;
+
+  const capped = computeAvsCouple(renteRetraiteMensuelle, renteConjoint, echelle44, { applyCap });
+
+  return {
+    ...capped,
+    renteIndividuelleMensuelle: renteRetraiteMensuelle,
+    renteConjointMensuelle: renteConjoint,
+    sourceConjoint: source,
+    estCouple,
+  };
 }
 
 /** Sélecteur "plancher" : dernière ligne dont income <= ramd (ou undefined si aucune) */
