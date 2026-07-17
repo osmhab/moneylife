@@ -142,7 +142,7 @@ describe("plafonnement des rentes de couple (150 %)", () => {
   });
 });
 
-describe("stratégie « les deux » — rente conjoint fournie sinon projetée", () => {
+describe("rente conjoint TOUJOURS projetée depuis le salaire (échelle 44)", () => {
   it("isCoupleEtatCivil : marié (1) et partenariat (3) uniquement", () => {
     expect(isCoupleEtatCivil(1)).toBe(true);
     expect(isCoupleEtatCivil(3)).toBe(true);
@@ -150,14 +150,7 @@ describe("stratégie « les deux » — rente conjoint fournie sinon projetée",
     expect(isCoupleEtatCivil(undefined)).toBe(false);
   });
 
-  it("rente conjoint FOURNIE est prioritaire", () => {
-    const c = client({ Enter_spouseRenteAvsMensuelle: 1_800, Enter_spouseSalaireAnnuel: 120_000 });
-    const r = resolveRenteConjointMensuelle(c, legal(), echelle);
-    expect(r.source).toBe("fournie");
-    expect(r.renteMensuelle).toBe(1_800);
-  });
-
-  it("sans rente fournie → projetée depuis le revenu (carrière complète)", () => {
+  it("rente conjoint projetée depuis le revenu (carrière complète)", () => {
     // Revenu 100k, carrière pleine → RAMD ≈ 100k → palier 100000 → 2000/mois.
     const c = client({ Enter_spouseSalaireAnnuel: 100_000 });
     const r = resolveRenteConjointMensuelle(c, legal(), echelle);
@@ -165,22 +158,22 @@ describe("stratégie « les deux » — rente conjoint fournie sinon projetée",
     expect(r.renteMensuelle).toBe(2_000);
   });
 
-  it("ni rente ni revenu → aucune", () => {
+  it("sans revenu conjoint → aucune", () => {
     const r = resolveRenteConjointMensuelle(client(), legal(), echelle);
     expect(r.source).toBe("aucune");
     expect(r.renteMensuelle).toBe(0);
   });
 
-  it("couple marié : plafond appliqué sur rente perso + conjoint fournie", () => {
-    // Perso : revenu 100k → rente 2000. Conjoint fourni 2000. Somme 4000 > 3000.
+  it("couple marié : plafond appliqué sur rentes perso + conjoint projetées", () => {
+    // Perso : revenu 100k → rente 2000. Conjoint : revenu 100k → 2000. Somme 4000 > 3000.
     const c = client({
       Enter_etatCivil: 1,
       Enter_salaireAnnuel: 100_000,
-      Enter_spouseRenteAvsMensuelle: 2_000,
+      Enter_spouseSalaireAnnuel: 100_000,
     });
     const r = computeAvsCoupleForClient(c, legal(), echelle);
     expect(r.estCouple).toBe(true);
-    expect(r.sourceConjoint).toBe("fournie");
+    expect(r.sourceConjoint).toBe("projetee");
     expect(r.renteIndividuelleMensuelle).toBe(2_000);
     expect(r.renteConjointMensuelle).toBe(2_000);
     expect(r.plafonnee).toBe(true);
@@ -188,11 +181,11 @@ describe("stratégie « les deux » — rente conjoint fournie sinon projetée",
     expect(r.renteAMensuelle).toBeCloseTo(1_500, 10);
   });
 
-  it("célibataire : jamais de plafonnement même avec une rente conjoint saisie", () => {
+  it("célibataire : jamais de plafonnement même avec un salaire conjoint saisi", () => {
     const c = client({
       Enter_etatCivil: 0,
       Enter_salaireAnnuel: 100_000,
-      Enter_spouseRenteAvsMensuelle: 2_000,
+      Enter_spouseSalaireAnnuel: 100_000,
     });
     const r = computeAvsCoupleForClient(c, legal(), echelle);
     expect(r.estCouple).toBe(false);

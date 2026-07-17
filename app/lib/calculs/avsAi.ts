@@ -247,24 +247,19 @@ export function isCoupleEtatCivil(etatCivil: Enter_EtatCivil | undefined): boole
 }
 
 /** D'où vient la rente individuelle du conjoint retenue. */
-export type RenteConjointSource = "fournie" | "projetee" | "aucune";
+export type RenteConjointSource = "projetee" | "aucune";
 
 /**
- * Résout la rente AVS mensuelle individuelle du conjoint selon la stratégie
- * « les deux » : la rente SAISIE est prioritaire ; à défaut, on la PROJETTE
- * depuis le salaire annuel du conjoint (hypothèse carrière complète, via la
- * même échelle 44 que la personne principale).
+ * Résout la rente AVS mensuelle individuelle du conjoint : TOUJOURS projetée
+ * depuis le salaire annuel du conjoint via l'échelle 44 (hypothèse carrière
+ * complète, même échelle que la personne principale). On ne demande jamais de
+ * rente estimée à l'utilisateur.
  */
 export function resolveRenteConjointMensuelle(
   client: ClientData,
   legal: Legal_Settings,
   echelle44: Legal_Echelle44Row[]
 ): { renteMensuelle: number; source: RenteConjointSource } {
-  const fournie = client.Enter_spouseRenteAvsMensuelle;
-  if (typeof fournie === "number" && Number.isFinite(fournie) && fournie > 0) {
-    return { renteMensuelle: fournie, source: "fournie" };
-  }
-
   const revenu = client.Enter_spouseSalaireAnnuel;
   if (typeof revenu === "number" && Number.isFinite(revenu) && revenu > 0) {
     // Conjoint modélisé comme un client minimal (revenu + naissance + sexe) :

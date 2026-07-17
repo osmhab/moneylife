@@ -34,10 +34,8 @@ export interface ClientData {
   Enter_etatCivil: Enter_EtatCivil;
   Enter_spouseSexe?: Enter_Sexe;
   Enter_spouseDateNaissance?: string; // "dd.MM.yyyy"
-  /** Rente AVS mensuelle individuelle estimée du conjoint, saisie manuellement.
-   *  Prioritaire pour le plafonnement couple ; sinon projetée depuis le revenu. */
-  Enter_spouseRenteAvsMensuelle?: number | null;
-  /** Salaire annuel du conjoint — sert à projeter sa rente si la rente n'est pas saisie. */
+  /** Salaire annuel du conjoint — sert à PROJETER sa rente AVS (échelle 44)
+   *  pour le plafonnement couple. On ne demande jamais de rente estimée. */
   Enter_spouseSalaireAnnuel?: number | null;
   Enter_mariageDuree?: 0 | 1; // 0 = ≥5 ans, 1 = <5 ans
   Enter_menageCommun5Ans?: boolean; // concubinage
