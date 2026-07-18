@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
     const base64Data = Buffer.from(bytes).toString("base64");
 
     const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return NextResponse.json({ error: "Clé API Gemini manquante" }, { status: 500 });
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
     const prompt = `Tu es un expert en prévoyance 3e pilier BANCAIRE suisse (compte 3a).
