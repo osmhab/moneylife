@@ -10,7 +10,7 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { INSTITUTION_RULES } from "@/lib/lpp-rules";
+import { INSTITUTION_RULES, dropBlockingZeroAccident } from "@/lib/lpp-rules";
 
 const TEXT_FIELDS = [
   "Enter_anneeCertificat", "Enter_prenom", "Enter_nom", "Enter_noAVS",
@@ -121,6 +121,9 @@ ${knowledgeBase}`;
         }
       }
     });
+
+    // Retire les `0` accident qui bloqueraient le fallback maladie du moteur.
+    dropBlockingZeroAccident(data);
 
     return NextResponse.json({ data });
   } catch (e: any) {

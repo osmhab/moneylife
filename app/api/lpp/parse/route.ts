@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { db, bucket, authAdmin } from "app/lib/firebase/admin";
 import admin from "firebase-admin";
-import { INSTITUTION_RULES } from "app/lib/lpp-rules";
+import { INSTITUTION_RULES, dropBlockingZeroAccident } from "app/lib/lpp-rules";
 import { DOCUMENT_CLASSIFICATION_PROMPT } from "app/lib/core/documentTypes";
 
 // Clés de classification renvoyées par l'IA mais qui ne sont PAS des champs de
@@ -215,6 +215,9 @@ ${DOCUMENT_CLASSIFICATION_PROMPT}`;
         clientMappedData[key] = null;
       }
     });
+
+    // Retire les `0` accident qui bloqueraient le fallback maladie du moteur.
+    dropBlockingZeroAccident(clientMappedData);
 
     // Validations de cohérence logique métier
     if (clientMappedData.Enter_salaireAssureLPP > clientMappedData.Enter_salaireAnnuel) {
