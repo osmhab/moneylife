@@ -9,7 +9,7 @@ import { requireAuth } from "@/lib/server/requireAuth";
 import {
   findActiveLinkForUid,
   spouseUidOf,
-  spousePrenom,
+  spouseIdentity,
 } from "@/lib/server/coupleLinks";
 
 export const dynamic = "force-dynamic";
@@ -30,14 +30,19 @@ export async function POST(req: NextRequest) {
 
     const role = link.inviterUid === uid ? "inviter" : "invitee";
     const spouseUid = spouseUidOf(link, uid);
-    const prenom = link.status === "accepted" && spouseUid ? await spousePrenom(spouseUid) : "";
+    // Identité minimale partagée seulement une fois le lien accepté.
+    const id = link.status === "accepted" && spouseUid
+      ? await spouseIdentity(spouseUid)
+      : { prenom: "", nom: "", dateNaissance: "" };
 
     return NextResponse.json({
       status: link.status,                       // "pending" | "accepted"
       role,                                       // "inviter" | "invitee"
       // Code visible seulement par l'inviteur d'une invitation en attente.
       code: role === "inviter" && link.status === "pending" ? link.code : null,
-      spousePrenom: prenom,
+      spousePrenom: id.prenom,
+      spouseNom: id.nom,
+      spouseDateNaissance: id.dateNaissance,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Erreur serveur" }, { status: 500 });

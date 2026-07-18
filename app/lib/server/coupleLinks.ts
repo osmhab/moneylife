@@ -116,8 +116,16 @@ export async function revokeLink(linkId: string, byUid: string): Promise<void> {
   });
 }
 
-/** Prénom du conjoint (DonneePersonnelles) pour l'affichage, ou "" si absent. */
-export async function spousePrenom(spouseUid: string): Promise<string> {
-  const snap = await db.doc(`clients/${spouseUid}/DonneePersonnelles/current`).get();
-  return (snap.data()?.Enter_prenom as string) ?? "";
+/** Identité MINIMALE du conjoint (nom, prénom, date de naissance) partagée après
+ *  liaison. Portée volontairement restreinte : on ne lit rien d'autre du conjoint
+ *  ici (le salaire est lu séparément dans avs-couple pour le calcul). */
+export async function spouseIdentity(
+  spouseUid: string
+): Promise<{ prenom: string; nom: string; dateNaissance: string }> {
+  const d = (await db.doc(`clients/${spouseUid}/DonneePersonnelles/current`).get()).data() ?? {};
+  return {
+    prenom: (d.Enter_prenom as string) ?? "",
+    nom: (d.Enter_nom as string) ?? "",
+    dateNaissance: (d.Enter_dateNaissance as string) ?? "",
+  };
 }

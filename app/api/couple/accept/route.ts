@@ -10,7 +10,7 @@ import {
   findActiveLinkForUid,
   findPendingByCode,
   acceptLink,
-  spousePrenom,
+  spouseIdentity,
 } from "@/lib/server/coupleLinks";
 
 export const dynamic = "force-dynamic";
@@ -60,8 +60,8 @@ export async function POST(req: NextRequest) {
     }
 
     await acceptLink(link.id, uid);
-    const prenom = await spousePrenom(link.inviterUid);
-    return NextResponse.json({ status: "accepted", spousePrenom: prenom });
+    const id = await spouseIdentity(link.inviterUid);
+    return NextResponse.json({ status: "accepted", spousePrenom: id.prenom });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Erreur serveur" }, { status: 500 });
   }
