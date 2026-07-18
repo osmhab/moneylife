@@ -183,9 +183,12 @@ export function AddInsurancePlanView({ onClose, adminUid }: { onClose: () => voi
         formDataUpload.append("file", pendingFiles[0]); 
       }
 
+      // Jeton Firebase requis (l'endpoint /api/insurance/parse est authentifié).
+      const idToken = await auth.currentUser?.getIdToken();
       const response = await fetch("/api/insurance/parse", {
         method: "POST",
-        body: formDataUpload, 
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        body: formDataUpload,
       });
 
       const result = await response.json();

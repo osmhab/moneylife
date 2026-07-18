@@ -2,8 +2,15 @@
 // Scan d'un relevé/attestation de 3e pilier BANCAIRE (compte 3a) → extraction IA.
 // Modelé sur /api/insurance/parse (même infra Gemini Vision), prompt adapté au 3a bancaire.
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/requireAuth";
 
 export async function POST(req: NextRequest) {
+  try {
+    await requireAuth(req);
+  } catch {
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  }
+
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File;

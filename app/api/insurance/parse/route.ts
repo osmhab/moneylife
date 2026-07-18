@@ -1,8 +1,15 @@
 // app/api/insurance/parse/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/requireAuth";
 import { DOCUMENT_CLASSIFICATION_PROMPT } from "@/lib/core/documentTypes";
 
 export async function POST(req: NextRequest) {
+  try {
+    await requireAuth(req);
+  } catch {
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  }
+
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File;
