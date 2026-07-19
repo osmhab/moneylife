@@ -62,6 +62,21 @@ export interface RetraiteSource {
   allocation: number;
 }
 
+/** Prestations du 1er pilier (AVS/AI) + complément LAA — toutes MENSUELLES.
+ *  Pas de capital ici (rien à épargner) : uniquement des rentes. */
+export interface PremierPilierPrestations {
+  /** Rente de vieillesse AVS (mensuel, à 65 ans). */
+  retraite: { avs: number };
+  /** Rente d'invalidité AI en cas de MALADIE (mensuel). */
+  invaliditeMaladie: { avs: number };
+  /** Rente d'invalidité AI + rente LAA en cas d'ACCIDENT (mensuel). */
+  invaliditeAccident: { avs: number; laa: number };
+  /** Rentes de survivants AVS (veuf·ve + orphelins) — décès par MALADIE (mensuel). */
+  decesMaladie: { avs: number };
+  /** Rentes de survivants AVS + LAA — décès par ACCIDENT (mensuel). */
+  decesAccident: { avs: number; laa: number };
+}
+
 export interface SituationAnalysis {
   totalScore: number;
   salaireMensuel: number;
@@ -75,6 +90,8 @@ export interface SituationAnalysis {
   invaliditeMaladie: RiskCard;
   invaliditeAccident: RiskCard;
   deces: RiskCard;
+  /** Prestations 1er pilier (AVS/AI) + LAA — pour l'onglet dédié (rentes, pas de capital). */
+  premierPilier: PremierPilierPrestations;
   fiscal: {
     investi3aAnnuel: number;
     plafond3a: number;
@@ -114,6 +131,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   const invM = cloudData.projections.invalidite_maladie;
   const invA = cloudData.projections.invalidite_accident;
   const decM = cloudData.projections.deces_maladie;
+  const decA = cloudData.projections.deces_accident;
 
   const salaireAnnuel = getVal(retProj, "Besoin (Salaire)");
 
@@ -267,6 +285,34 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   const igMaladie = analyseIG(invM);
   const igAccident = analyseIG(invA);
 
+  // ---- 1er PILIER (AVS/AI) + complément LAA — rentes MENSUELLES ----
+  // Invalidité : on prend le régime de CROISIÈRE (phase rente, dès la 3e année ;
+  // les 2 premières années ne versent que des indemnités journalières → AVS/AI = 0).
+  // La rente AI étant constante en phase 2, le max sur les colonnes ≥ 2 est robuste
+  // même si le profil est proche de 65 ans (peu de colonnes).
+  const invRenteMensuelle = (proj: any, label: string): number => {
+    const years = proj?.headerYears || [];
+    let v = 0;
+    years.forEach((_: number, idx: number) => {
+      if (idx >= 2) v = Math.max(v, getVal(proj, label, idx));
+    });
+    return v / 12;
+  };
+  const premierPilier: PremierPilierPrestations = {
+    retraite: { avs: retAvsAnnuelle / 12 },
+    invaliditeMaladie: { avs: invRenteMensuelle(invM, "AVS/AI") },
+    invaliditeAccident: {
+      avs: invRenteMensuelle(invA, "AVS/AI"),
+      laa: invRenteMensuelle(invA, "LAA"),
+    },
+    // Décès : rentes de survivants (veuf·ve + orphelins) à l'année en cours (colonne 0).
+    decesMaladie: { avs: getVal(decM, "AVS/AI", 0) / 12 },
+    decesAccident: {
+      avs: getVal(decA, "AVS/AI", 0) / 12,
+      laa: getVal(decA, "LAA", 0) / 12,
+    },
+  };
+
   // ---- DÉCÈS ----
   const estMarie = cloudData.Enter_etatCivil === 1;
   const enfants = cloudData.Enter_enfants || [];
@@ -361,6 +407,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
         { key: "3a", label: "3e pilier", amount: garantiesSaisies3a.capitalDeces },
       ] as BenefitLayer[]).filter((l) => l.amount > 0),
     },
+    premierPilier,
     fiscal: {
       investi3aAnnuel: cotisations3a,
       plafond3a: PLAFOND_3A_ANNUEL,
