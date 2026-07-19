@@ -123,6 +123,11 @@ describe("computeProjectionsEpargneLibre (cash)", () => {
   it("à 65 ans : pas de projection, renvoie le solde", () => {
     expect(computeProjectionsEpargneLibre({ soldeActuel: 42_000, isRegulier: false, isInvesti: false }, 65)).toBe(42_000);
   });
+
+  it("court terme (utilisée dans l'année) : aucune projection retraite → 0", () => {
+    const data = { soldeActuel: 20_000, isRegulier: false, isInvesti: true, profil: "growth", epargneHorizon: "court" };
+    expect(computeProjectionsEpargneLibre(data as any, 35)).toBe(0);
+  });
 });
 
 describe("computeDeathBenefitAssurance", () => {

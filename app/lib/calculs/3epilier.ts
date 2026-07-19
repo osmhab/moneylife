@@ -85,9 +85,20 @@ export const EPARGNE_LIBRE_SAVINGS_RATE = 0;
  *  - investi (fonds / ETF / actions) → intérêt composé selon le profil de risque
  *    (mêmes taux que le 3a investi).
  */
-export function computeProjectionsEpargneLibre(data: Data3aBanque, clientAge: number): number {
-  const { soldeActuel = 0, isRegulier, montantRegulier = 0, occurrence = "mois", isInvesti, profil } = data;
-  const r = isInvesti ? getRate(true, profil) : EPARGNE_LIBRE_SAVINGS_RATE;
+export function computeProjectionsEpargneLibre(
+  data: Data3aBanque & { epargneKind?: string; epargneHorizon?: string },
+  clientAge: number
+): number {
+  // COURT TERME (argent utilisé dans l'année) → aucune projection retraite possible.
+  // La somme reste des liquidités disponibles (décès / logement), mais pas un capital 65.
+  if (data.epargneHorizon === "court") return 0;
+
+  const { soldeActuel = 0, isRegulier, montantRegulier = 0, occurrence = "mois", isInvesti, profil, epargneKind } = data;
+  // Le SUPPORT fait foi quand il est renseigné (compte = non investi ; fonds/ETF/actions
+  // = investi), sinon on retombe sur le flag isInvesti. → cohérent même si l'utilisateur
+  // change le support a posteriori sans mettre à jour isInvesti.
+  const invested = epargneKind !== undefined ? epargneKind !== "compte" : !!isInvesti;
+  const r = invested ? getRate(true, profil) : EPARGNE_LIBRE_SAVINGS_RATE;
   const n = Math.max(0, 65 - clientAge);
   if (n === 0) return Math.round(soldeActuel);
 

@@ -104,6 +104,10 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
 
   const capital3aProjeteTotal = listePlans3a.reduce((acc: number, p: any) => {
     const d = p.data || {};
+    // Épargne libre COURT TERME (utilisée dans l'année) → pas projetable pour la
+    // retraite : on ne la compte PAS ici (elle reste comptée pour le décès + logement).
+    const t = String(p.type || "").toUpperCase();
+    if (t.includes("EPARGNE") && d.epargneHorizon === "court") return acc;
     return acc + parseAmount(d.capitalRetraiteProjete || d.capitalRetraiteGlobal || d.soldeActuel || d.montant || 0);
   }, 0);
 
