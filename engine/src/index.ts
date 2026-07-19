@@ -187,6 +187,18 @@ export const onNotificationCreated = onDocumentCreated({
       },
     });
 
+    // Journalise la CAUSE de chaque echec. Sans ca, un « 0/1 envoye » ne dit pas
+    // s'il s'agit d'un jeton mort, d'une cle APNs manquante cote console
+    // (messaging/third-party-auth-error) ou d'un incident transitoire — et le
+    // diagnostic se fait a l'aveugle.
+    response.responses.forEach((r, i) => {
+      if (!r.success) {
+        console.error(
+          `[push] echec jeton ${tokens[i].slice(0, 12)}… : ${r.error?.code} — ${r.error?.message}`
+        );
+      }
+    });
+
     // Purge des jetons devenus invalides.
     const stale: string[] = [];
     response.responses.forEach((r, i) => {
