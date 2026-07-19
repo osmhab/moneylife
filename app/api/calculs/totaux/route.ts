@@ -14,6 +14,7 @@ import { db } from "@/lib/firebase/admin";
 import {
   computeProjections3aAssurance,
   computeProjections3aBanque,
+  computeProjectionsEpargneLibre,
   computeDeathBenefitAssurance,
 } from "@/lib/calculs/3epilier";
 import { computeLPPProjectionRetraite } from "@/lib/calculs/lpp";
@@ -56,6 +57,8 @@ function computeTotals(plans: any[], clientAge: number): Totals {
     const d = p.data || {};
     const isLPP = p.type === "LPP_BASE";
     const isBank = p.type === "PILIER_3A_BANK" || p.type === "3A_BANQUE";
+    // Épargne libre (cash) : décès = solde (succession), EPL = solde (100% dispo).
+    const isCash = p.type === "EPARGNE_LIBRE";
 
     if (isLPP) {
       acc.current += Number(d.Enter_avoirVieillesseTotal) || 0;
@@ -78,12 +81,15 @@ function computeTotals(plans: any[], clientAge: number): Totals {
       acc.capital65 +=
         Number(d.projectionAssureur) ||
         Number(d.capitalRetraiteProjete) ||
-        (isBank
+        (isCash
+          ? computeProjectionsEpargneLibre(d, clientAge)
+          : isBank
           ? computeProjections3aBanque(d, clientAge)
           : computeProjections3aAssurance(d, clientAge));
       acc.epl += Number(d.valeurRachatActuelle) || Number(d.soldeActuel) || 0;
       acc.invalidite += Number(d.renteInvalidite) || 0;
-      if (isBank) {
+      if (isBank || isCash) {
+        // Cash / 3a bancaire : le capital décès = le solde (revient aux proches).
         acc.deces += Number(d.soldeActuel) || 0;
       } else {
         acc.deces += computeDeathBenefitAssurance(d);
@@ -121,14 +127,19 @@ export async function POST(req: NextRequest) {
     const plans = plansSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
     const clientAge = ageFromBirthdate(profileSnap.data()?.Enter_dateNaissance);
 
-    // Mêmes sous-ensembles que le web : LPP / privé (≠ LPP) / global (tous).
+    // Sous-ensembles : LPP / privé (3e pilier, hors épargne libre) / épargne libre
+    // (cash, sa propre page) / global (tous, l'épargne libre y compte comme cash).
     const lppPlans = plans.filter((p) => p.type === "LPP_BASE");
-    const privatePlans = plans.filter((p) => p.type !== "LPP_BASE");
+    const epargneLibrePlans = plans.filter((p) => p.type === "EPARGNE_LIBRE");
+    const privatePlans = plans.filter(
+      (p) => p.type !== "LPP_BASE" && p.type !== "EPARGNE_LIBRE"
+    );
 
     return NextResponse.json({
       clientAge,
       lpp: computeTotals(lppPlans, clientAge),
       prive: computeTotals(privatePlans, clientAge),
+      epargneLibre: computeTotals(epargneLibrePlans, clientAge),
       global: computeTotals(plans, clientAge),
     });
   } catch (e: any) {

@@ -88,10 +88,17 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   const retLppAnnuelle = getVal(retProj, "LPP");
   const prestationsRetAnnuelle = retAvsAnnuelle + retLppAnnuelle;
 
+  // Inclut le 3a/3b (prévoyance privée) ET l'ÉPARGNE LIBRE (cash) : décision de
+  // compter le cash dans les lacunes (retraite + décès). L'épargne libre est
+  // exclue du fiscal (pas de déduction 3a) et de l'invalidité (pas d'assurance).
   const listePlans3a = plans.filter((p: any) => {
     const type = (p.type || "").toLowerCase();
     const isActive = p.status === "ACTIVE" || !p.status;
-    const isPrivate = type.includes("3a") || type.includes("3b") || type.includes("pilier");
+    const isPrivate =
+      type.includes("3a") ||
+      type.includes("3b") ||
+      type.includes("pilier") ||
+      type.includes("epargne");
     return isPrivate && isActive;
   });
 
@@ -107,13 +114,14 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   const garantiesSaisies3a = listePlans3a.reduce(
     (acc: { renteIG: number; capitalDeces: number }, p: any) => {
       const d = p.data || {};
-      // 3a BANCAIRE : pas une assurance → aucune rente invalidité, et le capital
-      // décès = le SOLDE de l'avoir 3a (l'épargne revient aux proches).
+      // 3a BANCAIRE / ÉPARGNE LIBRE (cash) : pas une assurance → aucune rente
+      // invalidité, et le capital décès = le SOLDE (revient aux proches).
       // 3a/3b ASSURANCE : rente invalidité + capital décès garantis saisis.
-      const isBank = String(p.type || "").toUpperCase().includes("BANK");
+      const t = String(p.type || "").toUpperCase();
+      const isCashLike = t.includes("BANK") || t.includes("EPARGNE");
       return {
-        renteIG: acc.renteIG + (isBank ? 0 : (parseAmount(d.renteInvalidite) || parseAmount(d.renteIG) || 0)),
-        capitalDeces: acc.capitalDeces + (isBank
+        renteIG: acc.renteIG + (isCashLike ? 0 : (parseAmount(d.renteInvalidite) || parseAmount(d.renteIG) || 0)),
+        capitalDeces: acc.capitalDeces + (isCashLike
           ? (parseAmount(d.soldeActuel) || 0)
           : (parseAmount(d.capitalDecesFixe) || parseAmount(d.capitalDeces) || 0)),
       };

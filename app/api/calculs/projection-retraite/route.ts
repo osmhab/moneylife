@@ -14,13 +14,14 @@ import { computeLPPProjectionRetraite } from "@/lib/calculs/lpp";
 import {
   computeProjections3aAssurance,
   computeProjections3aBanque,
+  computeProjectionsEpargneLibre,
 } from "@/lib/calculs/3epilier";
 
 // Ces routes ne doivent pas être évaluées au build (logique dynamique).
 export const dynamic = "force-dynamic";
 
 const BodySchema = z.object({
-  kind: z.enum(["lpp", "3a-assurance", "3a-banque"]),
+  kind: z.enum(["lpp", "3a-assurance", "3a-banque", "epargne-libre"]),
   clientAge: z.number().int().min(0).max(120),
   // La `data` du plan (champs lus défensivement par le moteur) : objet libre.
   data: z.record(z.string(), z.any()).default({}),
@@ -60,6 +61,9 @@ export async function POST(req: NextRequest) {
       break;
     case "3a-banque":
       capital = computeProjections3aBanque(data as never, clientAge);
+      break;
+    case "epargne-libre":
+      capital = computeProjectionsEpargneLibre(data as never, clientAge);
       break;
     default:
       return NextResponse.json({ error: "kind inconnu" }, { status: 400 });

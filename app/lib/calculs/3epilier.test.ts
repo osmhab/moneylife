@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computeProjections3aAssurance,
   computeProjections3aBanque,
+  computeProjectionsEpargneLibre,
   computeDeathBenefitAssurance,
   type Data3aAssurance,
   type Data3aBanque,
@@ -96,6 +97,31 @@ describe("computeProjections3aBanque", () => {
     };
     // r = 0.5%, n = 1, P = 1200 -> 10050 + 1200 = 11250
     expect(computeProjections3aBanque(data, 64)).toBe(11_250);
+  });
+});
+
+describe("computeProjectionsEpargneLibre (cash)", () => {
+  it("compte épargne non investi : taux 0% → solde + versements sans intérêt", () => {
+    const data: Data3aBanque = {
+      soldeActuel: 10_000, isRegulier: true, montantRegulier: 100,
+      occurrence: "mois", isInvesti: false,
+    };
+    // r = 0%, n = 1, P = 1200 -> 10000 + 1200 = 11200 (aucun intérêt, contrairement au 3a banque à 0,5%)
+    expect(computeProjectionsEpargneLibre(data, 64)).toBe(11_200);
+  });
+
+  it("investi (ETF/actions) : intérêt composé selon le profil (comme 3a investi)", () => {
+    const data: Data3aBanque = {
+      soldeActuel: 10_000, isRegulier: false, isInvesti: true, profil: "growth",
+    };
+    // r = 5%, n = 1 -> 10000 * 1.05 = 10500 (identique au 3a investi même profil)
+    expect(computeProjectionsEpargneLibre(data, 64)).toBe(10_500);
+    expect(computeProjectionsEpargneLibre(data, 64))
+      .toBe(computeProjections3aBanque(data, 64));
+  });
+
+  it("à 65 ans : pas de projection, renvoie le solde", () => {
+    expect(computeProjectionsEpargneLibre({ soldeActuel: 42_000, isRegulier: false, isInvesti: false }, 65)).toBe(42_000);
   });
 });
 

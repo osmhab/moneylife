@@ -69,6 +69,37 @@ export function computeProjections3aBanque(data: Data3aBanque, clientAge: number
 }
 
 /* -------------------------------------------------------------------------- */
+/* ÉPARGNE LIBRE (cash : compte épargne, fonds, ETF, actions)                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Taux marché actuel d'un COMPTE ÉPARGNE libre non investi.
+ * Suisse ≈ 0 % en ce moment. Constante paramétrable (à ajuster si les taux montent).
+ */
+export const EPARGNE_LIBRE_SAVINGS_RATE = 0;
+
+/**
+ * Projection retraite de l'ÉPARGNE LIBRE (comptée comme cash). Même modèle que le
+ * 3a bancaire (solde + versements réguliers), MAIS :
+ *  - compte épargne non investi → croît au taux marché ~0 % (pas 0,5 %) ;
+ *  - investi (fonds / ETF / actions) → intérêt composé selon le profil de risque
+ *    (mêmes taux que le 3a investi).
+ */
+export function computeProjectionsEpargneLibre(data: Data3aBanque, clientAge: number): number {
+  const { soldeActuel = 0, isRegulier, montantRegulier = 0, occurrence = "mois", isInvesti, profil } = data;
+  const r = isInvesti ? getRate(true, profil) : EPARGNE_LIBRE_SAVINGS_RATE;
+  const n = Math.max(0, 65 - clientAge);
+  if (n === 0) return Math.round(soldeActuel);
+
+  const isAnnuel = occurrence === "annee";
+  const P = isRegulier ? (isAnnuel ? montantRegulier : montantRegulier * 12) : 0;
+  const capExistant = soldeActuel * Math.pow(1 + r, n);
+  const epargneFuture = r <= 0 ? P * n : P * ((Math.pow(1 + r, n) - 1) / r);
+
+  return Math.round(capExistant + epargneFuture);
+}
+
+/* -------------------------------------------------------------------------- */
 /* LOGIQUE ASSURANCE                                                          */
 /* -------------------------------------------------------------------------- */
 
