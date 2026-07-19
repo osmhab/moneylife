@@ -33,7 +33,7 @@ import {
   Legal_renteLPPNonDueAt,
 } from "@/lib/rules/guards";
 import { monthlyToAnnual, annualToMonthly } from "@/lib/core/format";
-import { computeAgeOn } from "@/lib/core/dates";
+import { computeAgeOn, isEnfantRenteEligible } from "@/lib/core/dates";
 
 /* ---------- Types de sortie ---------- */
 export type DecesMaladieResult = {
@@ -75,7 +75,7 @@ export type DecesMaladieResult = {
 /** Nombre d'enfants < 18 ans à une date donnée (paiement) */
 function countChildrenUnder18At(client: ClientData, refDate: Date): number {
   const enfants = client.Enter_enfants ?? [];
-  return enfants.filter(e => computeAgeOn(e.Enter_dateNaissance, refDate) < 18).length;
+  return enfants.filter(e => isEnfantRenteEligible(e, refDate)).length;
 }
 
 /** Rente LPP du conjoint OU du partenaire (jamais les deux) */

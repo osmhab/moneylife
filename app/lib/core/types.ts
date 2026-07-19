@@ -15,6 +15,10 @@ export type Enter_StatutProfessionnel = 0 | 1 | 2;    // 0 Salarié, 1 Indépend
 export interface Enter_Enfant {
   /** "01.12.2015" (masque "dd.MM.yyyy") */
   Enter_dateNaissance: string;
+  /** Prénom (optionnel — affichage). */
+  Enter_prenom?: string;
+  /** Enfant 18–24 ans encore aux études → ouvre droit aux rentes d'orphelin/enfant (art. 25 LAVS). */
+  Enter_enFormation?: boolean;
 }
 
 /* =========================================================

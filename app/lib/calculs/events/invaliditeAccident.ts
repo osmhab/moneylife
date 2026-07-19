@@ -19,7 +19,7 @@ import { computeAiProjection } from "@/lib/calculs/avsAi";
 import { calcRenteInvaliditeLAA } from "@/lib/calculs/laa";
 import { calcRenteInvaliditeLPP, calcRenteEnfantInvaliditeLPP } from "@/lib/calculs/lpp";
 import { monthlyToAnnual, annualToMonthly } from "@/lib/core/format";
-import { computeAgeOn } from "@/lib/core/dates";
+import { isEnfantRenteEligible } from "@/lib/core/dates";
 
 /* ---------- Types de sortie ---------- */
 export type InvaliditeAccidentResult = {
@@ -74,7 +74,7 @@ export type InvaliditeAccidentResult = {
 /* ---------- Helper ---------- */
 function countChildrenUnder18At(client: ClientData, at: Date): number {
   const enfants = client.Enter_enfants ?? [];
-  return enfants.filter(e => computeAgeOn(e.Enter_dateNaissance, at) < 18).length;
+  return enfants.filter(e => isEnfantRenteEligible(e, at)).length;
 }
 
 /* =========================================================

@@ -24,7 +24,7 @@ import type { ClientData, Legal_Settings, Legal_Echelle44Row } from "@/lib/core/
 import { computeAiProjection } from "@/lib/calculs/avsAi";
 import { calcRenteInvaliditeLPP, calcRenteEnfantInvaliditeLPP } from "@/lib/calculs/lpp";
 import { monthlyToAnnual, annualToMonthly } from "@/lib/core/format";
-import { computeAgeOn } from "@/lib/core/dates";
+import { isEnfantRenteEligible } from "@/lib/core/dates";
 
 /* ---------- Types de sortie ---------- */
 
@@ -75,10 +75,10 @@ export type InvaliditeMaladieResult = {
 
 /* ---------- Helpers internes ---------- */
 
-/** Nombre d'enfants < 18 ans à la date de sinistre */
-function countChildrenUnder18At(client: ClientData, dateSinistre: Date): number {
-  const enfants = client.Enter_enfants ?? [];
-  return enfants.filter(e => computeAgeOn(e.Enter_dateNaissance, dateSinistre) < 18).length;
+/** Nombre d'enfants ouvrant droit à une rente d'enfant d'invalide à la date de sinistre
+ *  (règle unique : < 18 ans, ou < 25 en formation — cf. isEnfantRenteEligible). */
+function countChildrenEligiblesAt(client: ClientData, dateSinistre: Date): number {
+  return (client.Enter_enfants ?? []).filter((e) => isEnfantRenteEligible(e, dateSinistre)).length;
 }
 
 /* =========================================================
@@ -117,7 +117,7 @@ export function computeInvaliditeMaladie(
   const aiAdultAnnual = monthlyToAnnual(aiProj.renteAiMensuelle);
 
   // AI enfants = 40%/enfant de la rente AI adulte
-  const nbEnfantsEligibles = countChildrenUnder18At(client, dateSinistre);
+  const nbEnfantsEligibles = countChildrenEligiblesAt(client, dateSinistre);
   const aiPerChildAnnual = monthlyToAnnual(aiProj.renteAiMensuelle * 0.4);
   const aiChildrenAnnual = aiPerChildAnnual * nbEnfantsEligibles;
 

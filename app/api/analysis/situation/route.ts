@@ -8,6 +8,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase/admin";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { computeSituationAnalysis } from "@/lib/analysis/situation";
+import { computePremierPilierSnapshot } from "@/lib/analysis/premierPilier";
+import { LEGAL_2025 } from "@/lib/core/legal";
+import { Legal_Echelle44_2025 } from "@/lib/registry/echelle44";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +51,20 @@ export async function POST(req: NextRequest) {
         { error: "Analyse indisponible (profil ou projections incomplets)" },
         { status: 404 }
       );
+    }
+
+    // Snapshot 1er pilier (AVS/AI + LAA) « photo d'aujourd'hui » — calculé via le moteur
+    // sur les données perso brutes. Non bloquant : si le profil est incomplet, on laisse
+    // premierPilier absent (l'app affiche son empty state).
+    try {
+      analysis.premierPilier = computePremierPilierSnapshot(
+        (persoSnap.data() || {}) as any,
+        LEGAL_2025,
+        Legal_Echelle44_2025.rows,
+        new Date()
+      );
+    } catch {
+      /* profil incomplet → premierPilier absent */
     }
 
     return NextResponse.json({ analysis });

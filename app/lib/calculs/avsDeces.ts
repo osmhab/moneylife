@@ -198,8 +198,8 @@ export function findRenteOrphelinMensuelleParEnfant(
 
 /* =========================================================
  * Orphelins éligibles (calculés depuis Enter_enfants)
- * - Règle actuelle : enfant < 18 ans au moment du décès.
- *   (Si extension "en formation" plus tard : ajuster à <25)
+ * - Règle : enfant < 18 ans au décès, OU < 25 ans encore en formation
+ *   (aligné sur isEnfantRenteEligible — source unique).
  * =======================================================*/
 function computeNbOrphelinsEligiblesAVS(client: ClientData, deathYear: number): number {
   const kids = client.Enter_enfants ?? [];
@@ -208,7 +208,8 @@ function computeNbOrphelinsEligiblesAVS(client: ClientData, deathYear: number): 
     const y = yearFromMask(k.Enter_dateNaissance);
     if (!y) continue;
     const ageAtDeath = deathYear - y;
-    if (ageAtDeath < 18) count++;
+    // Règle unique (cf. isEnfantRenteEligible) : < 18, ou < 25 si encore en formation.
+    if (ageAtDeath < 18 || (ageAtDeath < 25 && k.Enter_enFormation === true)) count++;
   }
   return count;
 }

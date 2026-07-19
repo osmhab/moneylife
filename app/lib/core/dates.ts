@@ -100,6 +100,24 @@ export function computeAgeToday(birthMask: string | null | undefined): number {
   return computeAgeOn(birthMask, new Date());
 }
 
+/**
+ * Un enfant ouvre-t-il droit à une rente (orphelin AVS, enfant d'invalide AI/LPP)
+ * à la date `at` ? RÈGLE UNIQUE (art. 25 LAVS / 35 LAI) :
+ *   • < 18 ans → toujours ;
+ *   • 18–24 ans (< 25) → seulement s'il est encore EN FORMATION.
+ * Source unique : appelée par tous les événements du moteur (invalidité + décès)
+ * pour ne jamais diverger. `at` = « photo » à cette date (aujourd'hui pour le 1er pilier).
+ */
+export function isEnfantRenteEligible(
+  enfant: { Enter_dateNaissance?: string | null; Enter_enFormation?: boolean } | null | undefined,
+  at: Date
+): boolean {
+  if (!enfant?.Enter_dateNaissance) return false;
+  const age = computeAgeOn(enfant.Enter_dateNaissance, at);
+  if (age < 18) return true;
+  return age < 25 && enfant.Enter_enFormation === true;
+}
+
 /** Calcule l'année de début de cotisations AVS à partir de l'âge saisi (ex. 21) */
 export function computeAvsStartYearFromAge(birthMask: string, avsStartAge: number): number | null {
   const d = maskToDate(birthMask);

@@ -1,12 +1,12 @@
 /* =========================================================
  * MoneyLife — Schémas de validation (Zod)
- * Fichier : /lib/core/schema.ts
+ * Fichier : app/lib/core/schema.ts
  * ---------------------------------------------------------
  * - Vérifie la cohérence et les types des données avant
- *   écriture Firestore ou usage dans les calculs.
+ * écriture Firestore ou usage dans les calculs.
  * - Regroupe : ClientDataSchema + LegalSettingsSchema.
  * =======================================================*/
-
+//
 import { z } from "zod";
 
 /* =========================================================
@@ -29,9 +29,13 @@ const dateMaskSchema = z.string().regex(dateMaskRegex, "Format attendu : jj.mm.a
     }
   });
 
-// Enfant minimal
+// Enfant complet
 export const Enter_EnfantSchema = z.object({
+  Enter_prenom: z.string().min(1, "Prénom requis").optional().or(z.literal("")),
   Enter_dateNaissance: dateMaskSchema,
+  // Enfant de 18–24 ans encore aux études → ouvre droit aux rentes d'orphelin/enfant
+  // (art. 25 LAVS). N'est demandé/pertinent que pour cette tranche d'âge.
+  Enter_enFormation: z.boolean().optional(),
 });
 
 /* =========================================================
@@ -43,6 +47,11 @@ export const ClientDataSchema = z.object({
   Enter_nom: z.string().min(1),
   Enter_dateNaissance: dateMaskSchema,
   Enter_sexe: z.coerce.number().int().min(0).max(1),
+
+  /* -------- ADRESSE (Ajout) -------- */
+  Enter_adresse: z.string().min(1, "Rue et numéro requis").optional(),
+  Enter_npa: z.string().min(4, "NPA requis").optional(),
+  Enter_localite: z.string().min(1, "Localité requise").optional(),
 
   /* -------- État civil / conjoint -------- */
   Enter_etatCivil: z.coerce.number().int().min(0).max(5),
@@ -91,20 +100,56 @@ export const ClientDataSchema = z.object({
   Enter_CapitalPlusRenteMal: z.coerce.number().nonnegative().optional(),
   Enter_CapitalPlusRenteAcc: z.coerce.number().nonnegative().optional(),
 
-  /* -------- Vieillesse -------- */
+  /* -------- Vieillesse (Projections) -------- */
   Enter_rentevieillesseLPP65: z.coerce.number().nonnegative().optional(),
+  Enter_rentevieillesseLPP64: z.coerce.number().nonnegative().optional(),
+  Enter_rentevieillesseLPP63: z.coerce.number().nonnegative().optional(),
+  Enter_rentevieillesseLPP62: z.coerce.number().nonnegative().optional(),
+  Enter_rentevieillesseLPP61: z.coerce.number().nonnegative().optional(),
+  Enter_rentevieillesseLPP60: z.coerce.number().nonnegative().optional(),
+  Enter_rentevieillesseLPP59: z.coerce.number().nonnegative().optional(),
+  Enter_rentevieillesseLPP58: z.coerce.number().nonnegative().optional(),
 
   /* -------- Métadonnées certificat LPP -------- */
   Enter_dateCertificatLPP: dateMaskSchema.optional(),
+  Enter_numAvs: z.string().optional(),
+  Enter_tauxOccupation: z.coerce.number().min(0).max(100).optional(),
+  
+  // --- Infos Caisse & Employeur ---
+  Enter_lppCaisseNom: z.string().optional(),
+  Enter_lppCaisseAdresse: z.string().optional(),
+  Enter_lppEmployeurNom: z.string().optional(),
+  Enter_lppEmployeurAdresse: z.string().optional(),
+
+  // --- Avoirs et Libre passage ---
   Enter_avoirVieillesseObligatoire: z.coerce.number().nonnegative().optional(),
   Enter_avoirVieillesseTotal: z.coerce.number().nonnegative().optional(),
   Enter_librePassageObligatoire: z.coerce.number().nonnegative().optional(),
   Enter_librePassageTotal: z.coerce.number().nonnegative().optional(),
+  
+  // --- Prestations Capital ---
   Enter_prestationCapital65: z.coerce.number().nonnegative().optional(),
+  Enter_prestationCapital64: z.coerce.number().nonnegative().optional(),
+  Enter_prestationCapital63: z.coerce.number().nonnegative().optional(),
+  Enter_prestationCapital62: z.coerce.number().nonnegative().optional(),
+  Enter_prestationCapital61: z.coerce.number().nonnegative().optional(),
+  Enter_prestationCapital60: z.coerce.number().nonnegative().optional(),
+  Enter_prestationCapital59: z.coerce.number().nonnegative().optional(),
+  Enter_prestationCapital58: z.coerce.number().nonnegative().optional(),
+
+  // --- Capacités ---
   Enter_rachatPossible: z.coerce.number().nonnegative().optional(),
+  Enter_rachatPossibleObligatoire: z.coerce.number().nonnegative().optional(),
   Enter_versementsAnticipesLogement: z.coerce.number().nonnegative().optional(),
   Enter_eplPossibleMax: z.coerce.number().nonnegative().optional(),
   Enter_miseEnGage: z.boolean().optional(),
+
+  // --- Cotisations (Détail Budget) ---
+  Enter_lppCotisationAnnuelleTotale: z.coerce.number().nonnegative().optional(),
+  Enter_lppCotisationEpargneEmploye: z.coerce.number().nonnegative().optional(),
+  Enter_lppCotisationEpargneEmployeur: z.coerce.number().nonnegative().optional(),
+  Enter_lppCotisationRisqueFraisEmploye: z.coerce.number().nonnegative().optional(),
+  Enter_lppCotisationRisqueFraisEmployeur: z.coerce.number().nonnegative().optional(),
 })
 .superRefine((data, ctx) => {
   const ETAT_MARIE = 1, ETAT_PARTENARIAT = 3, ETAT_CONCUBINAGE = 4;
