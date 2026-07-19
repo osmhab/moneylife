@@ -19,6 +19,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
   }
 
+  // Override d'allocation retraite par plan (preview live des sliders, avant sauvegarde).
+  let allocations: Record<string, number> | undefined;
+  try {
+    const text = await req.text();
+    if (text.trim()) {
+      const body = JSON.parse(text);
+      if (body && typeof body.allocations === "object") allocations = body.allocations;
+    }
+  } catch {
+    // Corps invalide → on ignore (analyse avec les allocations stockées).
+  }
+
   try {
     const [analyseSnap, persoSnap, plansSnap] = await Promise.all([
       db.doc(`clients/${uid}/Analyse/current`).get(),
@@ -30,7 +42,7 @@ export async function POST(req: NextRequest) {
     const cloudData = { ...(analyseSnap.data() || {}), ...(persoSnap.data() || {}) };
     const plans = plansSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    const analysis = computeSituationAnalysis({ cloudData, plans });
+    const analysis = computeSituationAnalysis({ cloudData, plans, allocations });
     if (!analysis) {
       return NextResponse.json(
         { error: "Analyse indisponible (profil ou projections incomplets)" },

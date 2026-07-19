@@ -24,8 +24,11 @@ export interface SituationInput {
   cloudData: AnyObj;
   /** Plans du client. */
   plans: any[];
-  /** Part du capital 3a allouée à la retraite (0–100). */
+  /** Part du capital 3a allouée à la retraite (0–100). LEGACY (fallback global). */
   allocation3a?: number;
+  /** Override d'allocation retraite PAR PLAN (planId → 0–100), pour le preview live
+   *  des sliders avant sauvegarde. Sinon on lit `plan.data.allocationRetraite` (défaut 100). */
+  allocations?: Record<string, number>;
   /** Lissage des prestations d'invalidité (réserve les années d'excédent). */
   isSmoothingIG?: boolean;
 }
@@ -48,6 +51,17 @@ export interface RiskCard {
   layers: BenefitLayer[];
 }
 
+/** Une source de capital retraite (LPP / 3a / 3b / épargne), avec son allocation (slider). */
+export interface RetraiteSource {
+  planId: string;
+  label: string;
+  type: string;
+  /** Capital retraite de la source (LPP = rente × 25). */
+  capital: number;
+  /** Part allouée à la retraite (0–100). */
+  allocation: number;
+}
+
 export interface SituationAnalysis {
   totalScore: number;
   salaireMensuel: number;
@@ -55,6 +69,8 @@ export interface SituationAnalysis {
   retraiteBaseMensuelle: number;
   /** Capital retraite manquant (lacune annuelle × 25 − capital 3a utilisé) — pour le pricing. */
   capManquantRetraite: number;
+  /** Sources de capital retraite par plan (pour les sliders d'allocation). */
+  retraiteSources: RetraiteSource[];
   retraite: RiskCard;
   invaliditeMaladie: RiskCard;
   invaliditeAccident: RiskCard;
@@ -72,8 +88,27 @@ const PLAFOND_3A_ANNUEL = 7258;
 
 /** Calcule les lacunes + scores affichés par SituationPrevoyancePage. */
 export function computeSituationAnalysis(input: SituationInput): SituationAnalysis | null {
-  const { cloudData, plans, allocation3a = 100, isSmoothingIG = false } = input;
+  const { cloudData, plans, allocation3a = 100, allocations, isSmoothingIG = false } = input;
   if (!cloudData?.projections || !cloudData?.Enter_salaireAnnuel) return null;
+
+  // Allocation retraite effective d'un plan (0–100) : override live > valeur stockée
+  // (data.allocationRetraite) > 100 % par défaut. Bornée [0, 100].
+  const allocOf = (p: any): number => {
+    const id = p.id;
+    const override = allocations && id != null && id in allocations ? Number(allocations[id]) : undefined;
+    const stored = p?.data?.allocationRetraite;
+    const raw = override ?? (stored != null ? Number(stored) : 100);
+    return Math.max(0, Math.min(100, Number.isFinite(raw) ? raw : 100));
+  };
+  // Libellé lisible d'un plan (pour les sliders côté UI).
+  const planLabel = (p: any): string => {
+    const t = String(p.type || "").toUpperCase();
+    const inst = (p.institutionName || "").trim();
+    if (t.startsWith("LPP")) return inst || "LPP (2e pilier)";
+    if (t.includes("EPARGNE")) return inst || "Épargne libre";
+    if (t.includes("3B")) return inst ? `3b · ${inst}` : "3b";
+    return inst ? `3a · ${inst}` : "3a";
+  };
 
   const retProj = cloudData.projections.retraite;
   const invM = cloudData.projections.invalidite_maladie;
@@ -84,9 +119,8 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
 
   // ---- RETRAITE ----
   const cibleRetAnnuelle = salaireAnnuel * 0.8;
-  const retAvsAnnuelle = getVal(retProj, "AVS/AI");
+  const retAvsAnnuelle = getVal(retProj, "AVS/AI");   // rente fixe (pas de slider)
   const retLppAnnuelle = getVal(retProj, "LPP");
-  const prestationsRetAnnuelle = retAvsAnnuelle + retLppAnnuelle;
 
   // Inclut le 3a/3b (prévoyance privée) ET l'ÉPARGNE LIBRE (cash) : décision de
   // compter le cash dans les lacunes (retraite + décès). L'épargne libre est
@@ -102,16 +136,44 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
     return isPrivate && isActive;
   });
 
-  const capital3aProjeteTotal = listePlans3a.reduce((acc: number, p: any) => {
-    const d = p.data || {};
-    // Épargne libre COURT TERME (utilisée dans l'année) → pas projetable pour la
-    // retraite : on ne la compte PAS ici (elle reste comptée pour le décès + logement).
-    const t = String(p.type || "").toUpperCase();
-    if (t.includes("EPARGNE") && d.epargneHorizon === "court") return acc;
-    return acc + parseAmount(d.capitalRetraiteProjete || d.capitalRetraiteGlobal || d.soldeActuel || d.montant || 0);
-  }, 0);
+  // ── ALLOCATION RETRAITE PAR PLAN (sliders) ────────────────────────────────
+  // Chaque source a un CAPITAL retraite + un % alloué. La LPP est capitalisée
+  // (rente × 25) pour être uniforme avec les capitaux (à 100 % elle reproduit
+  // exactement la rente LPP actuelle). Chaque source → rente = capital·alloc/25/12.
+  const retraiteSources: { planId: string; label: string; type: string; capital: number; allocation: number }[] = [];
 
-  const capitalUtilise = capital3aProjeteTotal * (allocation3a / 100);
+  const lppPlans = plans.filter(
+    (p: any) => String(p.type || "").toUpperCase().startsWith("LPP") && (p.status === "ACTIVE" || !p.status)
+  );
+  let retLppEffectifAnnuel = retLppAnnuelle;
+  if (retLppAnnuelle > 0) {
+    const lppPlan = lppPlans[0];
+    const lppAlloc = lppPlan ? allocOf(lppPlan) : 100;
+    retLppEffectifAnnuel = retLppAnnuelle * (lppAlloc / 100);
+    retraiteSources.push({
+      planId: lppPlan?.id ?? "lpp",
+      label: lppPlan ? planLabel(lppPlan) : "LPP (2e pilier)",
+      type: "LPP_BASE",
+      capital: Math.round(retLppAnnuelle * 25),
+      allocation: lppAlloc,
+    });
+  }
+
+  // Capitaux privés (3a / 3b / épargne long terme) : capital × allocation.
+  let capitalUtilise = 0;
+  for (const p of listePlans3a) {
+    const d = p.data || {};
+    const t = String(p.type || "").toUpperCase();
+    // Épargne libre COURT TERME → pas projetable pour la retraite (mais reste cash décès/logement).
+    if (t.includes("EPARGNE") && d.epargneHorizon === "court") continue;
+    const capital = parseAmount(d.capitalRetraiteProjete || d.capitalRetraiteGlobal || d.soldeActuel || d.montant || 0);
+    if (capital <= 0) continue;
+    const alloc = allocOf(p);
+    capitalUtilise += capital * (alloc / 100);
+    retraiteSources.push({ planId: p.id, label: planLabel(p), type: p.type, capital: Math.round(capital), allocation: alloc });
+  }
+
+  const prestationsRetAnnuelle = retAvsAnnuelle + retLppEffectifAnnuel;
   const renteIssueDu3a = capitalUtilise / 25 / 12;
   const renteTotaleAffichee = prestationsRetAnnuelle / 12 + renteIssueDu3a;
 
@@ -262,6 +324,8 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
     salaireMensuel: salaireAnnuel / 12,
     retraiteBaseMensuelle: prestationsRetAnnuelle / 12,
     capManquantRetraite: Math.max(0, cibleRetAnnuelle - prestationsRetAnnuelle) * 25 - capitalUtilise,
+    // Sources retraite PAR PLAN (pour les sliders d'allocation côté UI).
+    retraiteSources,
     retraite: {
       besoin: cibleRetraiteMensuelle,
       couverture: renteTotaleAffichee,
@@ -269,7 +333,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
       score: scoreRetraiteLocal,
       layers: ([
         { key: "avs", label: "AVS / AI", amount: retAvsAnnuelle / 12 },
-        { key: "lpp", label: "LPP (2e pilier)", amount: retLppAnnuelle / 12 },
+        { key: "lpp", label: "LPP (2e pilier)", amount: retLppEffectifAnnuel / 12 },
         { key: "3a", label: "3e pilier", amount: renteIssueDu3a },
       ] as BenefitLayer[]).filter((l) => l.amount > 0),
     },
