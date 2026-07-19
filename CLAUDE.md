@@ -183,11 +183,28 @@ npx tsc --noEmit    # typecheck (filtrer la sortie : migration en cours = bruit 
   (`.ignoresSafeArea`) — aucune coupure haut/bas.
 
 ### 7.2 Dégradés par contexte (haut sombre → couleur)
-LPP = **bleu** · Privé = **fuchsia** · Global = **vert** · Analyse = **indigo/violet**.
+Une couleur par page du pager, dans l'ordre de navigation :
+
+| Page | Contexte | Couleur |
+|---|---|---|
+| 0 | Global / Total | **vert** |
+| 1 | **1er pilier** (AVS/AI) | **or** |
+| 2 | 2e pilier (LPP) | **bleu** |
+| 3 | 3e pilier (privé) | **fuchsia** |
+| 4 | Épargne libre | **teal** |
+| 5 | Analyse | **indigo/violet** |
 
 ### 7.3 Palette
 `blue (0, 0.48, 1)` · `fuchsia (0.85, 0.11, 0.78)` · `green (0.06, 0.72, 0.51)` ·
-`indigo (0.42, 0.36, 0.90)`. Accents risque : `rose (0.96, 0.25, 0.45)` · `orange (0.96, 0.55, 0.10)`.
+`indigo (0.42, 0.36, 0.90)` · `gold (0.90, 0.66, 0.13)` · `teal (0, 0.68, 0.72)`.
+Accents risque : `rose (0.96, 0.25, 0.45)` · `orange (0.96, 0.55, 0.10)`.
+
+**Accents d'icônes de rangée** (cartes de détails, ex. `CategoryView`) : chaque rangée reçoit une
+couleur **distincte** pour rester lisible d'un coup d'œil — d'où `amber (0.96, 0.62, 0.04)`
+(« Rente invalidité »), volontairement proche mais **différent** de l'`orange` de la rangée
+« Retrait anticipé » de la même carte. Ce n'est **pas** une dérive de `gold` (autre rôle, et
+antérieur à son introduction) : ne pas « corriger » en unifiant, cela rendrait deux icônes
+identiques dans une même carte.
 
 ### 7.4 Composants
 - **Typographie** : police **Inter** partout, via le helper `Font.inter(size, weight)` (police
