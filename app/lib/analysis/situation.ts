@@ -107,9 +107,15 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   const garantiesSaisies3a = listePlans3a.reduce(
     (acc: { renteIG: number; capitalDeces: number }, p: any) => {
       const d = p.data || {};
+      // 3a BANCAIRE : pas une assurance → aucune rente invalidité, et le capital
+      // décès = le SOLDE de l'avoir 3a (l'épargne revient aux proches).
+      // 3a/3b ASSURANCE : rente invalidité + capital décès garantis saisis.
+      const isBank = String(p.type || "").toUpperCase().includes("BANK");
       return {
-        renteIG: acc.renteIG + (parseAmount(d.renteInvalidite) || parseAmount(d.renteIG) || 0),
-        capitalDeces: acc.capitalDeces + (parseAmount(d.capitalDecesFixe) || parseAmount(d.capitalDeces) || 0),
+        renteIG: acc.renteIG + (isBank ? 0 : (parseAmount(d.renteInvalidite) || parseAmount(d.renteIG) || 0)),
+        capitalDeces: acc.capitalDeces + (isBank
+          ? (parseAmount(d.soldeActuel) || 0)
+          : (parseAmount(d.capitalDecesFixe) || parseAmount(d.capitalDeces) || 0)),
       };
     },
     { renteIG: 0, capitalDeces: 0 }
