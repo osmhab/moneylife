@@ -6,7 +6,7 @@ import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { db, storage } from "@/lib/firebase";
-import { doc, updateDoc, serverTimestamp, onSnapshot, getDoc, addDoc, collection } from "firebase/firestore"; // 👈 Ajout de addDoc et collection
+import { doc, updateDoc, serverTimestamp, onSnapshot, getDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import DocumentUploaderModal from "@/[locale]/dashboard/prevoyance/_components/DocumentUploaderModal"; // 👈 NOUVEL IMPORT
 
@@ -84,23 +84,9 @@ export default function AdminSignedPlanProcessor({ isOpen, onClose, plan, client
         "metadata.activatedAt": serverTimestamp(),
       });
       
-      // 3. Création de la NOTIFICATION In-App pour le client
-      await addDoc(collection(db, `clients/${clientUid}/notifications`), {
-        title: "Contrat activé ! 🚀",
-        content: `Votre contrat ${livePlan.institutionName} est désormais actif.`,
-        html: `
-          <p>Bonjour ${clientFirstName},</p>
-          <p>Nous avons le plaisir de vous informer que votre contrat chez <strong>${livePlan.institutionName}</strong> a été validé par la compagnie.</p>
-          <p><strong>N° de police :</strong> ${numeroPolice}</p>
-          <p>Vous pouvez retrouver votre police et vos documents définitifs dans votre espace.</p>
-        `,
-        type: "success",
-        category: "SOUSCRIPTION",
-        read: false,
-        createdAt: serverTimestamp()
-      });
-
-      // 4. Email de confirmation — BEST-EFFORT (n'invalide jamais l'activation).
+      // 3. Notification in-app + e-mail — BEST-EFFORT (n'invalide jamais l'activation).
+      //    La notification n'est plus écrite ici : la route la crée AVANT d'envoyer
+      //    l'e-mail, donc elle survit à une panne SendGrid comme avant.
       //    On passe clientUid : si l'email est absent en base, le serveur le retrouve via Auth.
       let emailSent = false;
       try {
@@ -113,6 +99,12 @@ export default function AdminSignedPlanProcessor({ isOpen, onClose, plan, client
             firstName: clientFirstName,
             institutionName: livePlan.institutionName,
             numeroPolice: numeroPolice,
+            notificationHtml: `
+              <p>Bonjour ${clientFirstName},</p>
+              <p>Nous avons le plaisir de vous informer que votre contrat chez <strong>${livePlan.institutionName}</strong> a été validé par la compagnie.</p>
+              <p><strong>N° de police :</strong> ${numeroPolice}</p>
+              <p>Vous pouvez retrouver votre police et vos documents définitifs dans votre espace.</p>
+            `,
             locale: clientLocale
           })
         });

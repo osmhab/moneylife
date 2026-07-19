@@ -530,21 +530,19 @@ export default function SubscriptionWizardDrawer({ isOpen, onClose, analysisData
         </div>
       `;
 
-      await addDoc(collection(db, `clients/${targetUid}/notifications`), {
-        title: t("notif.title"),
-        content: t("notif.content", { recommendation }), 
-        html: notificationHtml, 
-        type: "success",
-        category: "SOUSCRIPTION",
-        read: false,
-        createdAt: serverTimestamp()
-      });
-      
+      // La notification n'est plus écrite ici : la route la crée avec l'e-mail.
+      // Seul le TEXTE est traduit ici (next-intl n'existe que côté client).
       fetch('/api/send-offer-confirmation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           requestId: docRef.id,
+          clientUid: targetUid,
+          notification: {
+            title: t("notif.title"),
+            content: t("notif.content", { recommendation }),
+            html: notificationHtml,
+          },
           email: user.email,
           firstName: offerData.client.firstName,
           lastName: offerData.client.lastName,

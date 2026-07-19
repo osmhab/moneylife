@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { db } from "app/lib/firebase/admin";
 import admin from "firebase-admin";
+import { notifyClient, notifyAdmin, lookupClientName } from "@/lib/server/notify";
 
 export async function POST(req: NextRequest) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -47,14 +48,21 @@ export async function POST(req: NextRequest) {
           "metadata.reviewPaymentId": session.payment_intent,
         });
 
-        // Notification In-App
-        await db.collection("clients").doc(clientUid).collection("notifications").add({
+        // Notification In-App (client)
+        await notifyClient({
+          uid: clientUid,
           title: "Paiement validé",
           content: "Votre demande de contrôle expert a bien été transmise à nos actuaires.",
-          type: "success",
           category: "PAIEMENT",
-          read: false,
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
+          actionUrl: "/dashboard/prevoyance",
+        });
+
+        // Alerte back-office : un actuaire doit prendre le dossier. Le paiement
+        // arrive par webhook, donc AUCUN humain n'est devant un écran à ce moment.
+        await notifyAdmin("EXPERT_REVIEW_PAID", {
+          clientUid,
+          clientName: await lookupClientName(clientUid),
+          planId,
         });
       }
     }

@@ -1,6 +1,7 @@
 // app/api/send-offer-confirmation/route.ts
 import { NextResponse } from 'next/server';
 import { sendCreditXConfirmationEmail, sendCreditXAdminAlert } from 'lib/mail/creditx-mailer';
+import { notifyClient, notifyAdmin } from '@/lib/server/notify';
 
 export async function POST(request: Request) {   
   try {
@@ -20,7 +21,9 @@ export async function POST(request: Request) {
       riskProfile,
       sante,      // L'objet avec isSmoker, height, weight, healthOk
       benchmarks,
-      details // L'objet avec deces, ia, lf, company
+      details, // L'objet avec deces, ia, lf, company
+      clientUid,
+      notification // { title, content, html } — déjà traduits par le composant
     } = body;
 
     // 1. Envoi de l'email de confirmation au Client
@@ -51,6 +54,28 @@ export async function POST(request: Request) {
       sante,      // Transmis au mailer pour les blocs orange
       benchmarks, // Transmis au mailer pour le tableau des gagnants
       requestId
+    });
+
+    // 3. Notification in-app au client.
+    // Le TEXTE arrive déjà traduit du composant (next-intl vit côté client) ; c'est
+    // la CRÉATION qui est ici, pour qu'elle soit indissociable de l'e-mail.
+    await notifyClient({
+      uid: clientUid,
+      email,
+      title: notification?.title ?? "Demande de souscription reçue",
+      content:
+        notification?.content ??
+        `Votre demande pour ${recommendation ?? "votre plan"} a bien été enregistrée. Nous revenons vers vous rapidement.`,
+      html: notification?.html,
+      category: "SOUSCRIPTION",
+      actionUrl: "/dashboard/prevoyance?tab=prive",
+    });
+
+    // 4. Alerte back-office. L'e-mail admin (sendCreditXAdminAlert ci-dessus) part
+    // déjà, mais rien n'était persisté : l'inbox admin garde désormais une trace.
+    await notifyAdmin("NEW_SUBSCRIPTION_REQUEST", {
+      clientUid,
+      clientName: [firstName, lastName].filter(Boolean).join(" ") || null,
     });
 
     return NextResponse.json({ success: true });

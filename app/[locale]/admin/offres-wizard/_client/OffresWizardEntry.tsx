@@ -3,12 +3,14 @@
 
 import React, { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc, where, addDoc, serverTimestamp, deleteDoc, collectionGroup, setDoc } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc, where, serverTimestamp, deleteDoc, collectionGroup, setDoc } from "firebase/firestore";
 import { 
   Search, ChevronRight, CheckCircle2, AlertCircle,
   LayoutDashboard, User, Phone, MapPin, 
-  Stethoscope, Briefcase, X, ShieldCheck, Loader2, Plus, Trash2, Landmark, CalendarDays, Mail, Heart, Clock, FileSignature, Edit2, Users, Sparkles, FolderLock, ScanSearch, Hash, PhoneCall
+  Stethoscope, Briefcase, X, ShieldCheck, Loader2, Plus, Trash2, Landmark, CalendarDays, Mail, Heart, Clock, FileSignature, Edit2, Users, Sparkles, FolderLock, ScanSearch, Hash, PhoneCall, Bell
 } from "lucide-react"; // 👈 Ajout de ScanSearch
+import Link from "next/link";
+import { useLocale } from "next-intl";
 import { motion } from "framer-motion";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
@@ -115,7 +117,11 @@ export default function OffresWizardEntry() {
   // 👈 États pour le tunnel de conseil physique
   const [isConseilWizardOpen, setIsConseilWizardOpen] = useState(false);
 
-  
+  // Alertes back-office non lues (cf. app/[locale]/admin/notifications).
+  // La cloche vit ICI parce que c'est la page où l'équipe passe ses journées :
+  // sans elle, personne ne saurait qu'une signature ou un paiement attend.
+  const locale = useLocale();
+  const [unreadAlerts, setUnreadAlerts] = useState(0);
 
   
 
@@ -123,6 +129,19 @@ export default function OffresWizardEntry() {
   useEffect(() => {
     const q = query(collection(db, "offers_requests_3e"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snap) => setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return () => unsubscribe();
+  }, []);
+
+  // 1bis. Compteur d'alertes non lues (temps réel).
+  // On ne récupère QUE les non lues : le badge n'a pas besoin de l'historique,
+  // et la collection grossit indéfiniment.
+  useEffect(() => {
+    const q = query(collection(db, "admin_notifications"), where("read", "==", false));
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => setUnreadAlerts(snap.size),
+      (err) => console.error("[admin-alerts] listener:", err)
+    );
     return () => unsubscribe();
   }, []);
 
@@ -346,26 +365,18 @@ export default function OffresWizardEntry() {
         <p>Rendez-vous dans votre espace prévoyance pour découvrir les détails de chaque offre et valider votre choix.</p>
       `;
 
-      // 3. Envoi de la notification In-App
-      await addDoc(collection(db, `clients/${selectedReq.clientUid}/notifications`), {
-        title: "Vos offres sont prêtes",
-        content: `Vos plans personnalisés sont disponibles. Veuillez consulter les détails dans votre espace prévoyance.`,
-        html: notificationHtml,
-        type: "success",
-        category: "OFFRE",
-        actionUrl: `/dashboard/prevoyance?tab=prive`, 
-        read: false,
-        createdAt: serverTimestamp()
-      });
-
-      // 4. Appel à l'API pour envoyer l'email SendGrid
+      // 3. E-mail SendGrid + notification in-app : un SEUL appel serveur.
+      // La notification n'est plus écrite ici (navigateur) : la route s'en charge,
+      // pour que fermer l'onglet ne puisse plus envoyer l'e-mail sans la notif.
       await fetch('/api/send-offer-ready', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          clientUid: selectedReq.clientUid,
           email: selectedReq.client?.email,
           firstName: selectedReq.client?.firstName,
           locale: selectedReq.client?.locale || "fr", // 👈 NOUVEAU : On ajoute la langue ici !
+          notificationHtml,
           plans: draftPlans.map(p => ({
             institutionName: p.institutionName,
             price: p.data?.primeTotale || p.data?.montantRegulier || 0
@@ -417,7 +428,23 @@ export default function OffresWizardEntry() {
                   className="w-full bg-white border border-slate-200 rounded-full py-3 pl-10 pr-4 text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-blue-500/20 transition-all placeholder:text-slate-400"
                 />
               </div>
-              <button 
+              {/* Cloche d'alertes back-office → page dédiée.
+                  Le préfixe de locale est explicite : le projet n'a pas de
+                  middleware next-intl, un href sans locale tomberait en 404. */}
+              <Link
+                href={`/${locale}/admin/notifications`}
+                title={unreadAlerts > 0 ? `${unreadAlerts} alerte(s) non lue(s)` : "Alertes back-office"}
+                className="relative shrink-0 p-3 bg-white border border-slate-200 hover:border-blue-500 text-slate-600 hover:text-blue-600 rounded-full transition-colors shadow-sm"
+              >
+                <Bell size={18} />
+                {unreadAlerts > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black flex items-center justify-center border-2 border-white">
+                    {unreadAlerts > 99 ? "99+" : unreadAlerts}
+                  </span>
+                )}
+              </Link>
+
+              <button
                 onClick={() => setIsAddClientOpen(true)}
                 className="w-full sm:w-auto px-5 py-3 bg-slate-900 hover:bg-blue-600 text-white font-bold rounded-full flex items-center justify-center gap-2 transition-colors shadow-sm"
               >

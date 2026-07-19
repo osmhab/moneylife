@@ -2,12 +2,13 @@
 import { NextResponse } from 'next/server';
 import { sendCreditXContractActivatedEmail } from 'lib/mail/creditx-mailer';
 import { authAdmin } from '@/lib/firebase/admin';
+import { notifyClient } from '@/lib/server/notify';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     // 👈 NOUVEAU : On récupère la locale
-    let { email, firstName, institutionName, numeroPolice, locale, clientUid } = body;
+    let { email, firstName, institutionName, numeroPolice, locale, clientUid, notificationHtml } = body;
 
     if (!institutionName || !numeroPolice) {
       return NextResponse.json({ error: "Données manquantes" }, { status: 400 });
@@ -22,6 +23,20 @@ export async function POST(request: Request) {
         console.warn("Lookup email via Auth échoué :", e);
       }
     }
+
+    // Notification AVANT l'e-mail, et AVANT le garde 404 : `notifyClient` n'échoue
+    // jamais, et l'e-mail est best-effort côté appelant. Notifier après ferait perdre
+    // la notification dès que SendGrid tombe, ou dès qu'un client n'a pas d'e-mail
+    // en base — alors qu'on connaît son uid et qu'il peut très bien lire son espace.
+    await notifyClient({
+      uid: clientUid,
+      email,
+      title: "Contrat activé !",
+      content: `Votre contrat ${institutionName} est actif. Numéro de police : ${numeroPolice}.`,
+      html: notificationHtml,
+      category: "SOUSCRIPTION",
+      actionUrl: "/dashboard/prevoyance?tab=prive",
+    });
 
     if (!email) {
       return NextResponse.json({ error: "Email client introuvable" }, { status: 404 });

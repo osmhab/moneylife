@@ -441,31 +441,13 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
             planData.status = "PENDING_CLIENT"; // Retour au client
             planData.metadata.companyModification = decisionExplanation; // Historique
             
-            // Notification In-App
-            await addDoc(collection(db, `clients/${clientUid}/notifications`), {
-                title: "Mise à jour de votre offre",
-                content: `La compagnie ${institution} a apporté une modification à votre dossier.`,
-                html: `
-                  <p>Bonjour,</p>
-                  <p>Suite à l'étude de votre dossier, la compagnie <strong>${institution}</strong> a émis une nouvelle proposition.</p>
-                  <div style="background:#ffffff; padding:20px; border-radius:12px; margin:20px 0; border:1px solid #e2e8f0;">
-                    <p style="margin:0 0 10px 0; font-size:12px; font-weight:bold; color:#4A4A4A; text-transform:uppercase; letter-spacing:0.05em;">Message de votre conseiller :</p>
-                    <p style="margin:0; font-size:14px; color:#1A1A1A; font-style:italic;">"${decisionExplanation}"</p>
-                  </div>
-                  <p>Veuillez consulter votre espace pour examiner les changements et valider cette nouvelle offre.</p>
-                `,
-                type: "success",
-                category: "COMPAGNIE",
-                read: false,
-                createdAt: serverTimestamp()
-             });
-  
-             // Email SendGrid
-             fetch('/api/send-offer-modified', {
+            // E-mail + notification in-app : créés ENSEMBLE côté serveur.
+            await fetch('/api/send-offer-modified', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  email: clientInfo?.Enter_email || "Email inconnu", 
+                  clientUid,
+                  email: clientInfo?.Enter_email || "Email inconnu",
                   firstName: clientInfo?.Enter_prenom || "Client",
                   institutionName: institution,
                   newPrice: Number(primeTotale),
@@ -479,29 +461,46 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
             planData.metadata.rejectReason = "Refus Compagnie";
             planData.metadata.rejectDetails = decisionExplanation;
 
-             // Notification In-App
-             await addDoc(collection(db, `clients/${clientUid}/notifications`), {
-                title: "Dossier refusé par la compagnie",
-                content: `La compagnie ${institution} a refusé votre dossier.`,
-                html: `
-                  <p>Bonjour,</p>
-                  <p>Nous avons le regret de vous informer que la compagnie <strong>${institution}</strong> a refusé votre dossier de souscription.</p>
-                  <div style="background:#fff1f2; padding:20px; border-radius:12px; margin:20px 0; border:1px solid #fecdd3;">
-                    <p style="margin:0 0 10px 0; font-size:12px; font-weight:bold; color:#9f1239; text-transform:uppercase; letter-spacing:0.05em;">Raison évoquée :</p>
-                    <p style="margin:0; font-size:14px; color:#881337;">"${decisionExplanation}"</p>
-                  </div>
-                  <p>Votre conseiller va vous contacter rapidement pour vous proposer des solutions alternatives.</p>
-                `,
-                type: "error", // Affichera un point rouge et non vert
-                category: "COMPAGNIE",
-                read: false,
-                createdAt: serverTimestamp()
-             });
+             // Le refus envoie désormais AUSSI un e-mail (avant : notif in-app seule,
+             // donc invisible pour qui n'ouvre pas son espace).
+             await fetch('/api/send-offer-rejected', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  clientUid,
+                  email: clientInfo?.Enter_email || "Email inconnu",
+                  firstName: clientInfo?.Enter_prenom || "Client",
+                  institutionName: institution,
+                  reason: decisionExplanation,
+                  locale: clientInfo?.locale || clientInfo?.Enter_langue || "fr",
+                  notificationHtml: `
+                    <p>Bonjour,</p>
+                    <p>Nous avons le regret de vous informer que la compagnie <strong>${institution}</strong> a refusé votre dossier de souscription.</p>
+                    <div style="background:#fff1f2; padding:20px; border-radius:12px; margin:20px 0; border:1px solid #fecdd3;">
+                      <p style="margin:0 0 10px 0; font-size:12px; font-weight:bold; color:#9f1239; text-transform:uppercase; letter-spacing:0.05em;">Raison évoquée :</p>
+                      <p style="margin:0; font-size:14px; color:#881337;">"${decisionExplanation}"</p>
+                    </div>
+                    <p>Votre conseiller va vous contacter rapidement pour vous proposer des solutions alternatives.</p>
+                  `,
+                })
+             }).catch(console.error);
 
-             // Tu pourras créer une route `/api/send-offer-rejected` plus tard si besoin
         } else {
-             // Acceptation standard (ACTIVE)
-             planData.status = "ACTIVE"; 
+             // Acceptation standard (ACTIVE) — branche autrefois MUETTE
+             // (ni e-mail ni notification alors que c'est une bonne nouvelle).
+             planData.status = "ACTIVE";
+
+             await fetch('/api/send-offer-accepted', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  clientUid,
+                  email: clientInfo?.Enter_email || "Email inconnu",
+                  firstName: clientInfo?.Enter_prenom || "Client",
+                  institutionName: institution,
+                  locale: clientInfo?.locale || clientInfo?.Enter_langue || "fr",
+                })
+             }).catch(console.error);
         }
 
         await updateDoc(doc(db, `clients/${clientUid}/plans`, editingPlan.id), planData);

@@ -84,6 +84,28 @@ export default function PlanDetailsView({ plan: initialPlan, onClose, isOpen, ad
 
   const targetUid = adminUid || auth.currentUser?.uid;
 
+  /**
+   * Prévient le back-office qu'une action CLIENT attend un traitement.
+   * Volontairement ignoré quand `adminUid` est posé (admin agissant POUR le client) :
+   * le jeton porterait l'uid de l'admin — l'alerte serait attribuée au mauvais
+   * compte — et l'admin est de toute façon déjà devant le dossier.
+   * Best-effort : ne doit jamais faire échouer la signature ou le refus.
+   */
+  const notifyBackOffice = async (event: string) => {
+    if (adminUid) return;
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      await fetch("/api/notify-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ event, planId: plan.id, institutionName: plan.institutionName }),
+      });
+    } catch (e) {
+      console.error("[notify-admin] échec :", e);
+    }
+  };
+
   // Options globales traduites via useMemo
   const OPTIONS_BOOLEAN = useMemo(() => [{ id: true, label: t("options.yes") }, { id: false, label: t("options.no") }], [t]);
   const OPTIONS_PROFIL = useMemo(() => [
@@ -238,10 +260,12 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
       const updatedDocs = [...plan.documents, ...newSignedDocs];
 
       await updateDoc(doc(db, "clients", targetUid, "plans", plan.id), {
-        status: "PENDING_INSURANCE", 
+        status: "PENDING_INSURANCE",
         documents: updatedDocs,
         "metadata.acceptedAt": serverTimestamp(),
       });
+
+      await notifyBackOffice("OFFER_SIGNED_BY_CLIENT");
 
       toast.success(t("toasts.success_signed"));
       setIsSignatureOpen(false);
@@ -282,6 +306,8 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
       await updateDoc(doc(db, "clients", targetUid, "DonneePersonnelles", "current"), {
         _lastPlanUpdateTrigger: serverTimestamp()
       });
+
+      await notifyBackOffice("OFFER_REJECTED_BY_CLIENT");
 
       toast.success(t("toasts.success_reject"));
       setIsRejectModalOpen(false);
@@ -435,31 +461,23 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
                                   "metadata.reviewedBy": adminUid
                                 });
 
-                                await addDoc(collection(db, `clients/${targetUid}/notifications`), {
-                                  title: "Contrôle Expert terminé",
-                                  content: `L'analyse manuelle de votre ${isLPP ? "certificat LPP" : "contrat 3ème pilier"} (${plan.institutionName || "Institution"}) a été effectuée avec succès. Vos données sont désormais certifiées exactes par nos experts.`,
-                                  type: "success",
-                                  category: isLPP ? "LPP" : "PREVOYANCE",
-                                  actionUrl: `/dashboard/prevoyance`, 
-                                  read: false,
-                                  createdAt: serverTimestamp()
-                                });
-
                                 const clientSnap = await getDoc(doc(db, "clients", targetUid, "DonneePersonnelles", "current"));
                                 const clientData = clientSnap.exists() ? clientSnap.data() : {};
 
-                                if (clientData.Enter_email) {
-                                  await fetch("/api/send-review-completed", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                      email: clientData.Enter_email,
-                                      firstName: clientData.Enter_prenom || "Client",
-                                      institutionName: plan.institutionName,
-                                      planType: plan.type
-                                    }),
-                                  });
-                                }
+                                // Appel INCONDITIONNEL (avant : conditionné à l'e-mail).
+                                // La route crée la notification puis envoie l'e-mail ;
+                                // sans e-mail en base, le client garde sa notification.
+                                await fetch("/api/send-review-completed", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    clientUid: targetUid,
+                                    email: clientData.Enter_email,
+                                    firstName: clientData.Enter_prenom || "Client",
+                                    institutionName: plan.institutionName,
+                                    planType: plan.type
+                                  }),
+                                });
 
                                 toast.success(t("ai.toast_success"), { id: toastId });
                               } catch (e) {

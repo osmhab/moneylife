@@ -1412,6 +1412,27 @@
       "body": "Ihr Dossier wartet noch auf Ihre Bestätigung. Wir laden Sie ein, sich in Ihren persönlichen Bereich einzuloggen, um die Details Ihrer Deckungen zu überprüfen und Ihre Dokumente elektronisch zu unterschreiben, um den Vorgang abzuschließen.",
       "shell_title": "Aktion Erforderlich",
       "cta_label": "Mein Angebot prüfen"
+    },
+    "OfferRejected": {
+      "subject": "Ihr Dossier {institutionName} wurde nicht angenommen",
+      "greeting": "Guten Tag {firstName},",
+      "intro": "Wir bedauern, Ihnen mitteilen zu müssen, dass die Gesellschaft {institutionName} Ihr Antragsdossier nicht angenommen hat.",
+      "reason_title": "Angegebener Grund:",
+      "outro": "Diese Absage stellt Ihr Vorsorgeprojekt nicht in Frage. Ihr Berater meldet sich in Kürze mit passenden Alternativlösungen bei Ihnen.",
+      "shell_title": "Entscheid der Gesellschaft",
+      "cta_label": "Zu meinem Bereich"
+    },
+    "OfferAccepted": {
+      "subject": "Gute Nachricht: Ihr Dossier {institutionName} wurde angenommen",
+      "greeting": "Guten Tag {firstName},",
+      "intro": "Die Gesellschaft {institutionName} hat Ihr Antragsdossier angenommen. Ihr Vertrag ist ab sofort aktiv.",
+      "next_steps_title": "Nächste Schritte",
+      "next_1": "Ihre definitive Police erhalten Sie in den nächsten Tagen.",
+      "next_2": "Ihre Vertragsunterlagen stehen in Ihrem gesicherten Bereich bereit.",
+      "next_3": "Der erste Einzug erfolgt zum vereinbarten Termin.",
+      "outro": "Für Fragen stehen wir Ihnen gerne zur Verfügung.",
+      "shell_title": "Dossier angenommen",
+      "cta_label": "Meinen Vertrag ansehen"
     }
   },
   "Welcome": {

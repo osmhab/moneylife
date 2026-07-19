@@ -443,6 +443,86 @@ export async function sendCreditXContractActivatedEmail(params: {
   await sgMail.send({ to: params.to, from, subject, html, text: subject });
 }
 
+// ✅ 5bis) EMAIL DOSSIER REFUSÉ PAR LA COMPAGNIE
+// Comblait un vrai trou : le refus ne produisait qu'une notification in-app
+// (cf. TODO laissé dans AdminPlanGenerator), donc invisible pour un client
+// qui n'ouvre pas son espace — alors que c'est la décision la plus lourde.
+export async function sendCreditXOfferRejectedEmail(params: {
+  to: string;
+  firstName: string;
+  institutionName: string;
+  reason: string;
+  locale?: string;
+}) {
+  ensureSendgrid();
+  const from = { email: "noreply@creditx.ch", name: "CreditX" };
+  const locale = params.locale || "fr";
+  const t = await getTranslations({ locale, namespace: "Emails.OfferRejected" });
+
+  const subject = t("subject", { institutionName: params.institutionName });
+
+  const bodyHtml = `
+    <p>${t("greeting", { firstName: escapeHtml(params.firstName) })}</p>
+    <p>${t("intro", { institutionName: escapeHtml(params.institutionName) })}</p>
+
+    <div style="background:#fff1f2; padding:20px; border-radius:12px; margin:24px 0; border:1px solid #fecdd3;">
+      <p style="margin:0 0 10px 0; font-size:12px; font-weight:bold; color:#9f1239; text-transform:uppercase; letter-spacing:0.05em;">${t("reason_title")}</p>
+      <p style="margin:0; font-size:14px; color:#881337;">${escapeHtml(params.reason)}</p>
+    </div>
+
+    <p>${t("outro")}</p>
+  `;
+
+  const html = renderCreditXShell({
+    title: t("shell_title"),
+    bodyHtml,
+    ctaLabel: t("cta_label"),
+    ctaUrl: `${appUrl()}/${locale}/dashboard/prevoyance?tab=prive`,
+  });
+
+  await sgMail.send({ to: params.to, from, subject, html, text: subject });
+}
+
+// ✅ 5ter) EMAIL DOSSIER ACCEPTÉ PAR LA COMPAGNIE (passage en ACTIVE)
+// L'autre trou : la branche d'acceptation ne produisait NI e-mail NI notification.
+// Le meilleur moment du parcours était le plus silencieux.
+export async function sendCreditXOfferAcceptedEmail(params: {
+  to: string;
+  firstName: string;
+  institutionName: string;
+  locale?: string;
+}) {
+  ensureSendgrid();
+  const from = { email: "noreply@creditx.ch", name: "CreditX" };
+  const locale = params.locale || "fr";
+  const t = await getTranslations({ locale, namespace: "Emails.OfferAccepted" });
+
+  const subject = t("subject", { institutionName: params.institutionName });
+
+  const bodyHtml = `
+    <p>${t("greeting", { firstName: escapeHtml(params.firstName) })}</p>
+    <p>${t("intro", { institutionName: escapeHtml(params.institutionName) })}</p>
+
+    <h3 style="font-size:14px; color:#1A1A1A; margin-top:32px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">${t("next_steps_title")}</h3>
+    <ul style="color:#4A4A4A; line-height:1.6; margin-bottom:32px;">
+      <li>${t("next_1")}</li>
+      <li>${t("next_2")}</li>
+      <li>${t("next_3")}</li>
+    </ul>
+
+    <p>${t("outro")}</p>
+  `;
+
+  const html = renderCreditXShell({
+    title: t("shell_title"),
+    bodyHtml,
+    ctaLabel: t("cta_label"),
+    ctaUrl: `${appUrl()}/${locale}/dashboard/prevoyance?tab=prive`,
+  });
+
+  await sgMail.send({ to: params.to, from, subject, html, text: subject });
+}
+
 export async function sendCreditXReviewCompletedEmail(params: {
   to: string;
   firstName: string;

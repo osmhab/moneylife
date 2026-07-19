@@ -5,6 +5,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { TransferTemplate } from "lib/pdf/TransferTemplate";
 import { Termination3bTemplate } from "lib/pdf/Termination3bTemplate";
+import { notifyAdmin, lookupClientName } from "@/lib/server/notify";
 
 export async function POST(req: Request) {
   try {
@@ -78,6 +79,13 @@ export async function POST(req: Request) {
     }
 
     await db.collection("signing_requests").doc(token).update(updatePayload);
+
+    // La lettre signée doit être transmise à l'ancienne institution par un humain :
+    // avant, seule une ligne d'`activity` était écrite, que personne ne surveille.
+    await notifyAdmin("TRANSFER_LETTER_SIGNED", {
+      clientUid,
+      clientName: await lookupClientName(clientUid),
+    });
 
     // Log activité
     await db.collection("clients").doc(clientUid).collection("activity").add({

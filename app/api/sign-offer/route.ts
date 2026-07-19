@@ -10,6 +10,7 @@ import { requireAuth } from "@/lib/server/requireAuth";
 import { db, bucket } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { flattenSignatureOnPdf } from "@/lib/core/signature";
+import { notifyAdmin, lookupClientName } from "@/lib/server/notify";
 import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +72,15 @@ export async function POST(req: NextRequest) {
       status: "PENDING_INSURANCE",
       documents: [...documents, ...newSignedDocs],
       "metadata.acceptedAt": FieldValue.serverTimestamp(),
+    });
+
+    // Le dossier attend maintenant une transmission à la compagnie : sans cette
+    // alerte, personne côté CreditX ne l'apprend (l'admin devait surveiller l'onglet).
+    await notifyAdmin("OFFER_SIGNED_BY_CLIENT", {
+      clientUid: uid,
+      clientName: await lookupClientName(uid),
+      institutionName: plan?.institutionName ?? null,
+      planId,
     });
 
     return NextResponse.json({ ok: true, signed: newSignedDocs.length });

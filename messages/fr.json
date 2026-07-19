@@ -1412,6 +1412,27 @@
       "body": "Votre dossier est toujours en attente de validation. Nous vous invitons à vous connecter à votre espace personnel pour vérifier les détails de vos couvertures et signer électroniquement vos documents pour finaliser votre démarche.",
       "shell_title": "Action Requise",
       "cta_label": "Vérifier mon offre"
+    },
+    "OfferRejected": {
+      "subject": "Votre dossier {institutionName} n'a pas été retenu",
+      "greeting": "Bonjour {firstName},",
+      "intro": "Nous avons le regret de vous informer que la compagnie {institutionName} n'a pas retenu votre dossier de souscription.",
+      "reason_title": "Raison évoquée :",
+      "outro": "Ce refus ne remet pas en cause votre projet de prévoyance. Votre conseiller vous recontacte rapidement avec des solutions alternatives adaptées à votre situation.",
+      "shell_title": "Décision de la compagnie",
+      "cta_label": "Consulter mon espace"
+    },
+    "OfferAccepted": {
+      "subject": "Bonne nouvelle : votre dossier {institutionName} est accepté",
+      "greeting": "Bonjour {firstName},",
+      "intro": "La compagnie {institutionName} a accepté votre dossier de souscription. Votre contrat est désormais actif.",
+      "next_steps_title": "Prochaines étapes",
+      "next_1": "Votre police définitive vous parviendra sous quelques jours.",
+      "next_2": "Vos documents contractuels sont disponibles dans votre espace sécurisé.",
+      "next_3": "Le premier prélèvement interviendra selon l'échéance convenue.",
+      "outro": "Nous restons à votre disposition pour toute question.",
+      "shell_title": "Dossier accepté",
+      "cta_label": "Voir mon contrat"
     }
   },
   "Welcome": {

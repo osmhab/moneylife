@@ -1,0 +1,204 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================
+    // Helpers
+    // ===============================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function email() {
+      return isSignedIn() ? request.auth.token.email : null;
+    }
+
+    // Collaborateurs / internes MoneyLife
+    function isInternal() {
+      return isSignedIn() && (
+        request.auth.uid == "FRFN1sTxU4VjlbJXnC3wBGLoVyw2" || // UID admin
+        (email() != null && email().matches(".*@creditx\\.ch")) ||
+        (email() != null && email().matches(".*@moneylife\\.ch"))
+      );
+    }
+
+    function isOwnerUid(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Helper: lit le clientUid d'une demande offers_requests_3e
+    function requestOwnerUid(requestId) {
+      return get(/databases/$(database)/documents/offers_requests_3e/$(requestId)).data.clientUid;
+    }
+
+    // ===============================
+    // ✅ AUDIT 3A — LEADS (nouveau modèle)
+    // ===============================
+    match /audit3a_leads/{sessionId} {
+      allow read: if isInternal();
+      allow delete: if isInternal();
+      allow create, update: if false;
+    }
+
+    match /audit3a_uploads/{uploadId} {
+      allow read: if isInternal();
+      allow create, update, delete: if false;
+    }
+
+    // ===============================
+    // USERS (profil / backoffice)
+    // ===============================
+    match /users/{uid} {
+      allow read: if isOwnerUid(uid) || isInternal();
+      allow create, update: if isOwnerUid(uid);
+      allow delete: if false;
+    }
+
+    match /users/{uid}/{document=**} {
+      allow read: if isOwnerUid(uid) || isInternal();
+      allow write: if isOwnerUid(uid);
+    }
+
+    // ===============================
+    // LPP JOBS (async)
+    // ===============================
+    match /clients/{uid}/lpp_jobs/{jobId} {
+      allow read: if isOwnerUid(uid) || isInternal();
+      allow create: if isOwnerUid(uid) || isInternal();
+      allow update, delete: if false;
+    }
+
+    // ===============================
+    // CLIENTS (tout l'espace client)
+    // ===============================
+    match /clients/{uid}/{document=**} {
+      allow read, write: if isOwnerUid(uid) || isInternal();
+    }
+
+    // ===============================
+    // ANALYSES
+    // ===============================
+    match /analyses/{analysisId} {
+      allow read: if isSignedIn() && resource.data.meta.uid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.meta.uid == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.meta.uid == request.auth.uid;
+    }
+
+    // ===============================
+    // ✅ LPP LEARNINGS (Apprentissage IA)
+    // ===============================
+    match /lpp_learnings/{docId} {
+      // Autorise la création si l'utilisateur est connecté et signe la correction
+      allow create: if isSignedIn() && request.resource.data.correctedBy == request.auth.uid;
+      // Lecture et gestion réservées aux admins
+      allow read, update, delete: if isInternal();
+    }
+
+    // ===============================
+    // CONFIGURATEUR & OFFRES
+    // ===============================
+    match /configs/{configId} {
+      allow read, write: if isSignedIn() && (
+        (resource.data.uid == request.auth.uid) ||
+        (request.resource.data.uid == request.auth.uid)
+      );
+    }
+
+    match /lpp_parsed/{uid}/{docId} {
+      allow read, write: if isOwnerUid(uid);
+    }
+
+    // ===============================
+    // BACKOFFICE — DEMANDES 3e PILIER
+    // ===============================
+    match /offers_requests_3e/{requestId} {
+      // Lecture : Admin ou le propriétaire de la demande
+      allow read: if isSignedIn() && (isInternal() || resource.data.clientUid == request.auth.uid);
+      
+      // Création : Autoriser si le client le fait pour lui-même OU si c'est un collaborateur (Admin)
+      allow create: if isSignedIn() && (request.resource.data.clientUid == request.auth.uid || isInternal());
+      
+      // Update/Delete : Réservé au backoffice
+      allow update, delete: if isInternal();
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && (isInternal() || requestOwnerUid(requestId) == request.auth.uid);
+        allow write: if false;
+      }
+
+      match /client_actions/{actionId} {
+        allow read: if isSignedIn() && (isInternal() || requestOwnerUid(requestId) == request.auth.uid);
+        allow create: if isSignedIn() && requestOwnerUid(requestId) == request.auth.uid && request.resource.data.clientUid == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
+    // ===============================
+    // ✅ LEADS 3A (Simulateur Intelligence)
+    // ===============================
+    match /leads-3a/{leadId} {
+      allow read, create, update, delete: if true;
+    }
+    
+    // ===============================
+    // ✅ MODÈLES 3A (Tableaux d'offres réelles)
+    // ===============================
+    match /learner_models_3a/{modelId} {
+      // Tout utilisateur connecté peut lire les modèles pour le calcul des primes
+      allow read: if isSignedIn();
+      // Seuls les admins/internes peuvent modifier les modèles
+      allow write: if isInternal();
+    }
+
+    // ===============================
+    // ✅ REQUÊTES COLLECTION GROUP (Admin Pipeline)
+    // ===============================
+    match /{path=**}/plans/{planId} {
+      allow read: if isInternal();
+    }
+
+    // ===============================
+    // ✅ LEARNER 3A (Base de données des benchmarks)
+    // ===============================
+    match /learner-3a/{benchmarkId} {
+      // Les clients connectés ont besoin de lire ces données pour calculer leur offre
+      allow read: if isSignedIn();
+      // Seuls les collaborateurs (admins) peuvent créer, modifier ou supprimer
+      allow write: if isInternal();
+    }
+    
+    // ===============================
+    // ✅ BENCHMARKS (Le Patch d'autorisation)
+    // ===============================
+    match /benchmarks/{document=**} {
+      // Lecture requise par l'algorithme pour comparer les primes
+      allow read: if isSignedIn();
+      // Modifications réservées à l'équipe interne
+      allow write: if isInternal();
+    }
+    
+    // ===============================
+    // ✅ ALERTES BACK-OFFICE (admin_notifications)
+    // ===============================
+    // Inbox de l'équipe : « offre signée », « contrôle expert payé »…
+    // Écrites UNIQUEMENT par le serveur (Admin SDK, via app/lib/server/notify.ts),
+    // qui contourne ces règles — d'où `write: if false` pour tout le monde ici :
+    // aucun client ne doit pouvoir fabriquer une alerte, et l'admin n'a besoin
+    // que de les lire et de les marquer comme lues.
+    match /admin_notifications/{notifId} {
+      allow read: if isInternal();
+      // Seul le passage à "lu" est permis (pas de réécriture du contenu).
+      allow update: if isInternal()
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['read', 'readAt']);
+      allow create, delete: if false;
+    }
+
+    // ===============================
+    // PAR DÉFAUT
+    // ===============================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
