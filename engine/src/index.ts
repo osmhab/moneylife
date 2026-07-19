@@ -1,5 +1,5 @@
 //engine/src/index.ts
-import { onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
+import { onDocumentUpdated, onDocumentWritten, onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
 
 // Utilisation de l'alias configuré pour le moteur partagé
@@ -135,5 +135,82 @@ export const onPlanUpdate = onDocumentWritten({
     console.log(`Recalcul forcé pour l'analyse de ${uid}`);
   } catch (error) {
     console.error("Erreur lors du trigger de plan :", error);
+  }
+});
+/**
+ * Trigger : onNotificationCreated
+ *
+ * Transforme TOUTE notification in-app en PUSH sur les appareils du client.
+ *
+ * Pourquoi ici et pas dans chaque route : les notifications naissent déjà en un
+ * seul point (`app/lib/server/notify.ts` → `clients/{uid}/notifications`). En
+ * s'accrochant à la création du document, tout nouvel événement devient
+ * automatiquement un push, sans retoucher le moindre site d'appel.
+ *
+ * Les jetons d'appareil sont écrits par l'app iOS dans `clients/{uid}/devices`.
+ * Un jeton refusé par FCM (app désinstallée) est supprimé au passage : sans ce
+ * ménage, la liste grossit indéfiniment et chaque envoi paie des échecs.
+ */
+export const onNotificationCreated = onDocumentCreated({
+  document: "clients/{uid}/notifications/{notifId}",
+  region: "europe-west1"
+}, async (event) => {
+  const uid = event.params.uid;
+  const notif = event.data?.data();
+  if (!notif) return;
+
+  try {
+    const devices = await db.collection(`clients/${uid}/devices`).get();
+    const tokens = devices.docs
+      .map((d) => d.get("token") as string | undefined)
+      .filter((t): t is string => typeof t === "string" && t.length > 0);
+
+    if (tokens.length === 0) {
+      console.log(`[push] aucun appareil enregistré pour ${uid} — ignoré`);
+      return;
+    }
+
+    const response = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: {
+        title: String(notif.title ?? "CreditX"),
+        body: String(notif.content ?? ""),
+      },
+      data: {
+        // Permet à l'app d'ouvrir le bon écran au tap.
+        category: String(notif.category ?? ""),
+        actionUrl: String(notif.actionUrl ?? ""),
+        notifId: event.params.notifId,
+      },
+      apns: {
+        payload: { aps: { sound: "default", badge: 1 } },
+      },
+    });
+
+    // Purge des jetons devenus invalides.
+    const stale: string[] = [];
+    response.responses.forEach((r, i) => {
+      const code = r.error?.code;
+      if (
+        code === "messaging/registration-token-not-registered" ||
+        code === "messaging/invalid-registration-token"
+      ) {
+        stale.push(tokens[i]);
+      }
+    });
+
+    if (stale.length > 0) {
+      const batch = db.batch();
+      devices.docs
+        .filter((d) => stale.includes(d.get("token")))
+        .forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      console.log(`[push] ${stale.length} jeton(s) périmé(s) purgé(s) pour ${uid}`);
+    }
+
+    console.log(`[push] ${uid} : ${response.successCount}/${tokens.length} envoyé(s)`);
+  } catch (error) {
+    // Non bloquant : un push raté ne doit pas faire échouer le trigger.
+    console.error("[push] échec d'envoi :", error);
   }
 });
