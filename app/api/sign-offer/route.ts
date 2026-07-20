@@ -11,6 +11,7 @@ import { db, bucket } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { flattenSignatureOnPdf } from "@/lib/core/signature";
 import { notifyAdmin, lookupClientName } from "@/lib/server/notify";
+import { isOfferExpired } from "@/lib/core/offerExpiry";
 import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,28 @@ export async function POST(req: NextRequest) {
     const plan = snap.data() as any;
     if (plan.status !== "PENDING_CLIENT") {
       return NextResponse.json({ error: "Cette offre n'est pas en attente de signature." }, { status: 409 });
+    }
+
+    // Verrou d'EXPIRATION. Sans lui, une offre de mars serait signée aujourd'hui
+    // aux conditions de mars — les primes et l'acceptation du risque ne valent
+    // que pour une durée limitée.
+    // Le contrôle est fait SERVEUR : l'app peut masquer le bouton, elle ne peut
+    // pas garantir qu'aucune requête ne sera forgée.
+    if (isOfferExpired(plan.metadata?.offerExpiresAt)) {
+      // On pose l'état terminal au passage : le client qui tente de signer une
+      // offre périmée doit voir son dossier refléter la réalité immédiatement,
+      // sans attendre le passage du cron.
+      await planRef.update({
+        status: "EXPIRED",
+        "metadata.expiredAt": FieldValue.serverTimestamp(),
+      });
+      return NextResponse.json(
+        {
+          error: "Cette offre a expiré et ne peut plus être signée. Contactez votre conseiller pour en obtenir une nouvelle.",
+          expired: true,
+        },
+        { status: 410 } // 410 Gone : la ressource a existé, elle ne reviendra pas.
+      );
     }
 
     const documents: any[] = plan.documents || [];

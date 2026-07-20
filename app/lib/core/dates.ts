@@ -55,6 +55,45 @@ export function maskToDate(mask: string): Date | null {
   return new Date(Number(yyyy), Number(mm) - 1, Number(dd));
 }
 
+/**
+ * Parse une date dans les DEUX formats qui circulent dans l'app :
+ *  - "jj.mm.aaaa" — saisies des formulaires (masque suisse) ;
+ *  - "aaaa-mm-jj" — sorties de l'extraction IA et des `<input type="date">`.
+ *
+ * Nécessaire parce qu'une même donnée (date d'échéance d'une police) arrive
+ * tantôt d'un scan, tantôt d'un formulaire : `maskToDate` seul en perdrait la
+ * moitié en silence, ce qui ferait retomber le calcul sur son hypothèse par
+ * défaut sans que rien ne le signale.
+ *
+ * Renvoie `null` si la chaîne n'est ni l'un ni l'autre, ou si la date n'existe
+ * pas (31.02 par exemple).
+ */
+export function parseFlexibleDate(input: string | null | undefined): Date | null {
+  if (!input) return null;
+  const s = String(input).trim();
+  if (!s) return null;
+
+  let y: number, m: number, d: number;
+
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const mask = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+
+  if (iso) {
+    [, y, m, d] = iso.map(Number) as unknown as [unknown, number, number, number];
+  } else if (mask) {
+    [, d, m, y] = mask.map(Number) as unknown as [unknown, number, number, number];
+  } else {
+    return null;
+  }
+
+  const date = new Date(y, m - 1, d);
+  // Contrôle de cohérence : `new Date(2026, 1, 31)` glisse au 3 mars sans erreur.
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) {
+    return null;
+  }
+  return date;
+}
+
 /** Date -> "dd.MM.yyyy" */
 export function dateToMask(d: Date | null | undefined): string {
   if (!d || Number.isNaN(d.getTime())) return "";

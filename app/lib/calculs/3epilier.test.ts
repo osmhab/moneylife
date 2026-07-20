@@ -4,6 +4,7 @@ import {
   computeProjections3aBanque,
   computeProjectionsEpargneLibre,
   computeDeathBenefitAssurance,
+  yearsToMaturity,
   type Data3aAssurance,
   type Data3aBanque,
 } from "./3epilier";
@@ -149,5 +150,69 @@ describe("computeDeathBenefitAssurance", () => {
   it("sans capital fixe ni date de début → retourne l'épargne", () => {
     const data = makeAssurance({ valeurRachatActuelle: 5_000 });
     expect(computeDeathBenefitAssurance(data)).toBe(5_000);
+  });
+});
+
+describe("yearsToMaturity — horizon de capitalisation", () => {
+  const AT = new Date("2026-07-20T12:00:00Z");
+
+  it("retombe sur 65 - âge quand l'échéance est absente", () => {
+    // NON-RÉGRESSION : les plans déjà en base n'ont pas ce champ, leur
+    // résultat ne doit pas bouger d'un franc.
+    expect(yearsToMaturity(undefined, 40, AT)).toBe(25);
+    expect(yearsToMaturity(null, 30, AT)).toBe(35);
+    expect(yearsToMaturity("", 50, AT)).toBe(15);
+  });
+
+  it("retombe aussi sur 65 - âge si la date est illisible", () => {
+    // Une date invalide ne doit pas produire un horizon nul (capital ecrasé),
+    // mais se comporter comme une date absente.
+    expect(yearsToMaturity("pas une date", 40, AT)).toBe(25);
+    expect(yearsToMaturity("31.02.2030", 40, AT)).toBe(25); // 31 février
+  });
+
+  it("accepte les DEUX formats de date qui circulent dans l'app", () => {
+    const iso = yearsToMaturity("2036-07-20", 40, AT);
+    const mask = yearsToMaturity("20.07.2036", 40, AT);
+    expect(iso).toBeCloseTo(10, 1);
+    expect(mask).toBeCloseTo(10, 1);
+    expect(iso).toBeCloseTo(mask, 5);
+  });
+
+  it("prime sur l'hypothèse des 65 ans", () => {
+    // Client de 40 ans dont la police échoit dans 5 ans : 5, pas 25.
+    expect(yearsToMaturity("20.07.2031", 40, AT)).toBeCloseTo(5, 1);
+  });
+
+  it("ne renvoie jamais de valeur négative sur une échéance passée", () => {
+    expect(yearsToMaturity("20.07.2020", 40, AT)).toBe(0);
+  });
+});
+
+describe("computeProjections3aAssurance — effet de la date d'échéance", () => {
+  it("projette moins loin quand la police échoit avant 65 ans", () => {
+    const base = { valeurRachatActuelle: 50_000, primeEpargne: 500, occurrence: "mois" as const };
+    const sans = computeProjections3aAssurance(makeAssurance(base), 40);
+    const avec = computeProjections3aAssurance(
+      makeAssurance({ ...base, dateEcheance: `20.07.${new Date().getFullYear() + 5}` }),
+      40
+    );
+    // Avant le correctif, les deux renvoyaient la MÊME valeur (25 ans d'horizon)
+    // et le capital d'une police échéant à 45 ans était largement surévalué.
+    expect(avec).toBeLessThan(sans);
+  });
+
+  it("laisse l'override projectionAssureur prioritaire malgré l'échéance", () => {
+    // La règle §2.3 de CLAUDE.md ne doit pas être affaiblie par ce changement.
+    const p = computeProjections3aAssurance(
+      makeAssurance({
+        projectionAssureur: 123_456,
+        valeurRachatActuelle: 50_000,
+        primeEpargne: 500,
+        dateEcheance: "20.07.2031",
+      }),
+      40
+    );
+    expect(p).toBe(123_456);
   });
 });

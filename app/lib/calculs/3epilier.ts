@@ -1,5 +1,7 @@
 // app/lib/calculs/3epilier.ts
 
+import { parseFlexibleDate } from "@/lib/core/dates";
+
 /**
  * Interface pour les données brutes issues du formulaire 3a Banque
  */
@@ -34,6 +36,40 @@ export interface Data3aAssurance extends Data3aBanque {
    * Si > 0, elle PRIME sur la projection calculée automatiquement.
    */
   projectionAssureur?: number;
+  /**
+   * Date d'ÉCHÉANCE de la police ("jj.mm.aaaa" ou "aaaa-mm-jj").
+   * Toute police 3a/3b en a une ; elle figure sur le contrat.
+   * Détermine l'horizon de projection — cf. `yearsToMaturity`.
+   */
+  dateEcheance?: string;
+}
+
+/**
+ * Nombre d'ANNÉES restantes à capitaliser.
+ *
+ * Historiquement le moteur postulait `65 - âge` pour TOUTE police : une police
+ * échéant à 60 ou 62 ans — cas courant — se voyait donc créditer des années de
+ * primes qui n'existeront jamais, et le capital projeté était surévalué.
+ *
+ * On utilise désormais la date d'échéance RÉELLE dès qu'elle est connue.
+ * En son absence, on retombe sur l'ancienne hypothèse : les milliers de plans
+ * déjà en base n'ont pas ce champ, leur résultat ne doit pas bouger.
+ *
+ * Note : avec une échéance, l'horizon est FRACTIONNAIRE (2.4 ans) là où le repli
+ * reste entier. C'est volontaire — une échéance dans 5 mois ne doit pas être
+ * arrondie à zéro ni à un an.
+ */
+export function yearsToMaturity(
+  dateEcheance: string | null | undefined,
+  clientAge: number,
+  at: Date = new Date()
+): number {
+  const end = parseFlexibleDate(dateEcheance);
+  if (end) {
+    const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
+    return Math.max(0, (end.getTime() - at.getTime()) / MS_PER_YEAR);
+  }
+  return Math.max(0, 65 - clientAge);
 }
 
 /**
@@ -123,7 +159,8 @@ export function computeProjections3aAssurance(data: Data3aAssurance, clientAge: 
 
   const { valeurRachatActuelle = 0, primeEpargne = 0, occurrence = "mois", isInvesti, profil, isLibere } = data;
   const r = getRate(isInvesti, profil);
-  const n = Math.max(0, 65 - clientAge);
+  // Horizon = échéance réelle de la police si connue, sinon 65 ans (cf. yearsToMaturity).
+  const n = yearsToMaturity(data.dateEcheance, clientAge);
   if (n === 0) return Math.round(valeurRachatActuelle);
 
   const isAnnuel = occurrence === "annee";

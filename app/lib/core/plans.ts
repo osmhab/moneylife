@@ -35,6 +35,15 @@ export const PlanSchema = z.object({
     updatedAt: z.date(),
     sourceFileUrl: z.string().optional(),
     isManualEntry: z.boolean().default(false),
+    /**
+     * Date limite de signature de l'OFFRE ("aaaa-mm-jj" ou "jj.mm.aaaa"),
+     * posée à la main par l'admin. Au-delà, le statut passe à EXPIRED et
+     * l'offre n'est plus signable — état TERMINAL (cf. offerExpiry.ts).
+     * Absente sur les contrats et sur les offres antérieures à ce champ.
+     */
+    offerExpiresAt: z.string().optional(),
+    /** Horodatage du passage effectif à EXPIRED. */
+    expiredAt: z.any().optional(),
   })
 });
 

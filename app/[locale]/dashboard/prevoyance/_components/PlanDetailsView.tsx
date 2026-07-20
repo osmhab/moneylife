@@ -17,6 +17,7 @@ import { auth, db, storage } from "@/lib/firebase/index"; // 👈 Alias
 import { doc, onSnapshot, updateDoc, serverTimestamp, deleteDoc, getDoc, collection, addDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "sonner";
+import { isOfferExpired } from "@/lib/core/offerExpiry";
 import { parseMoneyToNumber } from "@/lib/core/format"; // 👈 Alias
 import { normalizeDateMask } from "@/lib/core/dates"; // 👈 Alias
 import { computeProjections3aBanque, computeProjections3aAssurance, computeDeathBenefitAssurance } from "@/lib/calculs/3epilier";
@@ -225,6 +226,21 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
 
   const processSignature = async (base64Signature: string) => {
     if (!targetUid || !plan.id || !plan.documents) return;
+
+    // Verrou d'expiration. ATTENTION à sa portée : ce chemin écrit directement
+    // dans Firestore (pas de route serveur), donc ce contrôle protège le cas
+    // honnête — un client qui revient trop tard — mais ne constitue PAS une
+    // garantie côté serveur, contrairement à /api/sign-offer utilisé par l'iOS.
+    if (isOfferExpired(plan.metadata?.offerExpiresAt)) {
+      await updateDoc(doc(db, "clients", targetUid, "plans", plan.id), {
+        status: "EXPIRED",
+        "metadata.expiredAt": serverTimestamp(),
+      });
+      toast.error(t("toasts.err_sign_expired"));
+      setIsSignatureOpen(false);
+      onClose();
+      return;
+    }
 
     setLoadingSignature(true);
     try {
@@ -784,6 +800,9 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
                   <div className="bg-white rounded-[32px] overflow-hidden shadow-sm border border-slate-50">
                     <DetailRow icon={<ShieldCheck />} label={t("labels.contract_type")} value={d.typeContrat?.toUpperCase()} onClick={getEditAction(t("labels.contract_type"), d.typeContrat, "data.typeContrat", "select", OPTIONS_TYPE_CONTRAT)} mandatory />
                     <DetailRow icon={<Calendar />} label={t("labels.start_date")} value={formatDateDisplay(d.dateDebut)} onClick={getEditAction(t("labels.start_date"), d.dateDebut, "data.dateDebut")} mandatory />
+                    {/* Échéance : pilote l'horizon de projection (yearsToMaturity).
+                        Marquée obligatoire — sans elle le moteur suppose 65 ans. */}
+                    <DetailRow icon={<Calendar />} label={t("labels.end_date")} value={formatDateDisplay(d.dateEcheance)} onClick={getEditAction(t("labels.end_date"), d.dateEcheance, "data.dateEcheance")} mandatory />
                     <DetailRow icon={<Wallet />} label={t("labels.total_premium")} value={formatCHF(d.primeTotale)} sub={d.occurrence === 'mois' ? t("options.monthly") : t("options.yearly")} onClick={getEditAction(t("labels.total_premium"), d.primeTotale, "data.primeTotale")} mandatory />
                     <DetailRow icon={<History />} label={t("labels.frequency")} value={d.occurrence === 'annee' ? t("options.yearly") : t("options.monthly")} onClick={getEditAction(t("labels.frequency"), d.occurrence, "data.occurrence", "select", OPTIONS_FREQUENCE)} />
                     <DetailRow icon={<Coins />} label={t("labels.savings_part")} value={formatCHF(d.primeEpargne)} onClick={getEditAction(t("labels.savings_part"), d.primeEpargne, "data.primeEpargne")} />

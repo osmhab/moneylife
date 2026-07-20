@@ -28,6 +28,14 @@ export async function POST(req: NextRequest) {
 
     RÈGLES D'EXTRACTION CRITIQUES :
     1. dateDebut : Cherche "Début de l'assurance" ou "valable dès le". Format attendu: YYYY-MM-DD.
+    1bis. dateEcheance : Date de FIN du contrat. Cherche "Échéance", "Fin de l'assurance",
+       "Expiration", "jusqu'au", "Ablauf", "Vertragsende". Format attendu: YYYY-MM-DD.
+       - Toute police 3a/3b en possède une : cherche-la activement, elle est souvent
+         dans le même bloc que la date de début.
+       - Si SEUL un âge terminal est indiqué (ex: "jusqu'à l'âge de 65 ans") sans date
+         explicite, inscris "" (chaîne vide) — ne fabrique JAMAIS une date à partir d'un âge,
+         nous n'avons pas la date de naissance ici.
+       - NE PAS confondre avec la date d'échéance d'une PRIME (échéance de paiement).
     2. capitalDecesFixe : Extraire UNIQUEMENT si un montant CHF fixe est mentionné (ex: "Capital garanti CHF 74'151"). 
        - Si le capital décès est une formule (ex: "Primes + 10%" ou "Contre-valeur des parts"), inscris 0.
     3. RÈGLES PROFIL DE RISQUE : Analyse la part "Rendement/Fonds" vs "Sécurité/Intérêt fixe".
@@ -49,6 +57,7 @@ export async function POST(req: NextRequest) {
     - compagnie (string)
     - typeContrat ("3a" ou "3b")
     - dateDebut (string: YYYY-MM-DD)
+    - dateEcheance (string: YYYY-MM-DD, "" si absente)
     - primeTotale (number)
     - primeEpargne (number: prime totale moins frais de risque/incapacité)
     - occurrence ("mois" ou "annee")

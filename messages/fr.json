@@ -521,6 +521,7 @@
       "institution": "Institution / Compagnie",
       "contract_type": "Type de contrat",
       "start_date": "Date de début",
+      "end_date": "Date d'échéance",
       "total_premium": "Prime Totale",
       "frequency": "Fréquence",
       "savings_part": "Part Épargne",
@@ -649,7 +650,8 @@
       "del_not_found": "Impossible de supprimer : ce document n'existe pas en base.",
       "del_err": "Erreur technique lors de la suppression.",
       "exp_loading": "Création de la session sécurisée...",
-      "exp_err_start": "Impossible de démarrer le paiement."
+      "exp_err_start": "Impossible de démarrer le paiement.",
+      "err_sign_expired": "Cette offre a expiré et ne peut plus être signée. Contactez votre conseiller pour en obtenir une nouvelle."
     }
   },
   "ProfileDrawer": {
@@ -960,6 +962,7 @@
     "lbl_company": "Compagnie d'assurance",
     "ph_company": "ex: Swiss Life, AXA...",
     "lbl_start_date": "Date de début du contrat",
+    "lbl_end_date": "Date d'échéance du contrat",
     "lbl_frequency": "Fréquence de versement",
     "opt_monthly": "Mensuel",
     "opt_yearly": "Annuel",
@@ -1433,6 +1436,43 @@
       "outro": "Nous restons à votre disposition pour toute question.",
       "shell_title": "Dossier accepté",
       "cta_label": "Voir mon contrat"
+    },
+    "OfferExpiring": {
+      "subject": "Il vous reste {days} jours pour activer votre offre {institutionName}",
+      "subject_urgent": "Dernier jour pour signer votre offre {institutionName}",
+      "greeting": "Bonjour {firstName},",
+      "intro": "Votre offre {institutionName} vous attend toujours dans votre espace sécurisé.",
+      "deadline_title": "Date limite de signature",
+      "days_left": "{days} jours restants",
+      "last_day": "C'est le dernier jour",
+      "warning": "Passé cette date, l'offre ne pourra plus être signée : les conditions et le tarif ont été calculés pour une durée limitée. Il faudra alors refaire une demande complète.",
+      "outro": "La signature se fait en ligne, en quelques minutes, depuis votre espace.",
+      "shell_title": "Votre offre expire bientôt",
+      "cta_label": "Signer mon offre"
+    },
+    "OfferExpired": {
+      "subject": "Votre offre {institutionName} a expiré",
+      "greeting": "Bonjour {firstName},",
+      "intro": "Votre offre {institutionName} est arrivée à expiration le {date} sans avoir été signée. Elle n'est donc plus activable.",
+      "why_title": "Pourquoi une offre expire",
+      "why": "Le tarif et les conditions d'acceptation d'un assureur sont valables pour une durée déterminée. Au-delà, ils doivent être recalculés.",
+      "outro": "Rien n'est perdu : nous pouvons vous préparer une nouvelle offre sur les mêmes bases. Un simple message suffit.",
+      "shell_title": "Offre expirée",
+      "cta_label": "Demander une nouvelle offre"
+    },
+    "ContractMaturity": {
+      "subject": "Votre contrat {institutionName} arrive à échéance",
+      "greeting": "Bonjour {firstName},",
+      "intro": "Votre contrat {institutionName} arrive à échéance le {date}.",
+      "capital_title": "Capital prévu au terme",
+      "capital_note": "Montant indicatif, susceptible de varier légèrement selon la date exacte du décompte final.",
+      "tax_title": "Et l'impôt sur ce versement ?",
+      "tax_body": "Un versement en capital de prévoyance est imposé SÉPARÉMENT de vos autres revenus, à un taux réduit. Le montant dépend de votre canton de domicile, de la somme versée et de votre situation familiale. Nous pouvons l'estimer avec vous.",
+      "no_capital_title": "Fin de votre couverture",
+      "no_capital_body": "Aucun capital n'est prévu à cette échéance : c'est votre COUVERTURE d'assurance qui prend fin. Sans nouvelle solution, vous ne serez plus couvert au-delà de cette date.",
+      "outro": "Prenons quelques minutes au téléphone pour préparer la suite sereinement.",
+      "shell_title": "Échéance de votre contrat",
+      "cta_label": "Organiser un appel"
     }
   },
   "Welcome": {

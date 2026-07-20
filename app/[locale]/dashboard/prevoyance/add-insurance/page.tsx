@@ -60,6 +60,7 @@ export function AddInsurancePlanView({ onClose, adminUid }: { onClose: () => voi
     typeContrat: "3a" as "3a" | "3b", 
     compagnie: "",
     dateDebut: "", 
+    dateEcheance: "",
     primeTotale: 0,
     primeEpargne: 0,
     occurrence: "mois" as "mois" | "annee",
@@ -203,6 +204,7 @@ export function AddInsurancePlanView({ onClose, adminUid }: { onClose: () => voi
           ...prev,
           compagnie: scannedData.compagnie || prev.compagnie,
           dateDebut: scannedData.dateDebut || prev.dateDebut,
+          dateEcheance: scannedData.dateEcheance || prev.dateEcheance,
           typeContrat: scannedData.typeContrat || prev.typeContrat,
           primeTotale: Number(scannedData.primeTotale) || prev.primeTotale,
           primeEpargne: Number(scannedData.primeEpargne) || prev.primeEpargne,
@@ -415,6 +417,15 @@ export function AddInsurancePlanView({ onClose, adminUid }: { onClose: () => voi
                     type="date" 
                     value={formData.dateDebut} 
                     onChange={(v: string) => setFormData({...formData, dateDebut: v})} 
+                />
+
+                {/* Échéance : détermine l'horizon de projection du capital
+                    (cf. yearsToMaturity). Sans elle, le moteur suppose 65 ans. */}
+                <InputGroup
+                    label={t("lbl_end_date")}
+                    type="date"
+                    value={formData.dateEcheance}
+                    onChange={(v: string) => setFormData({...formData, dateEcheance: v})}
                 />
                             
                 {!formData.isLibere && (

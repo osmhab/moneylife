@@ -71,6 +71,12 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
   const [primeTotale, setPrimeTotale] = useState("");
   const [occurrence, setOccurrence] = useState<"mois" | "annee">("mois");
   const [dateDebut, setDateDebut] = useState("");
+  // Echeance de la POLICE (fin du contrat) — a ne pas confondre avec
+  // l'expiration de l'OFFRE, qui est une mecanique de dossier.
+  const [dateEcheance, setDateEcheance] = useState("");
+  // Expiration de l'OFFRE : toujours fixee A LA MAIN, jamais de valeur par defaut.
+  // Au-dela, l'offre n'est plus signable (statut EXPIRED, irreversible).
+  const [offerExpiresAt, setOfferExpiresAt] = useState("");
   const [isEnGage, setIsEnGage] = useState(false);
   const [isInvesti, setIsInvesti] = useState(false);
   const [profil, setProfil] = useState("equilibre");
@@ -164,6 +170,8 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
         setIsRegulier(d.isRegulier ?? true);
       } else {
         setDateDebut(d.dateDebut || "");
+        setDateEcheance(d.dateEcheance || "");
+        setOfferExpiresAt(editingPlan?.metadata?.offerExpiresAt || "");
         setPrimeEpargne(d.primeEpargne?.toString() || "");
         setValeurRachatActuelle(d.valeurRachatActuelle?.toString() || "");
         setIsLibere(d.isLibere || false);
@@ -381,6 +389,15 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
   const handleSavePlan = async () => {
     if (!institution) return toast.error("Institution requise");
     if (!primeTotale && !isLibere) return toast.error("Prime requise");
+
+    // L'expiration est OBLIGATOIRE dès que l'offre part chez le client, et
+    // jamais posée par défaut : c'est une décision commerciale, pas un réglage.
+    // Exclu pour « signé en direct » (PENDING_INSURANCE), où le client n'a
+    // aucune action à faire, et à l'édition d'un contrat déjà actif.
+    const partiraAuClient = !directSign && (!editingPlan || editingPlan.status === "PENDING_CLIENT");
+    if (partiraAuClient && !offerExpiresAt) {
+      return toast.error("Date d'expiration de l'offre requise — le client ne pourra plus signer après cette date.");
+    }
     
     // Validation explication requise
     if (editingPlan && decisionMode !== "accept" && !decisionExplanation.trim()) {
@@ -409,6 +426,7 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
         capitalRetraiteProjete: Number(capitalRetraiteProjete),
       } : {
         dateDebut: dateDebut || startDate, // 👈 On prend l'une ou l'autre
+        dateEcheance, // fin du contrat — pilote l'horizon de projection
         primeTotale: Number(primeTotale),
         primeEpargne: Number(primeEpargne),
         capitalRetraiteProjete: Number(capitalRetraiteProjete), 
@@ -431,6 +449,8 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
         metadata: {
           updatedAt: serverTimestamp(),
           adminOp: true,
+          // Expiration de l'offre : au-delà, plus signable (cf. offerExpiry.ts).
+          ...(offerExpiresAt ? { offerExpiresAt } : {}),
           ...(editingPlan?.metadata?.createdAt ? { createdAt: editingPlan.metadata.createdAt } : {})
         }
       };
@@ -687,6 +707,22 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
                   )}
 
                   <InputGroup label="Date de début" type="date" value={planType === 'assurance' ? dateDebut : startDate} onChange={planType === 'assurance' ? setDateDebut : setStartDate} icon={<CalendarDays size={18}/>} />
+
+                  {planType === 'assurance' && (
+                    <InputGroup label="Date d'échéance du contrat" type="date" value={dateEcheance} onChange={setDateEcheance} icon={<CalendarDays size={18}/>} />
+                  )}
+
+                  {/* Expiration de l'OFFRE — distincte de l'échéance du contrat.
+                      Masquée en « signé en direct » : le client n'a rien à signer. */}
+                  {!directSign && (
+                    <div>
+                      <InputGroup label="Expiration de l'offre (obligatoire)" type="date" value={offerExpiresAt} onChange={setOfferExpiresAt} icon={<CalendarDays size={18}/>} />
+                      <p className="text-[10px] font-bold text-slate-400 mt-1.5 ml-5 leading-snug">
+                        Passé cette date, le client ne peut plus signer. L&apos;offre est verrouillée
+                        définitivement — il faudra en refaire une.
+                      </p>
+                    </div>
+                  )}
                   
                   <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <span className="text-[11px] font-black text-slate-400 uppercase">Mise en gage (Nantissement)</span>

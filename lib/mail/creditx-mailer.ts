@@ -443,6 +443,156 @@ export async function sendCreditXContractActivatedEmail(params: {
   await sgMail.send({ to: params.to, from, subject, html, text: subject });
 }
 
+/* ==========================================================================
+ * RAPPELS AUTOMATIQUES (cron/reminders) — offres et échéances de contrat
+ * ========================================================================*/
+
+// ⏳ EMAIL « VOTRE OFFRE EXPIRE BIENTÔT » — jalons J-30/15/7/3/1
+export async function sendCreditXOfferExpiringEmail(params: {
+  to: string;
+  firstName: string;
+  institutionName: string;
+  daysLeft: number;
+  expiryDate: string; // déjà formatée "jj.mm.aaaa"
+  locale?: string;
+}) {
+  ensureSendgrid();
+  const from = { email: "noreply@creditx.ch", name: "CreditX" };
+  const locale = params.locale || "fr";
+  const t = await getTranslations({ locale, namespace: "Emails.OfferExpiring" });
+
+  // Le dernier jour mérite son propre objet : « il vous reste 1 jours » sonne
+  // faux, et l'urgence doit se lire dans la boîte de réception, pas au clic.
+  const urgent = params.daysLeft <= 1;
+  const subject = urgent
+    ? t("subject_urgent", { institutionName: params.institutionName })
+    : t("subject", { days: params.daysLeft, institutionName: params.institutionName });
+
+  const bodyHtml = `
+    <p>${t("greeting", { firstName: escapeHtml(params.firstName) })}</p>
+    <p>${t("intro", { institutionName: escapeHtml(params.institutionName) })}</p>
+
+    <div style="background:${urgent ? "#fff1f2" : "#fff7ed"}; padding:24px; border-radius:12px; margin:32px 0; border:1px solid ${urgent ? "#fecdd3" : "#ffedd5"};">
+      <h3 style="margin:0 0 10px 0; font-size:12px; text-transform:uppercase; color:${urgent ? "#9f1239" : "#c2410c"}; letter-spacing:0.05em;">${t("deadline_title")}</h3>
+      <p style="font-size:24px; font-weight:900; color:#1A1A1A; margin:0;">${escapeHtml(params.expiryDate)}</p>
+      <p style="font-size:14px; font-weight:bold; color:${urgent ? "#9f1239" : "#c2410c"}; margin:6px 0 0 0;">
+        ${urgent ? t("last_day") : t("days_left", { days: params.daysLeft })}
+      </p>
+    </div>
+
+    <p>${t("warning")}</p>
+    <p>${t("outro")}</p>
+  `;
+
+  const html = renderCreditXShell({
+    title: t("shell_title"),
+    bodyHtml,
+    ctaLabel: t("cta_label"),
+    ctaUrl: `${appUrl()}/${locale}/dashboard/prevoyance?tab=prive`,
+  });
+
+  await sgMail.send({ to: params.to, from, subject, html, text: subject });
+}
+
+// ⛔ EMAIL « VOTRE OFFRE A EXPIRÉ » — état terminal, on explique et on rouvre la porte
+export async function sendCreditXOfferExpiredEmail(params: {
+  to: string;
+  firstName: string;
+  institutionName: string;
+  expiryDate: string;
+  locale?: string;
+}) {
+  ensureSendgrid();
+  const from = { email: "noreply@creditx.ch", name: "CreditX" };
+  const locale = params.locale || "fr";
+  const t = await getTranslations({ locale, namespace: "Emails.OfferExpired" });
+
+  const subject = t("subject", { institutionName: params.institutionName });
+
+  const bodyHtml = `
+    <p>${t("greeting", { firstName: escapeHtml(params.firstName) })}</p>
+    <p>${t("intro", { institutionName: escapeHtml(params.institutionName), date: escapeHtml(params.expiryDate) })}</p>
+
+    <div style="background:#f8fafc; padding:20px; border-radius:12px; margin:24px 0; border:1px solid #e2e8f0;">
+      <p style="margin:0 0 8px 0; font-size:12px; font-weight:bold; color:#475569; text-transform:uppercase; letter-spacing:0.05em;">${t("why_title")}</p>
+      <p style="margin:0; font-size:14px; color:#1A1A1A;">${t("why")}</p>
+    </div>
+
+    <p>${t("outro")}</p>
+  `;
+
+  const html = renderCreditXShell({
+    title: t("shell_title"),
+    bodyHtml,
+    ctaLabel: t("cta_label"),
+    ctaUrl: `${appUrl()}/${locale}/dashboard/prevoyance?tab=prive`,
+  });
+
+  await sgMail.send({ to: params.to, from, subject, html, text: subject });
+}
+
+// 📅 EMAIL « ÉCHÉANCE DE VOTRE CONTRAT » — J-180/90/30/7
+//
+// Deux messages en un, selon qu'un capital est versé ou NON. Le cas sans capital
+// n'est pas une version dégradée : c'est une information de nature différente
+// (la COUVERTURE s'arrête), et les confondre serait trompeur.
+//
+// Volet fiscal : on énonce le PRINCIPE (imposition séparée, taux réduit,
+// variable selon le canton) sans jamais chiffrer. Annoncer un montant d'impôt
+// dans un envoi automatique reviendrait à donner un conseil fiscal chiffré —
+// hors du métier d'intermédiaire, et intenable à la moindre erreur de barème.
+export async function sendCreditXContractMaturityEmail(params: {
+  to: string;
+  firstName: string;
+  institutionName: string;
+  maturityDate: string;
+  capital: number; // 0 → contrat de risque pur
+  locale?: string;
+}) {
+  ensureSendgrid();
+  const from = { email: "noreply@creditx.ch", name: "CreditX" };
+  const locale = params.locale || "fr";
+  const t = await getTranslations({ locale, namespace: "Emails.ContractMaturity" });
+  const fmtChf = new Intl.NumberFormat("fr-CH");
+
+  const subject = t("subject", { institutionName: params.institutionName });
+  const hasCapital = params.capital > 0;
+
+  const capitalBlock = hasCapital
+    ? `
+    <div style="background:#f0fdf4; padding:24px; border-radius:12px; margin:32px 0; border:1px solid #bbf7d0;">
+      <h3 style="margin:0 0 10px 0; font-size:12px; text-transform:uppercase; color:#166534; letter-spacing:0.05em;">${t("capital_title")}</h3>
+      <p style="font-size:26px; font-weight:900; color:#14532d; margin:0;">CHF ${fmtChf.format(Math.round(params.capital))}</p>
+      <p style="font-size:12px; color:#4A4A4A; margin:8px 0 0 0;">${t("capital_note")}</p>
+    </div>
+
+    <h3 style="font-size:14px; color:#1A1A1A; margin-top:32px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">${t("tax_title")}</h3>
+    <p>${t("tax_body")}</p>
+  `
+    : `
+    <div style="background:#fff7ed; padding:24px; border-radius:12px; margin:32px 0; border:1px solid #ffedd5;">
+      <h3 style="margin:0 0 10px 0; font-size:12px; text-transform:uppercase; color:#c2410c; letter-spacing:0.05em;">${t("no_capital_title")}</h3>
+      <p style="margin:0; font-size:14px; color:#1A1A1A;">${t("no_capital_body")}</p>
+    </div>
+  `;
+
+  const bodyHtml = `
+    <p>${t("greeting", { firstName: escapeHtml(params.firstName) })}</p>
+    <p>${t("intro", { institutionName: escapeHtml(params.institutionName), date: escapeHtml(params.maturityDate) })}</p>
+    ${capitalBlock}
+    <p>${t("outro")}</p>
+  `;
+
+  const html = renderCreditXShell({
+    title: t("shell_title"),
+    bodyHtml,
+    ctaLabel: t("cta_label"),
+    ctaUrl: `${appUrl()}/${locale}/dashboard/prevoyance?tab=prive`,
+  });
+
+  await sgMail.send({ to: params.to, from, subject, html, text: subject });
+}
+
 // ✅ 5bis) EMAIL DOSSIER REFUSÉ PAR LA COMPAGNIE
 // Comblait un vrai trou : le refus ne produisait qu'une notification in-app
 // (cf. TODO laissé dans AdminPlanGenerator), donc invisible pour un client

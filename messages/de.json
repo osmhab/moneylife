@@ -521,6 +521,7 @@
       "institution": "Institution / Gesellschaft",
       "contract_type": "Vertragsart",
       "start_date": "Startdatum",
+      "end_date": "Ablaufdatum",
       "total_premium": "Gesamtprämie",
       "frequency": "Häufigkeit",
       "savings_part": "Sparanteil",
@@ -649,7 +650,8 @@
       "del_not_found": "Löschen nicht möglich: Dieses Dokument existiert nicht in der Datenbank.",
       "del_err": "Technischer Fehler beim Löschen.",
       "exp_loading": "Sichere Sitzung wird erstellt...",
-      "exp_err_start": "Zahlung konnte nicht gestartet werden."
+      "exp_err_start": "Zahlung konnte nicht gestartet werden.",
+      "err_sign_expired": "Dieses Angebot ist abgelaufen und kann nicht mehr unterzeichnet werden. Bitte kontaktieren Sie Ihren Berater für ein neues Angebot."
     }
   },
   "ProfileDrawer": {
@@ -960,6 +962,7 @@
     "lbl_company": "Versicherungsgesellschaft",
     "ph_company": "z.B.: Swiss Life, AXA...",
     "lbl_start_date": "Vertragsbeginn",
+    "lbl_end_date": "Ablaufdatum des Vertrags",
     "lbl_frequency": "Zahlungshäufigkeit",
     "opt_monthly": "Monatlich",
     "opt_yearly": "Jährlich",
@@ -1433,6 +1436,43 @@
       "outro": "Für Fragen stehen wir Ihnen gerne zur Verfügung.",
       "shell_title": "Dossier angenommen",
       "cta_label": "Meinen Vertrag ansehen"
+    },
+    "OfferExpiring": {
+      "subject": "Noch {days} Tage, um Ihr Angebot {institutionName} zu aktivieren",
+      "subject_urgent": "Letzter Tag zur Unterzeichnung Ihres Angebots {institutionName}",
+      "greeting": "Guten Tag {firstName},",
+      "intro": "Ihr Angebot {institutionName} wartet weiterhin in Ihrem gesicherten Bereich.",
+      "deadline_title": "Frist für die Unterzeichnung",
+      "days_left": "Noch {days} Tage",
+      "last_day": "Heute ist der letzte Tag",
+      "warning": "Nach diesem Datum kann das Angebot nicht mehr unterzeichnet werden: Konditionen und Prämie wurden für eine begrenzte Dauer berechnet. Es wäre dann ein vollständig neuer Antrag nötig.",
+      "outro": "Die Unterzeichnung erfolgt online, in wenigen Minuten, direkt in Ihrem Bereich.",
+      "shell_title": "Ihr Angebot läuft bald ab",
+      "cta_label": "Angebot unterzeichnen"
+    },
+    "OfferExpired": {
+      "subject": "Ihr Angebot {institutionName} ist abgelaufen",
+      "greeting": "Guten Tag {firstName},",
+      "intro": "Ihr Angebot {institutionName} ist am {date} abgelaufen, ohne unterzeichnet worden zu sein. Es kann daher nicht mehr aktiviert werden.",
+      "why_title": "Warum ein Angebot abläuft",
+      "why": "Prämie und Annahmebedingungen einer Versicherung gelten für eine bestimmte Dauer. Danach müssen sie neu berechnet werden.",
+      "outro": "Nichts ist verloren: Wir erstellen Ihnen gerne ein neues Angebot auf derselben Grundlage. Eine kurze Nachricht genügt.",
+      "shell_title": "Angebot abgelaufen",
+      "cta_label": "Neues Angebot anfragen"
+    },
+    "ContractMaturity": {
+      "subject": "Ihr Vertrag {institutionName} läuft ab",
+      "greeting": "Guten Tag {firstName},",
+      "intro": "Ihr Vertrag {institutionName} läuft am {date} ab.",
+      "capital_title": "Vorgesehenes Kapital bei Ablauf",
+      "capital_note": "Richtwert; je nach genauem Datum der Schlussabrechnung leicht abweichend.",
+      "tax_title": "Und die Steuer auf diese Auszahlung?",
+      "tax_body": "Eine Kapitalauszahlung aus der Vorsorge wird GETRENNT von Ihrem übrigen Einkommen besteuert, zu einem reduzierten Satz. Die Höhe hängt von Ihrem Wohnkanton, der Auszahlungssumme und Ihrer Familiensituation ab. Wir schätzen sie gerne gemeinsam mit Ihnen.",
+      "no_capital_title": "Ende Ihres Versicherungsschutzes",
+      "no_capital_body": "Zu diesem Ablauf ist keine Kapitalauszahlung vorgesehen: Ihr VERSICHERUNGSSCHUTZ endet. Ohne neue Lösung sind Sie danach nicht mehr gedeckt.",
+      "outro": "Nehmen wir uns ein paar Minuten am Telefon, um die nächsten Schritte in Ruhe zu planen.",
+      "shell_title": "Ablauf Ihres Vertrags",
+      "cta_label": "Telefontermin vereinbaren"
     }
   },
   "Welcome": {
