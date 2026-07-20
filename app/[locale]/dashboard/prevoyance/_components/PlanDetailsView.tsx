@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { 
   X, Edit2, User, Landmark, Wallet, TrendingUp, ShieldCheck, Heart, 
   History, Coins, MapPin, Calendar, Activity, AlertTriangle, Info, Receipt, Trash2, Lock,
-  FileText, ExternalLink, CheckCircle2, Loader2, MessageSquareWarning, Phone, Sparkles, Check
+  FileText, ExternalLink, CheckCircle2, Loader2, MessageSquareWarning, Phone, Sparkles, Check, RefreshCw
 } from "lucide-react";
 import { Plan } from "app/lib/core/plans"; // 👈 Alias
 import EditAmountDrawer from "./EditAmountDrawer";
@@ -46,9 +46,14 @@ interface PlanDetailsViewProps {
   onClose: () => void;
   isOpen?: boolean;
   adminUid?: string;
+  /** Relance le scan pour REMPLACER ce plan (certificat LPP annuel, police 3a/3b). */
+  onReplace?: (plan: ExtendedPlan) => void;
 }
 
-export default function PlanDetailsView({ plan: initialPlan, onClose, isOpen, adminUid }: PlanDetailsViewProps) {
+/** Types remplaçables — doit rester aligné sur REPLACEABLE_TYPES de /api/plans/replace. */
+const REPLACEABLE_TYPES = ["LPP_BASE", "LPP_COMPL", "PILIER_3A_POLICE", "PILIER_3B"];
+
+export default function PlanDetailsView({ plan: initialPlan, onClose, isOpen, adminUid, onReplace }: PlanDetailsViewProps) {
   // 👈 NOUVEAU : Traductions
   const t = useTranslations("PlanDetailsView");
 
@@ -1127,6 +1132,30 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
                   </button>
                 ))}
                 
+                {/* REMPLACEMENT annuel. Réservé aux plans issus d'un document du
+                    client : un contrat souscrit chez CreditX est refusé côté serveur
+                    (on en connaît les termes, un scan ne doit pas les écraser).
+                    L'année du certificat est affichée pour que le client voie
+                    immédiatement s'il consulte des chiffres périmés. */}
+                {onReplace && !adminUid && REPLACEABLE_TYPES.includes(plan.type) && plan.origin !== "creditx" && (
+                  <button
+                    onClick={() => { onReplace(plan); onClose(); }}
+                    className="w-full flex items-center space-x-4 p-4 bg-blue-50 hover:bg-blue-100 rounded-[24px] transition-all group text-left"
+                  >
+                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-100 group-active:scale-90 transition-transform shrink-0">
+                      <RefreshCw size={22} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-black text-slate-900">{t("replace.btn")}</p>
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-tight">
+                        {d.Enter_anneeCertificat
+                          ? t("replace.hint_year", { year: d.Enter_anneeCertificat })
+                          : t("replace.hint")}
+                      </p>
+                    </div>
+                  </button>
+                )}
+
                 {(plan.metadata as any)?.sourceFileUrl && (
                   <div className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-[24px] transition-all group">
                     <button

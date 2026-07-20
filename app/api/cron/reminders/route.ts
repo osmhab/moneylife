@@ -25,12 +25,14 @@ import {
   sendCreditXOfferExpiringEmail,
   sendCreditXOfferExpiredEmail,
   sendCreditXContractMaturityEmail,
+  sendCreditXLppCertificateEmail,
 } from "lib/mail/creditx-mailer";
 import {
   isOfferExpired,
   daysUntilExpiry,
   reachedMilestone,
   reachedContractMilestone,
+  reachedLppCertMilestone,
 } from "@/lib/core/offerExpiry";
 
 export const dynamic = "force-dynamic";
@@ -155,7 +157,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
 
-  const report = { offersExpired: 0, offerReminders: 0, contractReminders: 0, emails: 0, errors: 0 };
+  const report = { offersExpired: 0, offerReminders: 0, contractReminders: 0, lppCertReminders: 0, emails: 0, errors: 0 };
   const lookupClient = makeClientLookup();
 
   try {
@@ -306,6 +308,67 @@ export async function GET(request: Request) {
         report.contractReminders++;
       } catch (e) {
         console.error("[cron/reminders] contrat:", docSnap.ref.path, e);
+        report.errors++;
+      }
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* 3. CERTIFICATS LPP — campagne annuelle a partir du 31 mars        */
+    /* ---------------------------------------------------------------- */
+    // Requete sur le TYPE et non le statut : les certificats LPP scannes n'ont
+    // souvent aucun statut en base (27 plans dans ce cas), un filtre sur ACTIVE
+    // en manquerait la majorite.
+    const lppPlans = await db.collectionGroup("plans").where("type", "==", "LPP_BASE").get();
+
+    for (const docSnap of lppPlans.docs) {
+      try {
+        const plan = docSnap.data() as any;
+        const uid = docSnap.ref.parent.parent?.id;
+        if (!uid) continue;
+
+        const certYear = plan.data?.Enter_anneeCertificat;
+        const milestone = reachedLppCertMilestone(certYear);
+        if (milestone === null) continue;
+
+        // Drapeau par ANNEE et par jalon : la campagne doit repartir a zero
+        // chaque annee, ce qu'un drapeau unique interdirait a jamais.
+        const flag = `lppCert_${new Date().getFullYear()}_J${milestone}`;
+        if (plan.metadata?.reminders?.[flag]) continue;
+
+        const caisse = plan.institutionName || "votre caisse de pension";
+        const annee = new Date().getFullYear();
+        const relance = milestone > 0;
+
+        await notifyClient({
+          uid,
+          title: relance ? "Certificat LPP toujours attendu" : "Votre certificat LPP de l'année",
+          content: relance
+            ? `Nous n'avons pas encore votre certificat ${annee} de ${caisse}. Sans lui, votre analyse repose sur des chiffres de l'an dernier.`
+            : `${caisse} a normalement émis votre certificat ${annee}. Remplacez l'ancien depuis votre espace pour que votre analyse reste juste.`,
+          category: "LPP",
+          actionUrl: "/dashboard/prevoyance",
+        });
+
+        const dest = await lookupClient(uid);
+        if (dest.email) {
+          await safeMail(`certificat LPP J+${milestone}`, () =>
+            sendCreditXLppCertificateEmail({
+              to: dest.email!,
+              firstName: dest.firstName,
+              institutionName: caisse,
+              year: annee,
+              previousYear: Number(certYear) || null,
+              isFollowUp: relance,
+              locale: dest.locale,
+            })
+          );
+          report.emails++;
+        }
+
+        await docSnap.ref.update({ [`metadata.reminders.${flag}`]: true });
+        report.lppCertReminders++;
+      } catch (e) {
+        console.error("[cron/reminders] certificat LPP:", docSnap.ref.path, e);
         report.errors++;
       }
     }

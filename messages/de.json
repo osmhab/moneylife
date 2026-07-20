@@ -652,6 +652,11 @@
       "exp_loading": "Sichere Sitzung wird erstellt...",
       "exp_err_start": "Zahlung konnte nicht gestartet werden.",
       "err_sign_expired": "Dieses Angebot ist abgelaufen und kann nicht mehr unterzeichnet werden. Bitte kontaktieren Sie Ihren Berater für ein neues Angebot."
+    },
+    "replace": {
+      "btn": "Durch ein neues Dokument ersetzen",
+      "hint": "Zahlen dieses Plans aktualisieren",
+      "hint_year": "Ausweis {year} — durch den neuesten ersetzen"
     }
   },
   "ProfileDrawer": {
@@ -1483,6 +1488,20 @@
       "action": "Sie können in wenigen Minuten und unverbindlich eine persönliche Offerte in Ihrem Bereich erstellen und die Wirkung auf Ihre Deckung sofort sehen.",
       "outro": "Wenn Sie lieber persönlich darüber sprechen, antworten Sie einfach auf diese Nachricht.",
       "unsub_hint": "Sie erhalten zu diesem Thema höchstens drei Erinnerungen im Abstand von drei Monaten."
+    },
+    "LppCertificate": {
+      "subject": "Ihr BVG-Ausweis {year} von {institutionName}",
+      "subject_followup": "Erinnerung: Ihr BVG-Ausweis {year}",
+      "greeting": "Guten Tag {firstName},",
+      "intro": "{institutionName} stellt jedes Jahr einen neuen Vorsorgeausweis aus. Derjenige für {year} sollte bei Ihnen eingetroffen sein.",
+      "why_title": "Warum das wichtig ist",
+      "why_body": "Prämien, Altersguthaben und Leistungen bei Invalidität oder Tod ändern sich von Jahr zu Jahr. Solange uns der Ausweis {year} fehlt, beruht Ihre Analyse auf den Zahlen von {previousYear} — Ihre tatsächlichen Lücken können also unterschätzt werden.",
+      "why_body_unknown": "Prämien, Altersguthaben und Leistungen bei Invalidität oder Tod ändern sich von Jahr zu Jahr. Ohne aktuellen Ausweis kann Ihre Analyse Ihre tatsächlichen Lücken unterschätzen.",
+      "how_title": "Es geht schnell",
+      "how_body": "Öffnen Sie in Ihrem Bereich Ihre 2. Säule und klicken Sie auf « Ersetzen ». Scannen Sie den neuen Ausweis oder laden Sie ihn hoch: die Zahlen werden automatisch aktualisiert. Ihre alten Dokumente bleiben im Tresor erhalten.",
+      "outro": "Falls Sie ihn nicht erhalten haben, sendet Ihnen Ihre Pensionskasse den Ausweis auf Anfrage gerne erneut zu.",
+      "shell_title": "BVG-Ausweis {year}",
+      "cta_label": "Ausweis aktualisieren"
     }
   },
   "Welcome": {

@@ -494,6 +494,60 @@ export async function sendCreditXOfferExpiringEmail(params: {
   await sgMail.send({ to: params.to, from, subject, html, text: subject });
 }
 
+// 📄 EMAIL « VOTRE CERTIFICAT LPP DE L'ANNÉE » — campagne annuelle dès le 31 mars
+//
+// Le message explique POURQUOI remplacer, pas seulement qu'il faut le faire :
+// tant que le certificat n'est pas à jour, l'analyse tourne sur les chiffres de
+// l'an dernier et sous-estime potentiellement les lacunes. C'est l'argument qui
+// donne du sens à la demande, et il est vrai.
+export async function sendCreditXLppCertificateEmail(params: {
+  to: string;
+  firstName: string;
+  institutionName: string;
+  year: number;
+  previousYear: number | null;
+  isFollowUp: boolean;
+  locale?: string;
+}) {
+  ensureSendgrid();
+  const from = { email: "noreply@creditx.ch", name: "CreditX" };
+  const locale = params.locale || "fr";
+  const t = await getTranslations({ locale, namespace: "Emails.LppCertificate" });
+
+  const subject = params.isFollowUp
+    ? t("subject_followup", { year: params.year })
+    : t("subject", { year: params.year, institutionName: params.institutionName });
+
+  // Sans année précédente connue, on ne peut pas écrire « les chiffres de 2025 » :
+  // une variante du texte évite d'afficher un trou ou une année inventée.
+  const whyBody = params.previousYear
+    ? t("why_body", { year: params.year, previousYear: params.previousYear })
+    : t("why_body_unknown");
+
+  const bodyHtml = `
+    <p>${t("greeting", { firstName: escapeHtml(params.firstName) })}</p>
+    <p>${t("intro", { institutionName: escapeHtml(params.institutionName), year: params.year })}</p>
+
+    <div style="background:#eff6ff; padding:20px; border-radius:12px; margin:24px 0; border:1px solid #bfdbfe;">
+      <p style="margin:0 0 8px 0; font-size:12px; font-weight:bold; color:#1d4ed8; text-transform:uppercase; letter-spacing:0.05em;">${t("why_title")}</p>
+      <p style="margin:0; font-size:14px; color:#1A1A1A;">${whyBody}</p>
+    </div>
+
+    <h3 style="font-size:14px; color:#1A1A1A; margin-top:32px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">${t("how_title")}</h3>
+    <p>${t("how_body")}</p>
+    <p>${t("outro")}</p>
+  `;
+
+  const html = renderCreditXShell({
+    title: t("shell_title", { year: params.year }),
+    bodyHtml,
+    ctaLabel: t("cta_label"),
+    ctaUrl: `${appUrl()}/${locale}/dashboard/prevoyance`,
+  });
+
+  await sgMail.send({ to: params.to, from, subject, html, text: subject });
+}
+
 // ⛔ EMAIL « VOTRE OFFRE A EXPIRÉ » — état terminal, on explique et on rouvre la porte
 export async function sendCreditXOfferExpiredEmail(params: {
   to: string;

@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ShieldCheck, TrendingUp, Scan, X, Image as ImageIcon, Trash2, Plus, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { auth, db, storage } from "@/lib/firebase/index"; // 👈 Alias mis à jour
@@ -22,7 +22,7 @@ import UploadSourceDrawer from "../_components/UploadSourceDrawer";
 import { computeProjections3aAssurance, computeDeathBenefitAssurance } from "@/lib/calculs/3epilier"; // 👈 Alias mis à jour
 import { buildSourceDocTitle } from "@/lib/core/documentTypes";
 
-export function AddInsurancePlanView({ onClose, adminUid }: { onClose: () => void, adminUid?: string }) {
+export function AddInsurancePlanView({ onClose, adminUid, replacePlanId }: { onClose: () => void, adminUid?: string, replacePlanId?: string }) {
   // 👈 NOUVEAU : Initialisation des traductions
   const t = useTranslations("AddInsurancePlanPage");
   const targetUid = adminUid || auth.currentUser?.uid;
@@ -260,6 +260,44 @@ export function AddInsurancePlanView({ onClose, adminUid }: { onClose: () => voi
     try {
       const projectionRetraite = computeProjections3aAssurance(formData as any, clientAge);
       const protectionDeces = computeDeathBenefitAssurance(formData as any);
+
+      // REMPLACEMENT d'une police existante : on ecrase au lieu de creer.
+      // Sans cette branche, le client se retrouverait avec DEUX polices et un
+      // capital compte en double.
+      if (replacePlanId) {
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch("/api/plans/replace", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            planId: replacePlanId,
+            institutionName: formData.compagnie,
+            data: {
+              ...formData,
+              capitalRetraiteProjete: projectionRetraite,
+              capitalDecesCalcule: protectionDeces,
+              projectionCalculatedAt: new Date().toISOString(),
+            },
+            sourceFileUrl: uploadedFileUrl || undefined,
+            sourceDoc: uploadedFileUrl ? {
+              type: scanDocType || "Police 3e pilier",
+              title: buildSourceDocTitle(formData.typeContrat === "3a" ? "PILIER_3A_POLICE" : "PILIER_3B", formData.compagnie),
+              tags: scanDocTags,
+              keywords: scanDocKeywords,
+            } : undefined,
+          }),
+        });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(out?.error || "Le remplacement a échoué.");
+          setLoading(false);
+          return;
+        }
+        sessionStorage.setItem("autoOpenPlanId", replacePlanId);
+        toast.success(t("toast_save_success"));
+        onClose();
+        return;
+      }
 
       const newPlanRef = await addDoc(collection(db, "clients", targetUid, "plans"), {
         type: formData.typeContrat === "3a" ? "PILIER_3A_POLICE" : "PILIER_3B",
@@ -605,5 +643,8 @@ function SegmentedToggle({ value, onChange, small = false, labelYes, labelNo }: 
 // 👈 NOUVEAU : On exporte la page pour l'espace client
 export default function AddInsurancePlanPage() {
   const router = useRouter();
-  return <AddInsurancePlanView onClose={() => router.back()} />;
+  const params = useSearchParams();
+  // `?replacePlanId=` est pose par le bouton « Remplacer » du detail de plan.
+  const replacePlanId = params.get("replacePlanId") || undefined;
+  return <AddInsurancePlanView onClose={() => router.back()} replacePlanId={replacePlanId} />;
 }

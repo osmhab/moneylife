@@ -652,6 +652,11 @@
       "exp_loading": "Création de la session sécurisée...",
       "exp_err_start": "Impossible de démarrer le paiement.",
       "err_sign_expired": "Cette offre a expiré et ne peut plus être signée. Contactez votre conseiller pour en obtenir une nouvelle."
+    },
+    "replace": {
+      "btn": "Remplacer par un nouveau document",
+      "hint": "Mettre à jour les chiffres de ce plan",
+      "hint_year": "Certificat {year} — remplacer par le plus récent"
     }
   },
   "ProfileDrawer": {
@@ -1483,6 +1488,20 @@
       "action": "Vous pouvez générer une proposition personnalisée en quelques minutes depuis votre espace, sans engagement, et voir immédiatement l'effet sur votre couverture.",
       "outro": "Si vous préférez en discuter de vive voix, répondez simplement à ce message.",
       "unsub_hint": "Vous recevrez au maximum trois rappels à ce sujet, espacés de trois mois."
+    },
+    "LppCertificate": {
+      "subject": "Votre certificat LPP {year} de {institutionName}",
+      "subject_followup": "Rappel : votre certificat LPP {year}",
+      "greeting": "Bonjour {firstName},",
+      "intro": "{institutionName} émet chaque année un nouveau certificat de prévoyance. Celui de {year} devrait vous être parvenu.",
+      "why_title": "Pourquoi c'est important",
+      "why_body": "Les primes, l'avoir de vieillesse et les prestations en cas d'invalidité ou de décès changent d'une année à l'autre. Tant que nous n'avons pas le certificat {year}, votre analyse repose sur les chiffres de {previousYear} — vos lacunes réelles peuvent donc être sous-estimées.",
+      "why_body_unknown": "Les primes, l'avoir de vieillesse et les prestations en cas d'invalidité ou de décès changent d'une année à l'autre. Sans certificat à jour, votre analyse peut sous-estimer vos lacunes réelles.",
+      "how_title": "C'est rapide",
+      "how_body": "Depuis votre espace, ouvrez votre 2e pilier et cliquez sur « Remplacer ». Scannez ou déposez le nouveau certificat : les chiffres se mettent à jour automatiquement. Vos anciens documents restent conservés dans votre coffre-fort.",
+      "outro": "Si vous ne l'avez pas reçu, votre caisse de pension peut vous le renvoyer sur simple demande.",
+      "shell_title": "Certificat LPP {year}",
+      "cta_label": "Mettre à jour mon certificat"
     }
   },
   "Welcome": {

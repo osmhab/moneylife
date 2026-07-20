@@ -4,6 +4,7 @@ import {
   daysUntilExpiry,
   reachedMilestone,
   offerExpiryInstant,
+  reachedLppCertMilestone,
 } from "./offerExpiry";
 
 // Milieu de journée : permet de verifier qu'une offre expirant AUJOURD'HUI
@@ -88,5 +89,40 @@ describe("reachedMilestone", () => {
   it("ne renvoie rien le jour de l'expiration ni après", () => {
     expect(reachedMilestone("15.08.2026", NOW)).toBeNull();
     expect(reachedMilestone("01.08.2026", NOW)).toBeNull();
+  });
+});
+
+describe("reachedLppCertMilestone — campagne annuelle LPP", () => {
+  const MARS31 = new Date(2026, 2, 31, 10, 0);
+  const AVRIL30 = new Date(2026, 3, 30, 10, 0); // 31 mars + 30 j
+  const MAI30 = new Date(2026, 4, 30, 10, 0);   // 31 mars + 60 j
+
+  it("ne relance PAS un certificat de l'année en cours", () => {
+    expect(reachedLppCertMilestone(2026, MARS31)).toBeNull();
+    expect(reachedLppCertMilestone("2026", AVRIL30)).toBeNull();
+  });
+
+  it("relance un certificat périmé, aux 3 jalons", () => {
+    expect(reachedLppCertMilestone(2025, MARS31)).toBe(0);
+    expect(reachedLppCertMilestone(2025, AVRIL30)).toBe(30);
+    expect(reachedLppCertMilestone(2025, MAI30)).toBe(60);
+  });
+
+  it("ne relance rien entre les jalons", () => {
+    expect(reachedLppCertMilestone(2025, new Date(2026, 3, 10, 10, 0))).toBeNull();
+  });
+
+  it("n'ouvre pas la campagne avant le 31 mars", () => {
+    // Les caisses n'ont pas encore envoye les certificats : reclamer serait premature.
+    expect(reachedLppCertMilestone(2025, new Date(2026, 0, 15, 10, 0))).toBeNull();
+    expect(reachedLppCertMilestone(2025, new Date(2026, 2, 30, 10, 0))).toBeNull();
+  });
+
+  it("traite une année ABSENTE comme périmée", () => {
+    // Sans annee, impossible d'affirmer que le certificat est a jour :
+    // le silence serait pire qu'une relance.
+    expect(reachedLppCertMilestone(null, MARS31)).toBe(0);
+    expect(reachedLppCertMilestone(undefined, MARS31)).toBe(0);
+    expect(reachedLppCertMilestone("", MARS31)).toBe(0);
   });
 });

@@ -66,6 +66,9 @@ export function PrevoyanceDashboardView({ adminUid }: { adminUid?: string }) {
   const [hasUnreadNotifs, setHasUnreadNotifs] = useState(false);
 
   const [currentStep, setCurrentStep] = useState<Step>("LIST");
+  // Plan a REMPLACER (certificat LPP annuel, police 3a/3b). Quand il est pose,
+  // le scan qui suit ecrase ce plan au lieu d'en creer un nouveau.
+  const [replacePlanId, setReplacePlanId] = useState<string | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
@@ -347,6 +350,43 @@ export function PrevoyanceDashboardView({ adminUid }: { adminUid?: string }) {
             // On récupère l'URL publique de téléchargement pour l'ajouter aux métadonnées
             import("firebase/storage").then(async ({ getDownloadURL }) => {
               const downloadUrl = await getDownloadURL(storageRef);
+
+              // REMPLACEMENT : on écrase le plan existant au lieu d'en créer un
+              // second. Sans cette branche, un client qui met à jour son certificat
+              // se retrouverait avec DEUX 2e piliers et un capital compté double.
+              if (replacePlanId) {
+                const token = await auth.currentUser?.getIdToken();
+                const res = await fetch("/api/plans/replace", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({
+                    planId: replacePlanId,
+                    institutionName: data.institutionName || "Caisse de pension",
+                    data: { ...data.clientMappedData, capitalRetraiteGlobal: projectionLPP },
+                    sourceFileUrl: downloadUrl,
+                    sourceDoc: {
+                      type: data.documentType || "Certificat LPP",
+                      title: buildSourceDocTitle("LPP_BASE", data.institutionName),
+                      tags: Array.isArray(data.suggestedTags) ? data.suggestedTags : [],
+                      keywords: Array.isArray(data.keywords) ? data.keywords : [],
+                    },
+                  }),
+                });
+                const out = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                  toast.error(out?.error || "Le remplacement a échoué.");
+                } else {
+                  toast.success(
+                    out.previousCertYear && out.newCertYear
+                      ? `Certificat mis à jour : ${out.previousCertYear} → ${out.newCertYear}`
+                      : "Certificat mis à jour."
+                  );
+                }
+                setSelectedPlanId(replacePlanId);
+                setReplacePlanId(null);
+                setCurrentStep("LIST");
+                return;
+              }
 
               const newPlanDoc = await addDoc(plansRef, {
                 type: "LPP_BASE",
@@ -728,6 +768,18 @@ export function PrevoyanceDashboardView({ adminUid }: { adminUid?: string }) {
           plan={plans.find(p => p.id === selectedPlanId)!} 
           onClose={() => setSelectedPlanId(null)} 
           adminUid={adminUid} // 👈 LA PIÈCE MANQUANTE EST ICI !
+          onReplace={(p) => {
+            // `id` est optionnel dans le type Plan : sans lui, le serveur ne
+            // saurait pas quoi remplacer et créerait un doublon silencieux.
+            if (!p.id) return;
+            setReplacePlanId(p.id);
+            // Police 3a/3b : le scan vit sur une autre page, on lui passe la cible.
+            if (!String(p.type).startsWith("LPP")) {
+              router.push(`/dashboard/prevoyance/add-insurance?replacePlanId=${p.id}`);
+              return;
+            }
+            setCurrentStep("INSTRUCTIONS");
+          }}
         />
       )}
 

@@ -82,6 +82,51 @@ export const OFFER_REMINDER_MILESTONES = [30, 15, 7, 3, 1] as const;
  */
 export const CONTRACT_REMINDER_MILESTONES = [180, 90, 30, 7] as const;
 
+/* ==========================================================================
+ * CERTIFICAT LPP — campagne annuelle
+ * ========================================================================*/
+
+/**
+ * Un certificat LPP est réémis chaque année. Les caisses les envoient au premier
+ * trimestre : avant fin mars, réclamer le nouveau serait prématuré — le client
+ * ne l'a tout simplement pas encore reçu.
+ *
+ * Jalons en JOURS ÉCOULÉS depuis le 31 mars, plutôt qu'un envoi unique ce
+ * jour-là : quelqu'un en vacances le 31 ne recevrait jamais rien.
+ */
+export const LPP_CERT_MILESTONES = [0, 30, 60] as const;
+
+/**
+ * Jalon de campagne atteint aujourd'hui, ou `null` hors campagne.
+ *
+ * `certYear` est l'année portée par le certificat en base
+ * (`data.Enter_anneeCertificat`). On ne relance QUE si elle est antérieure à
+ * l'année en cours — un certificat déjà à jour ne doit rien déclencher.
+ */
+export function reachedLppCertMilestone(
+  certYear: number | string | null | undefined,
+  at: Date = new Date()
+): number | null {
+  const year = Number(certYear);
+  const currentYear = at.getFullYear();
+
+  // Année absente OU périmée → le client doit fournir le certificat de l'année.
+  // Absente incluse volontairement : sans année, on ne peut pas affirmer qu'il
+  // est à jour, et le silence serait pire qu'une relance.
+  const outdated = !Number.isFinite(year) || year < currentYear;
+  if (!outdated) return null;
+
+  const campaignStart = new Date(currentYear, 2, 31); // 31 mars
+  campaignStart.setHours(0, 0, 0, 0);
+  const today = new Date(at);
+  today.setHours(0, 0, 0, 0);
+
+  const elapsed = Math.round((today.getTime() - campaignStart.getTime()) / (24 * 60 * 60 * 1000));
+  if (elapsed < 0) return null; // campagne pas encore ouverte
+
+  return (LPP_CERT_MILESTONES as readonly number[]).includes(elapsed) ? elapsed : null;
+}
+
 /** Jalon d'échéance de contrat atteint aujourd'hui, s'il y en a un. */
 export function reachedContractMilestone(
   dateEcheance: string | null | undefined,
