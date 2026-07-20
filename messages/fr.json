@@ -1473,6 +1473,16 @@
       "outro": "Prenons quelques minutes au téléphone pour préparer la suite sereinement.",
       "shell_title": "Échéance de votre contrat",
       "cta_label": "Organiser un appel"
+    },
+    "GapNudge": {
+      "subject": "Votre prévoyance présente des lacunes",
+      "shell_title": "Votre analyse de prévoyance",
+      "intro": "Votre bilan de prévoyance fait apparaître un écart entre vos besoins et votre couverture actuelle.",
+      "gap_title": "Ce que cela signifie",
+      "gap_body": "En cas de retraite, d'invalidité ou de décès, les prestations prévues aujourd'hui ne suffiraient pas à maintenir votre niveau de vie. L'écart se comble d'autant plus facilement qu'on s'y prend tôt.",
+      "action": "Vous pouvez générer une proposition personnalisée en quelques minutes depuis votre espace, sans engagement, et voir immédiatement l'effet sur votre couverture.",
+      "outro": "Si vous préférez en discuter de vive voix, répondez simplement à ce message.",
+      "unsub_hint": "Vous recevrez au maximum trois rappels à ce sujet, espacés de trois mois."
     }
   },
   "Welcome": {

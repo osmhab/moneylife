@@ -1473,6 +1473,16 @@
       "outro": "Nehmen wir uns ein paar Minuten am Telefon, um die nächsten Schritte in Ruhe zu planen.",
       "shell_title": "Ablauf Ihres Vertrags",
       "cta_label": "Telefontermin vereinbaren"
+    },
+    "GapNudge": {
+      "subject": "Ihre Vorsorge weist Lücken auf",
+      "shell_title": "Ihre Vorsorgeanalyse",
+      "intro": "Ihre Vorsorgeanalyse zeigt eine Differenz zwischen Ihrem Bedarf und Ihrer aktuellen Deckung.",
+      "gap_title": "Was das bedeutet",
+      "gap_body": "Bei Pensionierung, Invalidität oder Todesfall würden die heute vorgesehenen Leistungen nicht ausreichen, um Ihren Lebensstandard zu halten. Je früher man handelt, desto leichter lässt sich diese Lücke schliessen.",
+      "action": "Sie können in wenigen Minuten und unverbindlich eine persönliche Offerte in Ihrem Bereich erstellen und die Wirkung auf Ihre Deckung sofort sehen.",
+      "outro": "Wenn Sie lieber persönlich darüber sprechen, antworten Sie einfach auf diese Nachricht.",
+      "unsub_hint": "Sie erhalten zu diesem Thema höchstens drei Erinnerungen im Abstand von drei Monaten."
     }
   },
   "Welcome": {
