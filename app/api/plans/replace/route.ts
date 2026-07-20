@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth } from "@/lib/server/requireAuth";
+import { buildSourceDocTitle } from "@/lib/core/documentTypes";
 
 export const dynamic = "force-dynamic";
 
@@ -102,9 +103,18 @@ export async function POST(req: NextRequest) {
     if (institutionName) patch.institutionName = institutionName;
     if (sourceFileUrl) patch["metadata.sourceFileUrl"] = sourceFileUrl;
     if (sourceDoc?.type) patch["metadata.sourceDocType"] = sourceDoc.type;
-    if (sourceDoc?.title) patch["metadata.sourceDocTitle"] = sourceDoc.title;
     if (Array.isArray(sourceDoc?.tags)) patch["metadata.sourceDocTags"] = sourceDoc.tags;
     if (Array.isArray(sourceDoc?.keywords)) patch["metadata.sourceDocKeywords"] = sourceDoc.keywords;
+
+    // TITRE du document au coffre-fort. Reconstruit ICI quand l'appelant n'en
+    // fournit pas : l'endpoint de scan utilisé par l'iOS (/api/lpp/parse-image)
+    // n'extrait aucune classification, contrairement à celui du web. Sans ce
+    // repli, un client changeant de caisse garderait « Certificat de caisse de
+    // pension - CPVAL » sur un document désormais émis par AXA.
+    // Le titre dépend de l'institution : on le recalcule dès qu'elle change.
+    const finalInstitution = institutionName || current.institutionName;
+    patch["metadata.sourceDocTitle"] =
+      sourceDoc?.title || buildSourceDocTitle(current.type, finalInstitution);
 
     // Le rappel annuel est reconduit : en effaçant les drapeaux, le client sera
     // de nouveau relancé l'an prochain. Sans ça, un remplacement en 2027
