@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="22px" height="32px" viewBox="0 0 22 32" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>LPP Icone</title>
+    <defs>
+        <linearGradient x1="50%" y1="10.6741322%" x2="38.1165835%" y2="98.2486341%" id="linearGradient-1">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#EEEEEE" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="52.7440617%" y1="12.6480472%" x2="73.7033056%" y2="109.254297%" id="linearGradient-2">
+            <stop stop-color="#EC51B3" offset="0%"></stop>
+            <stop stop-color="#EABC38" offset="62.1885927%"></stop>
+            <stop stop-color="#E8D002" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Carte-Scan" transform="translate(-336, -620)">
+            <g id="Scan-LPP" transform="translate(321.5, 609)">
+                <g id="LPP-Icone" transform="translate(15.2926, 11.75)">
+                    <path d="M2,0 L19,0 C20.1045695,0 21,0.8954305 21,2 L21,30.5 L21,30.5 L2,30.5 C0.8954305,30.5 0,29.6045695 0,28.5 L0,2 C0,0.8954305 0.8954305,2.22044605e-16 2,0 Z" id="Rectangle-5" fill="url(#linearGradient-2)"></path>
+                    <g id="Group" transform="translate(6.2311, 3.9544)" fill="#001D38">
+                        <rect id="Rectangle-6" x="0" y="0" width="12.768869" height="2" rx="1"></rect>
+                        <rect id="Rectangle-6-Copy" x="2.41505436" y="3.61989789" width="10.3538146" height="2" rx="1"></rect>
+                        <rect id="Rectangle-6-Copy-2" x="1.04342501" y="6.73694021" width="11.725444" height="2" rx="1"></rect>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

@@ -1,7 +1,19 @@
-/** @type {import('next').NextConfig} */
+import createNextIntlPlugin from 'next-intl/plugin';
+
+const withNextIntl = createNextIntlPlugin('./i18n.ts');
+
 const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
-  // tu peux laisser Typescript faire échouer le build si tu préfères
-  // typescript: { ignoreBuildErrors: true },
+  output: "standalone" as const, // 👈 L'astuce magique est ici
+  
+  async rewrites() {
+    return [
+      {
+        source: "/prevoyance", 
+        destination: "/",      
+      },
+    ];
+  },
 };
-export default nextConfig;
+
+export default withNextIntl(nextConfig);

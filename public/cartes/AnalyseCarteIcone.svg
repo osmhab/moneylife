@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="61px" height="32px" viewBox="0 0 61 32" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Icone Analyse</title>
+    <defs>
+        <linearGradient x1="50%" y1="10.6741322%" x2="38.1165835%" y2="98.2486341%" id="linearGradient-1">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#EEEEEE" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="-14.7361465%" y1="37.0547235%" x2="123.285988%" y2="60.8983192%" id="linearGradient-2">
+            <stop stop-color="#3023AE" offset="0%"></stop>
+            <stop stop-color="#53A0FD" offset="47.5247532%"></stop>
+            <stop stop-color="#B4EC51" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Carte-Analayse" transform="translate(-330, -620)">
+            <g id="Scan-LPP" transform="translate(321.5, 609)">
+                <g id="Icone-Analyse" transform="translate(9, 11.6)">
+                    <rect id="Rectangle" x="0" y="0" width="59.6" height="30.8"></rect>
+                    <line x1="9.62271039" y1="11.2426954" x2="9.62271039" y2="25.2" id="Line-2" stroke="#0083FF" stroke-width="2.4" stroke-linecap="round"></line>
+                    <line x1="5.42267039" y1="8.53274656" x2="5.42267039" y2="25.2" id="Line-2-Copy-5" stroke="#0083FF" stroke-width="2.4" stroke-linecap="round"></line>
+                    <line x1="1.22263039" y1="16.4687402" x2="1.22263039" y2="25.2" id="Line-2-Copy-6" stroke="#0083FF" stroke-width="2.4" stroke-linecap="round"></line>
+                    <line x1="13.8227504" y1="5.6" x2="13.8227504" y2="25.2" id="Line-2-Copy" stroke="#0083FF" stroke-width="2.4" stroke-linecap="round"></line>
+                    <line x1="18.0227904" y1="7.73748038" x2="18.0227904" y2="25.2" id="Line-2-Copy-2" stroke="#0083FF" stroke-width="2.4" stroke-linecap="round"></line>
+                    <line x1="22.2228304" y1="11.2426954" x2="22.2228304" y2="25.2" id="Line-2-Copy-3" stroke="#0083FF" stroke-width="2.4" stroke-linecap="round"></line>
+                    <line x1="26.4228704" y1="5.6" x2="26.4228704" y2="25.2" id="Line-2-Copy-4" stroke="#0083FF" stroke-width="2.4" stroke-linecap="round"></line>
+                    <path d="M13.5109065,22.6305431 C28.0686616,16.1602693 37.6385405,12.3500883 42.220543,11.2 C46.6482302,10.0886451 52.1040433,10.0341084 58.5879825,11.0363899 L58.5878709,11.0370941 C59.1693162,11.1292612 59.598038,11.6296089 59.5999934,12.2183106 L59.6,30.6 L59.6,30.6 L14,30.6 C13.3372583,30.6 12.8,30.0627417 12.8,29.4 L12.8000002,23.7278669 C12.7997023,23.2539397 13.0783644,22.824231 13.511191,22.6311811 Z" id="Rectangle-3" fill="url(#linearGradient-2)"></path>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

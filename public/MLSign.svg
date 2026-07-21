@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="150px" height="78px" viewBox="0 0 150 78" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Icone Sign@1x</title>
+    <defs>
+        <linearGradient x1="53.7528126%" y1="12.6480472%" x2="82.4169337%" y2="109.254297%" id="linearGradient-1">
+            <stop stop-color="#EC51B3" offset="0%"></stop>
+            <stop stop-color="#EABC38" offset="62.1885927%"></stop>
+            <stop stop-color="#E8D002" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Frame-2" transform="translate(-1259, -562)">
+            <g id="Icone-Sign" transform="translate(1259.4148, 562.2369)">
+                <rect id="Rectangle" x="0" y="0" width="149" height="77"></rect>
+                <g id="Group" transform="translate(56.5374, 28.3423)">
+                    <circle id="Oval-4" fill="#60D1FA" cx="7.79994157" cy="5.5" r="1.0791155"></circle>
+                    <circle id="Oval-4-Copy" fill="#60D1FA" cx="12.4481726" cy="5.5" r="1.0791155"></circle>
+                    <circle id="Oval-4-Copy-2" fill="#60D1FA" cx="17.0964036" cy="5.5" r="1.0791155"></circle>
+                    <path d="M19.4329587,0.5 L24.4329587,5.5 M19.4329587,10.5 L24.4329587,5.5" id="Combined-Shape" stroke="#60D1FA" stroke-width="2" stroke-linecap="round"></path>
+                    <path d="M0.5,0.5 L5.5,5.5 M0.5,10.5 L5.5,5.5" id="Combined-Shape-Copy" stroke="#60D1FA" stroke-width="2" stroke-linecap="round" transform="translate(3, 5.5) scale(-1, 1) translate(-3, -5.5)"></path>
+                </g>
+                <circle id="Oval-3" fill="#60D1FA" cx="32.838798" cy="20.7630598" r="12.3684701"></circle>
+                <path d="M32.838798,35.2315299 C49.6017085,35.2315299 55.8627089,42.9751302 51.6217991,58.4623309 L14.0557969,58.4623309 C9.81488715,42.9751302 16.0758875,35.2315299 32.838798,35.2315299 Z" id="Rectangle-4" fill="#60D1FA"></path>
+                <path d="M149,3 L149,77 L149,77 L90,77 C88.3431458,77 87,75.6568542 87,74 L87,43.1666352 L87,43.1666352 L87,3 C87,1.34314575 88.3431458,0 90,0 L146,0 C147.656854,-4.4408921e-16 149,1.34314575 149,3 Z" id="Polygon-Copy" fill="url(#linearGradient-1)" style="mix-blend-mode: screen;"></path>
+                <g id="Graphic" transform="translate(106, 19.0923)" stroke="#001D38" stroke-linecap="round" stroke-linejoin="round">
+                    <g id="Group" transform="translate(1.505, 2.4575)">
+                        <path d="M10.495,9.8341251 C9.3904305,9.8341251 8.495,10.9347584 8.495,12.2924584 C8.495,13.5462084 8.395,15.3776668 8.235,17.2091251" id="Path" stroke-width="2"></path>
+                        <path d="M12.495,13.6691251 C12.495,16.5945418 12.495,21.5112084 11.495,24.5841251" id="Path" stroke-width="2"></path>
+                        <path d="M15.785,23.3795418 C15.905,22.6420418 16.215,20.5524584 16.285,19.6674584" id="Path" stroke-width="2"></path>
+                        <path d="M0.495,12.2924584 C0.495,7.00175133 3.24930095,2.30462805 7.33272234,0.631559561 C11.4161437,-1.04150893 15.9124176,0.684892753 18.495,4.91745843" id="Path" stroke-width="2"></path>
+                        <line x1="0.495" y1="17.2091251" x2="0.505" y2="17.2091251" id="Path" stroke-width="2"></line>
+                        <path d="M20.295,17.2091251 C20.495,14.7507918 20.426,10.6281668 20.295,9.8341251" id="Path" stroke-width="2"></path>
+                        <path d="M3.495,21.5112084 C3.995,19.6674584 4.495,15.9799584 4.495,12.2924584 C4.49398952,11.4552328 4.60896599,10.6239079 4.835,9.8341251" id="Path" stroke-width="2"></path>
+                        <path d="M7.145,24.5841251 C7.355,23.7728751 7.595,22.9616251 7.715,22.1257918" id="Path" stroke-width="2"></path>
+                        <path d="M7.495,5.90079177 C9.35200177,4.58295171 11.6400086,4.58340216 13.4966668,5.90197333 C15.3533251,7.2205445 16.4963753,9.65677995 16.495,12.2924584 L16.495,14.7507918" id="Path" stroke-width="2"></path>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

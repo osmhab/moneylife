@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.github
+.vercel
+.turbo
+dist
+out
+coverage
+.env*
+secrets
+legacy

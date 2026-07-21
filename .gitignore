@@ -31,3 +31,5 @@ firebase-debug.log
 app/lib/legacy/functions/node_modules/
 
 legacy/functions/node_modules/
+
+env.prod.yaml

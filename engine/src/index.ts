@@ -170,6 +170,23 @@ export const onNotificationCreated = onDocumentCreated({
       return;
     }
 
+    // Badge = nombre REEL de notifications non lues (celle qui vient d'etre creee
+    // comprise, elle est non lue par definition). Un badge fige a 1 sous-estimait
+    // des qu'un client avait plusieurs messages en attente.
+    // `count()` agrege cote serveur : on ne rapatrie pas les documents.
+    let badge = 1;
+    try {
+      const agg = await db
+        .collection(`clients/${uid}/notifications`)
+        .where("read", "==", false)
+        .count()
+        .get();
+      badge = agg.data().count;
+    } catch (e) {
+      // Index absent ou erreur d'agregation : on degrade sans bloquer l'envoi.
+      console.warn("[push] comptage des non-lus impossible, badge=1 :", e);
+    }
+
     const response = await admin.messaging().sendEachForMulticast({
       tokens,
       notification: {
@@ -183,7 +200,7 @@ export const onNotificationCreated = onDocumentCreated({
         notifId: event.params.notifId,
       },
       apns: {
-        payload: { aps: { sound: "default", badge: 1 } },
+        payload: { aps: { sound: "default", badge } },
       },
     });
 

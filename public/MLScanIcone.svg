@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="150px" height="78px" viewBox="0 0 150 78" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Icone Scan LPP</title>
+    <defs>
+        <linearGradient x1="52.7048994%" y1="12.6480472%" x2="73.3650208%" y2="109.254297%" id="linearGradient-1">
+            <stop stop-color="#EC51B3" offset="0%"></stop>
+            <stop stop-color="#EABC38" offset="62.1885927%"></stop>
+            <stop stop-color="#E8D002" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Frame-2" transform="translate(-416, -562)">
+            <g id="Icone-Scan-LPP" transform="translate(416.5852, 562.2369)">
+                <rect id="Rectangle" x="0" y="0" width="149" height="77"></rect>
+                <rect id="Rectangle-2" fill="#60D1FA" x="0" y="0" width="125" height="56" rx="4"></rect>
+                <path d="M116,25.8086763 L147,25.8086763 C148.104569,25.8086763 149,26.7041068 149,27.8086763 L149,77.0086763 L149,77.0086763 L116,77.0086763 C114.895431,77.0086763 114,76.1132458 114,75.0086763 L114,27.8086763 C114,26.7041068 114.895431,25.8086763 116,25.8086763 Z" id="Rectangle-5" fill="url(#linearGradient-1)" style="mix-blend-mode: screen;"></path>
+                <rect id="Rectangle-6" fill="#001D38" x="126" y="29.7630598" width="19" height="2" rx="1"></rect>
+                <rect id="Rectangle-6-Copy" fill="#001D38" x="129.593586" y="33.3829577" width="15.4064137" height="2" rx="1"></rect>
+                <rect id="Rectangle-6-Copy-2" fill="#001D38" x="127.55261" y="36.5" width="17.4473899" height="2" rx="1"></rect>
+                <line x1="58" y1="23.7630598" x2="90.5" y2="23.7630598" id="Line-Copy" stroke="#001D38" stroke-width="2" stroke-linecap="round"></line>
+                <line x1="74.25" y1="29.2630598" x2="90.5" y2="29.2630598" id="Line-Copy-2" stroke="#001D38" stroke-width="2" stroke-linecap="round"></line>
+                <path d="M49.5,13.7631598 L54.5,18.7631598 M49.5,23.7631598 L54.5,18.7631598" id="Combined-Shape" stroke="#001D38" stroke-width="2" stroke-linecap="round"></path>
+            </g>
+        </g>
+    </g>
+</svg>

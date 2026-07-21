@@ -1,3 +1,4 @@
+// app/components/RequireAdmin.tsx
 "use client";
 
 import { useEffect, useState } from "react";

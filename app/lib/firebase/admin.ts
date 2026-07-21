@@ -17,5 +17,6 @@ if (!getApps().length) {
 
 export const db = getFirestore();
 export const storage = getStorage();
-export const bucket = storage.bucket();
+const bucketName = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "moneylife-c3b0b.firebasestorage.app";
+export const bucket = storage.bucket(bucketName);
 export const authAdmin = getAuth();

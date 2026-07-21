@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="55px" height="29px" viewBox="0 0 55 29" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Icone Config</title>
+    <defs>
+        <linearGradient x1="50%" y1="10.6741322%" x2="38.1165835%" y2="98.2486341%" id="linearGradient-1">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#EEEEEE" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="86.5803639%" y1="106.871951%" x2="27.8498281%" y2="7.85415423%" id="linearGradient-2">
+            <stop stop-color="#0020FF" offset="0%"></stop>
+            <stop stop-color="#B56FFF" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Carte-Config" transform="translate(-330, -623)">
+            <g id="Scan-LPP" transform="translate(321.5, 609)">
+                <g id="Icone-Config" transform="translate(8.5, 14.3027)">
+                    <rect id="Rectangle" x="0" y="0" width="54.3701" height="28.0973"></rect>
+                    <path d="M1.4596,0 L44.1529,0 C44.9590148,4.21884749e-15 45.6125,0.653485179 45.6125,1.4596 L45.6125,9.57955832 L45.6125,9.57955832 L45.6125,18.9748 C45.6125,19.7809148 44.9590148,20.4344 44.1529,20.4344 L35.3056708,20.4344 L35.3056708,20.4344 L1.4596,20.4344 C0.653485179,20.4344 1.55431223e-15,19.7809148 1.55431223e-15,18.9748 L0,1.4596 C0,0.653485179 0.653485179,0 1.4596,0 Z" id="Rectangle-2" fill="#FCBAFF"></path>
+                    <circle id="Oval-2" fill="#001D38" cx="45.6360162" cy="26.1357706" r="1.2777927"></circle>
+                    <path d="M6.67569965,8.4286745 L6.67569965,13.4416596 C6.67569965,14.4493031 7.49255612,15.2661596 8.50019965,15.2661596 L25.4279326,15.2661596 L25.4279326,15.2661596" id="Line-3" stroke="#001D38" stroke-width="0.7298" stroke-linecap="round"></path>
+                    <path d="M9.42277896,7.60692928 L9.42277896,13.4416596 C9.42277896,14.4493031 10.2396354,15.2661596 11.247279,15.2661596 L28.1900275,15.2661596 L28.1900275,15.2661596" id="Line-3" stroke="#001D38" stroke-width="0.7298" stroke-linecap="round" transform="translate(18.8064, 11.4365) scale(-1, -1) translate(-18.8064, -11.4365)"></path>
+                    <circle id="Oval" fill="#001D38" cx="6.67569965" cy="7.60692928" r="1.21750962"></circle>
+                    <circle id="Oval" fill="#001D38" cx="28.1900275" cy="15.2661596" r="1.21750962"></circle>
+                    <path d="M41.2751351,5.1086 L53.2754,5.1086 C53.8799861,5.1086 54.3701,5.59871388 54.3701,6.2033 L54.3701,28.0973 L54.3701,28.0973 L35.8016351,28.0973 C35.197049,28.0973 34.7069351,27.6071861 34.7069351,27.0026 L34.7069351,11.6768 C34.7069351,8.04928331 37.6476184,5.1086 41.2751351,5.1086 Z" id="Rectangle-7" fill="url(#linearGradient-2)"></path>
+                    <g id="Graphic" transform="translate(39.4384, 10.4288)" stroke="#D8D8D8" stroke-linecap="round" stroke-linejoin="round">
+                        <g id="Group">
+                            <line x1="5.659599" y1="5.28400743" x2="3.601563" y2="1.71846006" id="Path" stroke-width="1.029018"></line>
+                            <line x1="5.659599" y1="7.06420857" x2="3.601563" y2="10.6297559" id="Path" stroke-width="1.029018"></line>
+                            <line x1="6.174108" y1="11.319198" x2="6.174108" y2="10.29018" id="Path" stroke-width="1.029018"></line>
+                            <line x1="6.174108" y1="1.029018" x2="6.174108" y2="2.058036" id="Path" stroke-width="1.029018"></line>
+                            <line x1="7.203126" y1="6.174108" x2="11.319198" y2="6.174108" id="Path" stroke-width="1.029018"></line>
+                            <line x1="8.746653" y1="10.6297559" x2="8.232144" y2="9.73965537" id="Path" stroke-width="1.029018"></line>
+                            <line x1="8.746653" y1="1.71846006" x2="8.232144" y2="2.60856063" id="Path" stroke-width="1.029018"></line>
+                            <line x1="1.029018" y1="6.174108" x2="2.058036" y2="6.174108" id="Path" stroke-width="1.029018"></line>
+                            <line x1="10.6297559" y1="8.746653" x2="9.73965537" y2="8.232144" id="Path" stroke-width="1.029018"></line>
+                            <line x1="10.6297559" y1="3.601563" x2="9.73965537" y2="4.116072" id="Path" stroke-width="1.029018"></line>
+                            <line x1="1.71846006" y1="8.746653" x2="2.60856063" y2="8.232144" id="Path" stroke-width="1.029018"></line>
+                            <line x1="1.71846006" y1="3.601563" x2="2.60856063" y2="4.116072" id="Path" stroke-width="1.029018"></line>
+                            <circle id="Oval" stroke-width="1.029018" cx="6.174108" cy="6.174108" r="1.029018"></circle>
+                            <circle id="Oval" stroke-width="1.029018" cx="6.174108" cy="6.174108" r="4.116072"></circle>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

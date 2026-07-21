@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="56px" height="29px" viewBox="0 0 56 29" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Icone Sign</title>
+    <defs>
+        <linearGradient x1="50%" y1="10.6741322%" x2="38.1165835%" y2="98.2486341%" id="linearGradient-1">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#EEEEEE" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="53.7528126%" y1="12.6480472%" x2="82.4169337%" y2="109.254297%" id="linearGradient-2">
+            <stop stop-color="#60D1FA" offset="0%"></stop>
+            <stop stop-color="#0050FF" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Carte-Sign" transform="translate(-330, -623)">
+            <g id="Scan-LPP" transform="translate(321.5, 609)">
+                <g id="Icone-Sign" transform="translate(8.5, 14.3027)">
+                    <rect id="Rectangle" x="0" y="0" width="55.13" height="28.49"></rect>
+                    <g id="Group" transform="translate(21.1038, 10.6716)">
+                        <circle id="Oval-4" fill="#60D1FA" cx="2.70097838" cy="1.85" r="1"></circle>
+                        <circle id="Oval-4-Copy" fill="#60D1FA" cx="4.42082385" cy="1.85" r="1"></circle>
+                        <circle id="Oval-4-Copy-2" fill="#60D1FA" cx="6.14066932" cy="1.85" r="1"></circle>
+                        <path d="M7.00519471,1.08885123e-13 L8.85519471,1.85 M7.00519471,3.7 L8.85519471,1.85" id="Combined-Shape" stroke="#60D1FA" stroke-width="0.74" stroke-linecap="round"></path>
+                        <path d="M7.00522973e-13,1.08885123e-13 L1.85,1.85 M7.00522973e-13,3.7 L1.85,1.85" id="Combined-Shape-Copy" stroke="#60D1FA" stroke-width="0.74" stroke-linecap="round" transform="translate(0.925, 1.85) scale(-1, 1) translate(-0.925, -1.85)"></path>
+                    </g>
+                    <circle id="Oval-3" fill="#60D1FA" cx="12.1503553" cy="7.68233212" r="4.57633394"></circle>
+                    <path d="M12.1503553,13.0356661 C18.3526322,13.0356661 20.6692023,15.9007982 19.1000657,21.6310624 L5.20064486,21.6310624 C3.63150825,15.9007982 5.94807838,13.0356661 12.1503553,13.0356661 Z" id="Rectangle-4" fill="#60D1FA"></path>
+                    <path d="M55.13,1.11 L55.13,28.49 L55.13,28.49 L33.3,28.49 C32.6869639,28.49 32.19,27.9930361 32.19,27.38 L32.19,15.971655 L32.19,15.971655 L32.19,1.11 C32.19,0.496963928 32.6869639,-4.4408921e-16 33.3,-4.4408921e-16 L54.02,0 C54.6330361,-2.22044605e-16 55.13,0.496963928 55.13,1.11 Z" id="Polygon-Copy" fill="url(#linearGradient-2)"></path>
+                    <g id="Graphic" transform="translate(39.22, 7.0641)" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round">
+                        <g id="Group" transform="translate(0.5568, 0.9093)">
+                            <path d="M3.88315,3.63862629 C3.47445929,3.63862629 3.14315,4.04586062 3.14315,4.54820962 C3.14315,5.01209712 3.10615,5.6897367 3.04695,6.36737629" id="Path" stroke-width="0.74"></path>
+                            <path d="M4.62315,5.05757629 C4.62315,6.13998045 4.62315,7.95914712 4.25315,9.09612629" id="Path" stroke-width="0.74"></path>
+                            <path d="M5.84045,8.65043045 C5.88485,8.37755545 5.99955,7.60440962 6.02545,7.27695962" id="Path" stroke-width="0.74"></path>
+                            <path d="M0.18315,4.54820962 C0.18315,2.59064799 1.20224135,0.852712378 2.71310727,0.233677038 C4.22397318,-0.385358303 5.88759449,0.253410319 6.84315,1.81945962" id="Path" stroke-width="0.74"></path>
+                            <line x1="0.18315" y1="6.36737629" x2="0.18685" y2="6.36737629" id="Path" stroke-width="0.74"></line>
+                            <path d="M7.50915,6.36737629 C7.58315,5.45779295 7.55762,3.9324217 7.50915,3.63862629" id="Path" stroke-width="0.74"></path>
+                            <path d="M1.29315,7.95914712 C1.47815,7.27695962 1.66315,5.91258462 1.66315,4.54820962 C1.66277612,4.23843614 1.70531742,3.93084592 1.78895,3.63862629" id="Path" stroke-width="0.74"></path>
+                            <path d="M2.64365,9.09612629 C2.72135,8.79596379 2.81015,8.49580129 2.85455,8.18654295" id="Path" stroke-width="0.74"></path>
+                            <path d="M2.77315,2.18329295 C3.46024066,1.69569213 4.30680318,1.6958588 4.99376672,2.18373013 C5.68073027,2.67160146 6.10365886,3.57300858 6.10315046,4.54820962 L6.10315046,5.45779295" id="Path" stroke-width="0.74"></path>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

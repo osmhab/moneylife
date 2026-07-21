@@ -1,94 +1,62 @@
 /*app/globals.css*/
-/* ===== Tailwind v4 ===== */
+
+/* 1. LES IMPORTS (Toujours en premier) */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 @import "tailwindcss";
 @plugin "tailwindcss-animate";
 
-/* ===== Tokens (slate + brand) ===== */
+/* 2. CONFIGURATION DU THÈME & DESIGN SYSTEM */
 @custom-variant dark (&:is(.dark *));
 
 :root {
   color-scheme: light;
-  --radius: 0.625rem;
+  --radius: 1.25rem; 
 
-  /* Brand primaire MoneyLife */
-  --primary: #003263;
-  --primary-foreground: white;
+  /* Palette Revolut Style */
+  --primary: #191C1F;
+  --primary-foreground: #FFFFFF;
+  --background: #F8F9FB;
+  --foreground: #191C1F;
+  --card: #FFFFFF;
+  --card-foreground: #191C1F;
+  --popover: #FFFFFF;
+  --popover-foreground: #191C1F;
+  --secondary: #F1F2F4;
+  --secondary-foreground: #191C1F;
+  --muted: #F1F2F4;
+  --muted-foreground: #667085;
+  --accent: #F1F2F4;
+  --accent-foreground: #191C1F;
+  --destructive: #FF4D4D;
+  --border: #E2E4E8;
+  --input: #E2E4E8;
+  --ring: #0075FF;
 
-  /* Slate (clair) — tes valeurs existantes conservées */
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
-
-  /* Charts + sidebar (facultatif, tu peux garder tes valeurs) */
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
-
-  /* Thème de base */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  /* Charts */
+  --chart-1: #0075FF;
+  --chart-2: #00D084;
+  --chart-3: #FF7A00;
+  --chart-4: #6A00FF;
+  --chart-5: #FF004C;
 }
 
 .dark {
-  /* On garde le même bleu brand en dark */
-  --primary: #0030A8;
-  --primary-foreground: white;
-
-  /* Slate (sombre) */
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  color-scheme: dark;
+  --primary: #FFFFFF;
+  --primary-foreground: #191C1F;
+  --background: #0E1012;
+  --foreground: #FFFFFF;
+  --card: #191C1F;
+  --card-foreground: #FFFFFF;
+  --muted: #26292E;
+  --muted-foreground: #8E96A3;
+  --border: #2D3135;
+  --input: #2D3135;
+  --ring: #0075FF;
 }
 
-/* Map utilitaires v4 */
 @theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
@@ -102,141 +70,84 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-    --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
+  --radius-xl: 2rem;
+  --radius-2xl: 2.5rem;
 }
 
+/* 3. STYLES DE BASE & CLASSES SPÉCIALES */
 @layer base {
   * { @apply border-border outline-ring/50; }
-  body { @apply bg-background text-foreground; }
-}
-
-
-/* ===== Rainbow Flow (déjà en place) ===== */
-@keyframes ml-drift-1 {
-  0%,100% { transform: translate3d(-15%,-12%,0) scale(1); }
-  50%     { transform: translate3d(20%,15%,0) scale(1.25); }
-}
-@keyframes ml-drift-2 {
-  0%,100% { transform: translate3d(10%,-10%,0) scale(1); }
-  50%     { transform: translate3d(-22%,18%,0) scale(1.22); }
-}
-@keyframes ml-drift-3 {
-  0%,100% { transform: translate3d(-12%,12%,0) scale(1); }
-  50%     { transform: translate3d(18%,-20%,0) scale(1.28); }
-}
-
-
-.ml-anim-drift-1  { animation: ml-drift-1 4s ease-in-out infinite; }
-.ml-anim-drift-2  { animation: ml-drift-2 5s ease-in-out infinite; }
-.ml-anim-drift-3  { animation: ml-drift-3 6s ease-in-out infinite; }
-.ml-anim-drift-1d { animation: ml-drift-1 3s ease-in-out infinite; }
-.ml-anim-drift-2d { animation: ml-drift-2 4s ease-in-out infinite; }
-.ml-anim-drift-3d { animation: ml-drift-3 5s ease-in-out infinite; }
-
-/* ===== Blobs sway (verticale ample & irrégulière) ===== */
-@keyframes ml-blob-sway {
-  0%   { transform: translateY(calc(var(--ml-amp, 28px) * -0.9)); }
-  11%  { transform: translateY(calc(var(--ml-amp, 28px) *  0.6)); }
-  23%  { transform: translateY(calc(var(--ml-amp, 28px) * -0.2)); }
-  37%  { transform: translateY(calc(var(--ml-amp, 28px) *  1.0)); }
-  52%  { transform: translateY(calc(var(--ml-amp, 28px) * -0.7)); }
-  68%  { transform: translateY(calc(var(--ml-amp, 28px) *  0.5)); }
-  84%  { transform: translateY(calc(var(--ml-amp, 28px) * -1.0)); }
-  100% { transform: translateY(calc(var(--ml-amp, 28px) * -0.9)); }
-}
-
-@layer utilities {
-  .ml-blob-sway {
-    animation: ml-blob-sway var(--ml-sway, 8s) ease-in-out infinite;
-    animation-delay: var(--ml-delay, 0s);
+  body { 
+    @apply bg-background text-foreground font-sans antialiased; 
+    letter-spacing: -0.01em;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .ml-blob-sway { animation: none !important; }
+/* Material Symbols Class */
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
 }
 
-
-
-
-/* ===== Waves — seamless (quad-tiling) + irregular sway ===== */
-
-/* 4 tuiles → on translate -25% pour boucler sans joint */
-@keyframes ml-loop-x-25 {
-  from { transform: translate3d(0,0,0); }
-  to   { transform: translate3d(-25%,0,0); }
-}
-
-/* Tangage vertical pseudo-aléatoire (une amplitude commune) */
-@keyframes ml-sway-irregular {
-  0%   { transform: translateY(calc(var(--ml-amp, 28px) * -0.9)); }
-  12%  { transform: translateY(calc(var(--ml-amp, 28px) *  0.5)); }
-  25%  { transform: translateY(calc(var(--ml-amp, 28px) * -0.3)); }
-  38%  { transform: translateY(calc(var(--ml-amp, 28px) *  1.0)); }
-  52%  { transform: translateY(calc(var(--ml-amp, 28px) * -0.7)); }
-  68%  { transform: translateY(calc(var(--ml-amp, 28px) *  0.4)); }
-  84%  { transform: translateY(calc(var(--ml-amp, 28px) * -1.0)); }
-  100% { transform: translateY(calc(var(--ml-amp, 28px) * -0.9)); }
-}
-
-@layer utilities {
-  .ml-loop-x { animation: ml-loop-x-25 var(--ml-scroll, 14s) linear infinite; }
-  .ml-sway-y { animation: ml-sway-irregular var(--ml-sway, 7s) ease-in-out infinite; animation-delay: var(--ml-delay, 0s); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ml-loop-x, .ml-sway-y { animation: none !important; }
-}
-
-/* MoneyLife — supprimer les flèches des inputs number */
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-input[type="number"] {
-  -moz-appearance: textfield;
-}
-
-/* ===== MoneyLife Top Route Loader (Google-like continuous) ===== */
+/* 4. ANIMATIONS */
 @keyframes ml-toploader-move {
   0% { transform: translateX(-120%); }
   100% { transform: translateX(320%); }
 }
-
-/* Le gradient "glisse" à l’intérieur de la barre => effet flux continu */
 @keyframes ml-toploader-gradient {
   0% { background-position: 0% 50%; }
   100% { background-position: 200% 50%; }
 }
+@keyframes ml-shimmer {
+  0% { transform: translateX(-140%) rotate(12deg); opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translateX(140%) rotate(12deg); opacity: 0; }
+}
 
 @layer utilities {
   .ml-toploader-rainbow {
-    background-image: linear-gradient(
-      90deg,
-      #ff004c,
-      #ff7a00,
-      #ffd500,
-      #00d084,
-      #00b3ff,
-      #6a00ff,
-      #ff00c8,
-      #ff004c
-    );
+    background-image: linear-gradient(90deg, #ff004c, #ff7a00, #ffd500, #00d084, #00b3ff, #6a00ff, #ff00c8, #ff004c);
     background-size: 200% 100%;
   }
-
   .ml-toploader {
-    animation:
-      ml-toploader-move 0.9s linear infinite,
-      ml-toploader-gradient 0.65s linear infinite;
+    animation: ml-toploader-move 0.9s linear infinite, ml-toploader-gradient 0.65s linear infinite;
   }
+  .ml-shimmer {
+    @apply absolute top-[-30%] left-0 w-[55%] h-[160%] filter blur-[10px];
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.32), rgba(255,255,255,0.10), transparent);
+    animation: ml-shimmer 4.8s ease-in-out infinite;
+  }
+}
+
+/* Slider Custom */
+input[type="range"].slider-custom {
+  background-image: linear-gradient(#1a4f8a, #1a4f8a);
+  background-repeat: no-repeat;
+  outline: none;
+}
+input[type="range"].slider-custom::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 78, 168, 0.3);
+  border: 1px solid #1a4f8a;
 }

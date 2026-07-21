@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="150px" height="78px" viewBox="0 0 150 78" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Icone Config</title>
+    <defs>
+        <linearGradient x1="54.2348006%" y1="12.6480472%" x2="86.5803639%" y2="109.254297%" id="linearGradient-1">
+            <stop stop-color="#EC51B3" offset="0%"></stop>
+            <stop stop-color="#EABC38" offset="62.1885927%"></stop>
+            <stop stop-color="#E8D002" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Frame-2" transform="translate(-978, -562)">
+            <g id="Icone-Config" transform="translate(978.4716, 562.2369)">
+                <rect id="Rectangle" x="0" y="0" width="149" height="77"></rect>
+                <path d="M4,0 L121,-4.4408921e-16 C123.209139,-4.4408921e-16 125,1.790861 125,4 L125,26.2525578 L125,26.2525578 L125,52 C125,54.209139 123.209139,56 121,56 L96.7543733,56 L96.7543733,56 L4,56 C1.790861,56 3.99680289e-15,54.209139 0,52 L0,4 C0,1.790861 1.790861,4.4408921e-16 4,0 Z" id="Rectangle-2" fill="#60D1FA"></path>
+                <circle id="Oval-2" fill="#001D38" cx="125.064446" cy="71.6244741" r="3.50176131"></circle>
+                <path d="M18.2946003,23.0985873 L18.2946003,36.8365569 C18.2946003,39.5979807 20.5331765,41.8365569 23.2946003,41.8365569 L69.6846605,41.8365569 L69.6846605,41.8365569" id="Line-3" stroke="#001D38" stroke-width="2" stroke-linecap="round"></path>
+                <path d="M25.8229075,20.8466135 L25.8229075,36.8365569 C25.8229075,39.5979807 28.0614838,41.8365569 30.8229075,41.8365569 L77.2541176,41.8365569 L77.2541176,41.8365569" id="Line-3" stroke="#001D38" stroke-width="2" stroke-linecap="round" transform="translate(51.5385, 31.3416) scale(-1, -1) translate(-51.5385, -31.3416)"></path>
+                <circle id="Oval" fill="#001D38" cx="18.2946003" cy="20.8466135" r="3.33655692"></circle>
+                <circle id="Oval" fill="#001D38" cx="77.2541176" cy="41.8365569" r="3.33655692"></circle>
+                <path d="M113.113552,14 L146,14 C147.656854,14 149,15.3431458 149,17 L149,77 L149,77 L98.1135519,77 C96.4566977,77 95.1135519,75.6568542 95.1135519,74 L95.1135519,32 C95.1135519,22.0588745 103.172426,14 113.113552,14 Z" id="Rectangle-7" fill="url(#linearGradient-1)" style="mix-blend-mode: screen;"></path>
+                <g id="Graphic" transform="translate(108.08, 28.58)" stroke="#001D38" stroke-linecap="round" stroke-linejoin="round">
+                    <g id="Group">
+                        <line x1="15.51" y1="14.4807" x2="9.87" y2="4.7094" id="Path" stroke-width="2.82"></line>
+                        <line x1="15.51" y1="19.3593" x2="9.87" y2="29.1306" id="Path" stroke-width="2.82"></line>
+                        <line x1="16.92" y1="31.02" x2="16.92" y2="28.2" id="Path" stroke-width="2.82"></line>
+                        <line x1="16.92" y1="2.82" x2="16.92" y2="5.64" id="Path" stroke-width="2.82"></line>
+                        <line x1="19.74" y1="16.92" x2="31.02" y2="16.92" id="Path" stroke-width="2.82"></line>
+                        <line x1="23.97" y1="29.1306" x2="22.56" y2="26.6913" id="Path" stroke-width="2.82"></line>
+                        <line x1="23.97" y1="4.7094" x2="22.56" y2="7.1487" id="Path" stroke-width="2.82"></line>
+                        <line x1="2.82" y1="16.92" x2="5.64" y2="16.92" id="Path" stroke-width="2.82"></line>
+                        <line x1="29.1306" y1="23.97" x2="26.6913" y2="22.56" id="Path" stroke-width="2.82"></line>
+                        <line x1="29.1306" y1="9.87" x2="26.6913" y2="11.28" id="Path" stroke-width="2.82"></line>
+                        <line x1="4.7094" y1="23.97" x2="7.1487" y2="22.56" id="Path" stroke-width="2.82"></line>
+                        <line x1="4.7094" y1="9.87" x2="7.1487" y2="11.28" id="Path" stroke-width="2.82"></line>
+                        <circle id="Oval" stroke-width="2.82" cx="16.92" cy="16.92" r="2.82"></circle>
+                        <circle id="Oval" stroke-width="2.82" cx="16.92" cy="16.92" r="11.28"></circle>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

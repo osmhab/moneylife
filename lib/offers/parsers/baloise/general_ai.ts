@@ -11,9 +11,11 @@ import {
   extractJsonFromModelOutput,
 } from "../swisslife/utils";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+function getOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+  return new OpenAI({ apiKey });
+}
 
 export interface AiBaloiseMeta {
   meta: {
@@ -266,7 +268,7 @@ export async function parseBaloiseMeta(
     throw new Error("Texte OCR Bâloise vide pour parseBaloiseMeta");
   }
 
-  const response = await client.responses.create({
+  const response = await getOpenAI().responses.create({
     model: "gpt-4.1",
     input: [
       {

@@ -1,0 +1,65 @@
+import { NextResponse } from "next/server";
+import { db, authAdmin } from "@/lib/firebase/admin";
+
+export async function GET(req: Request) {
+  try {
+    // 1. Vérification de l'authentification admin
+    const authz = req.headers.get("authorization") || "";
+    const token = authz.startsWith("Bearer ") ? authz.slice(7) : null;
+    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    await authAdmin.verifyIdToken(token);
+
+    // 2. Récupération de l'UID dans l'URL
+    const { searchParams } = new URL(req.url);
+    const uid = searchParams.get("uid");
+    if (!uid) return NextResponse.json({ error: "Missing UID" }, { status: 400 });
+
+    // 3. Récupération du document racine du client
+    const clientDoc = await db.collection("clients").doc(uid).get();
+    if (!clientDoc.exists) {
+      return NextResponse.json({ error: "Client non trouvé" }, { status: 404 });
+    }
+    const mainData = clientDoc.data();
+
+    // 4. RÉCUPÉRATION DU SOUS-DOCUMENT DES DONNÉES PERSONNELLES
+    // C'est ici que se trouvent les adresses (Enter_adresse, etc.)
+    const dpDoc = await db
+      .collection("clients")
+      .doc(uid)
+      .collection("DonneePersonnelles")
+      .doc("current")
+      .get();
+    
+    const dpData = dpDoc.exists ? dpDoc.data() : null;
+
+    // 5. CONSTRUCTION DU PAYLOAD POUR LE FRONTEND
+    return NextResponse.json({
+      ok: true,
+      uid,
+      donneesPersonnelles: {
+        exists: !!dpData,
+        // On fusionne les infos pour que le front trouve tout au même endroit
+        firstName: dpData?.Enter_prenom || mainData?.firstName || "",
+        lastName: dpData?.Enter_nom || mainData?.lastName || "",
+        birthdate: dpData?.Enter_dateNaissance || "",
+        
+        // ON AJOUTE LES CHAMPS D'ADRESSE ICI
+        address: dpData?.Enter_adresse || "",
+        npa: dpData?.Enter_npa || "",
+        localite: dpData?.Enter_localite || "",
+        
+        // On garde les clés brutes par sécurité
+        Enter_adresse: dpData?.Enter_adresse || "",
+        Enter_npa: dpData?.Enter_npa || "",
+        Enter_localite: dpData?.Enter_localite || "",
+        
+        updatedAt: dpData?.updatedAt || null,
+      }
+    });
+
+  } catch (e: any) {
+    console.error("Erreur Overview API:", e.message);
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}

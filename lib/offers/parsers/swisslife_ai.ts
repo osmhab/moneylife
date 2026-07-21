@@ -9,9 +9,11 @@ import {
   SurrenderValueRow,
 } from "./types";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
+function getOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+  return new OpenAI({ apiKey });
+}
 
 /* -------------------------------------------------------------------------- */
 /* Helper : extraction texte depuis Responses API                             */
@@ -364,7 +366,7 @@ CONTRAINTES :
 /* -------------------------------------------------------------------------- */
 
 async function callMetaPrompt(ocrText: string): Promise<AiSwissLifeMeta> {
-  const response = await client.responses.create({
+  const response = await getOpenAI().responses.create({
     model: "gpt-4.1",
     input: [
       {
@@ -385,7 +387,7 @@ async function callMetaPrompt(ocrText: string): Promise<AiSwissLifeMeta> {
 }
 
 async function callNormalTablePrompt(ocrText: string): Promise<AiRachatRow[]> {
-  const response = await client.responses.create({
+  const response = await getOpenAI().responses.create({
     model: "gpt-4.1",
     input: [
       {
@@ -413,7 +415,7 @@ async function callNormalTablePrompt(ocrText: string): Promise<AiRachatRow[]> {
 }
 
 async function callEplTablePrompt(ocrText: string): Promise<AiRachatRow[]> {
-  const response = await client.responses.create({
+  const response = await getOpenAI().responses.create({
     model: "gpt-4.1",
     input: [
       {

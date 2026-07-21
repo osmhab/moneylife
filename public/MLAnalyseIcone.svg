@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="150px" height="78px" viewBox="0 0 150 78" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Icone Analyse@1x</title>
+    <defs>
+        <linearGradient x1="55.7883523%" y1="42.9885337%" x2="100%" y2="61.1228324%" id="linearGradient-1">
+            <stop stop-color="#EC51B3" offset="0%"></stop>
+            <stop stop-color="#EABC38" offset="62.1885927%"></stop>
+            <stop stop-color="#E8D002" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Frame-2" transform="translate(-697, -562)">
+            <g id="Icone-Analyse" transform="translate(697.5284, 562.2369)">
+                <rect id="Rectangle" x="0" y="0" width="149" height="77"></rect>
+                <line x1="24.056776" y1="28.1067384" x2="24.056776" y2="63" id="Line-2" stroke="#60D1FA" stroke-width="6" stroke-linecap="round"></line>
+                <line x1="13.556676" y1="21.3318664" x2="13.556676" y2="63" id="Line-2-Copy-5" stroke="#60D1FA" stroke-width="6" stroke-linecap="round"></line>
+                <line x1="3.05657597" y1="41.1718505" x2="3.05657597" y2="63" id="Line-2-Copy-6" stroke="#60D1FA" stroke-width="6" stroke-linecap="round"></line>
+                <line x1="34.556876" y1="14" x2="34.556876" y2="63" id="Line-2-Copy" stroke="#60D1FA" stroke-width="6" stroke-linecap="round"></line>
+                <line x1="45.056976" y1="19.3437009" x2="45.056976" y2="63" id="Line-2-Copy-2" stroke="#60D1FA" stroke-width="6" stroke-linecap="round"></line>
+                <line x1="55.557076" y1="28.1067384" x2="55.557076" y2="63" id="Line-2-Copy-3" stroke="#60D1FA" stroke-width="6" stroke-linecap="round"></line>
+                <line x1="66.057176" y1="14" x2="66.057176" y2="63" id="Line-2-Copy-4" stroke="#60D1FA" stroke-width="6" stroke-linecap="round"></line>
+                <path d="M33.7806521,56.5748529 C70.1731379,40.4000825 94.0967064,30.8751316 105.551358,28 C116.618444,25.2221476 130.254856,25.0853235 146.460593,27.5895276 L146.460535,27.5898987 C147.922163,27.8169671 149.000157,29.0754966 149,30.554657 L149,76.5 L149,76.5 L35,76.5 C33.3431458,76.5 32,75.1568542 32,73.5 L32.0000003,59.3149962 C32.0005066,58.1302054 32.6982642,57.0566893 33.7808026,56.5751913 Z" id="Rectangle-3" fill="url(#linearGradient-1)" style="mix-blend-mode: screen;"></path>
+            </g>
+        </g>
+    </g>
+</svg>

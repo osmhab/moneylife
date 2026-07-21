@@ -3,34 +3,36 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, ChevronRight } from "lucide-react";
+import { Menu, X, ChevronDown } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+
+// Import du hook de traduction
+import { useTranslations } from "next-intl";
+
+// 👈 NOUVEAU : On ajoute le type pour les sous-liens
+type SubLink = {
+  href: string;
+  label: string;
+  desc?: string; // Petite description optionnelle pour le dropdown
+};
 
 type NavLink = {
   href: string;
   label: string;
   external?: boolean;
+  disabled?: boolean;
+  subLinks?: SubLink[]; // 👈 NOUVEAU : Optionnel pour avoir un menu déroulant
 };
 
 type Props = {
-  /** Ton logo en React node (ex: <img src="/logoMoneyLife.svg" className="h-6 w-auto" />) */
   Logo?: React.ReactNode;
-  /** Liens de navigation (centre) */
   links: NavLink[];
-  /** Lien et libellé du CTA (droite) */
   ctaHref?: string;
   ctaLabel?: string;
-  /**
-   * Apparence de la barre :
-   * - "solid": fond blanc + (option) bordure basse
-   * - "glass": verre (bg blanc translucide + backdrop-blur) ; au hover → fond blanc
-   * - "transparent": aucun fond/bordure
-   */
   variant?: "transparent" | "solid" | "glass";
-  /** Afficher une bordure basse (utile surtout pour "solid" / "glass") */
   border?: boolean;
-  /** Classes supplémentaires */
   className?: string;
   containerClassName?: string;
 };
@@ -38,8 +40,8 @@ type Props = {
 export default function NavBar({
   Logo,
   links,
-  ctaHref = "/scan",
-  ctaLabel = "Scannez votre certificat LPP",
+  ctaHref = "/login",
+  ctaLabel,
   variant = "solid",
   border = true,
   className = "",
@@ -47,127 +49,261 @@ export default function NavBar({
 }: Props) {
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
+  const [hash, setHash] = React.useState<string>("");
+  const [scrolled, setScrolled] = React.useState(false);
+
+  // Chargement des traductions de la Navbar
+  const t = useTranslations("Navbar");
+  
+  // On utilise la prop ctaLabel si elle est fournie, sinon on prend la traduction par défaut
+  const finalCtaLabel = ctaLabel || t("cta");
+
+  React.useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 50);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () => setHash(window.location.hash || "");
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
 
   const isActive = (href: string) => {
     if (!pathname) return false;
+    if (href.includes("#")) {
+      const targetHash = "#" + href.split("#")[1];
+      if (pathname === "/") return hash === targetHash;
+      return false;
+    }
     if (href === "/") return pathname === "/";
     return pathname.startsWith(href);
   };
 
+  const isGlass = variant === "glass";
+  const appliedVariant = (isGlass && scrolled) ? "solid" : variant;
+
   const base =
-    variant === "solid"
+    appliedVariant === "solid"
+      ? ["bg-white/95 backdrop-blur-md", border ? "border-b border-slate-200" : "border-transparent"].join(" ")
+      : appliedVariant === "glass"
       ? [
-          "bg-white",
-          border ? "border-b border-slate-200/70" : "border-transparent",
-        ].join(" ")
-      : variant === "glass"
-      ? [
-          // couche verre translucide
-          "bg-white/30",
-          border ? "border-b border-white/40" : "border-transparent",
-          // blur compatible (feature query)
-          "supports-[backdrop-filter]:bg-white/30",
-          "supports-[backdrop-filter]:backdrop-blur-md",
-          // transitions & état hover → blanc “plein”, sans blur
+          "bg-white/5 border-b border-white/10 backdrop-blur-md",
           "transition-all duration-300",
-          "hover:bg-white hover:backdrop-blur-0 hover:border-slate-200/70",
+          "hover:bg-white hover:border-slate-200 shadow-sm", 
         ].join(" ")
       : "bg-transparent";
 
+  const isDarkBar = appliedVariant === "glass";
+
   return (
-    <header className={["relative", base, className].join(" ")}>
+    <header className={["relative group z-50 transition-colors duration-300", base, className].join(" ")}>
       <div
         className={[
-          "mx-auto flex h-14 sm:h-16 max-w-7xl items-center justify-between px-4 sm:px-6",
+          "mx-auto flex h-16 sm:h-20 max-w-7xl items-center justify-between px-6 sm:px-8",
           containerClassName,
         ].join(" ")}
       >
-        {/* LEFT — Logo */}
-        <div className="flex items-center">
-          <Link href="/" className="inline-flex items-center gap-2" aria-label="Accueil">
-            {Logo ?? <span className="text-lg font-black text-[#0030A8]">MoneyLife</span>}
+        {/* LEFT — Logo + liens desktop */}
+        <div className="flex items-center gap-10">
+          <Link href="/" className="inline-flex items-center gap-2" aria-label={t("sr_home")}>
+            {Logo ?? (
+              <img
+                src="https://firebasestorage.googleapis.com/v0/b/moneylife-c3b0b.firebasestorage.app/o/Logo%20Black.png?alt=media&token=490c0a26-6d62-4a9b-a7b9-1f1d439aedbd"
+                alt="CreditX"
+                className={[
+                  "h-8 md:h-10 w-auto transition-all duration-300",
+                  isDarkBar ? "invert brightness-0 group-hover:invert-0 group-hover:brightness-100" : ""
+                ].join(" ")}
+              />
+            )}
           </Link>
+
+          <nav className="hidden md:flex items-center gap-8" aria-label={t("sr_nav_main")}>
+            {links.map((l) => {
+              const active = isActive(l.href);
+              
+              if (l.disabled) {
+                return (
+                  <div
+                    key={l.href + l.label}
+                    className={[
+                      "flex items-center gap-2 text-[15px] font-semibold cursor-default transition-colors",
+                      isDarkBar ? "text-white/40 group-hover:text-slate-400" : "text-slate-400"
+                    ].join(" ")}
+                  >
+                    {l.label}
+                    <span className={["px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest", isDarkBar ? "bg-white/10 text-white/50 group-hover:bg-slate-100 group-hover:text-slate-500" : "bg-slate-100 text-slate-500"].join(" ")}>
+                      {t("soon")}
+                    </span>
+                  </div>
+                );
+              }
+
+              // 👈 NOUVEAU : Si le lien a un sous-menu (dropdown)
+              if (l.subLinks) {
+                return (
+                  <div key={l.href + l.label} className="relative group/dropdown py-4">
+                    <div
+                      className={[
+                        "flex items-center gap-1 text-[15px] font-semibold cursor-pointer transition-colors",
+                        isDarkBar 
+                          ? "text-white/90 hover:text-white group-hover:text-slate-600 group-hover:hover:text-slate-900" 
+                          : active ? "text-slate-900" : "text-slate-600 hover:text-slate-900",
+                      ].join(" ")}
+                    >
+                      {l.label}
+                      <ChevronDown className="h-4 w-4 transition-transform group-hover/dropdown:rotate-180" />
+                    </div>
+
+                    {/* La bulle du dropdown */}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 opacity-0 translate-y-2 pointer-events-none group-hover/dropdown:opacity-100 group-hover/dropdown:translate-y-0 group-hover/dropdown:pointer-events-auto transition-all duration-200 z-50">
+                      <div className="bg-white rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.1)] border border-slate-100 p-2 w-[260px] flex flex-col gap-1 relative overflow-hidden">
+                        {l.subLinks.map((sub) => (
+                          <Link
+                            key={sub.href}
+                            href={sub.href}
+                            className="flex flex-col px-4 py-3 rounded-xl hover:bg-slate-50 transition-colors group/sublink"
+                          >
+                            <span className="text-sm font-bold text-slate-900 group-hover/sublink:text-indigo-600 transition-colors">{sub.label}</span>
+                            {sub.desc && <span className="text-[11px] font-medium text-slate-500 mt-0.5 leading-snug">{sub.desc}</span>}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Rendu classique si pas de sous-menu
+              return (
+                <Link
+                  key={l.href + l.label}
+                  href={l.href}
+                  target={l.external ? "_blank" : undefined}
+                  rel={l.external ? "noopener noreferrer" : undefined}
+                  aria-current={active ? "page" : undefined}
+                  className={[
+                    "group/link relative text-[15px] font-semibold transition-colors",
+                    isDarkBar 
+                      ? "text-white/90 hover:text-white group-hover:text-slate-600 group-hover:hover:text-slate-900" 
+                      : active ? "text-slate-900" : "text-slate-600 hover:text-slate-900",
+                  ].join(" ")}
+                >
+                  {l.label}
+                  <span
+                    className={[
+                      "pointer-events-none absolute left-1/2 top-[calc(100%+6px)] h-[2px] w-0 -translate-x-1/2 rounded-full transition-all duration-300",
+                      isDarkBar ? "bg-white group-hover:bg-slate-900" : "bg-slate-900",
+                      active ? "w-full" : "group-hover/link:w-full",
+                    ].join(" ")}
+                  />
+                </Link>
+              );
+            })}
+          </nav>
         </div>
 
-        {/* CENTER — Liens desktop */}
-        <nav className="hidden md:flex items-center gap-1" aria-label="Navigation principale">
-          {links.map((l) => {
-            const active = isActive(l.href);
-            return (
-              <Link
-                key={l.href + l.label}
-                href={l.href}
-                target={l.external ? "_blank" : undefined}
-                rel={l.external ? "noopener noreferrer" : undefined}
-                aria-current={active ? "page" : undefined}
-                className={[
-                  "group relative rounded-full px-3 py-2 text-sm transition-colors",
-                  active ? "text-slate-900" : "text-slate-600 hover:text-slate-900",
-                ].join(" ")}
-              >
-                {l.label}
-                {/* soulignement animé */}
-                <span
-                  className={[
-                    "pointer-events-none absolute left-1/2 top-[calc(100%-2px)] h-[2px] w-0 -translate-x-1/2 rounded-full bg-slate-900 transition-all duration-300",
-                    active ? "w-6" : "group-hover:w-6",
-                  ].join(" ")}
-                />
-              </Link>
-            );
-          })}
-        </nav>
-
         {/* RIGHT — CTA + Burger */}
-        <div className="flex items-center gap-2">
-          {/* CTA desktop */}
+        <div className="flex items-center gap-2 sm:gap-4">
+          
+          <div className={["hidden sm:flex items-center transition-colors", isDarkBar ? "text-white/90 group-hover:text-slate-600" : "text-slate-600"].join(" ")}>
+            <LanguageSwitcher />
+          </div>
+
           <Link
             href={ctaHref}
-            className="
-              hidden sm:inline-flex items-center justify-center gap-2
-              rounded-full bg-[#11243E] px-4 py-2.5
-              text-white text-sm font-semibold
-              shadow-[0_10px_22px_rgba(17,36,62,0.20)]
-              transition-colors hover:bg-[#1B3766]
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#11243E] focus-visible:ring-offset-2
-            "
+            className={[
+              "hidden sm:inline-flex items-center justify-center gap-2",
+              "rounded-full px-6 py-2.5 text-[14px] font-bold transition-all hover:scale-105 active:scale-95 shadow-lg",
+              isDarkBar 
+                ? "bg-white text-slate-900 group-hover:bg-slate-900 group-hover:text-white" 
+                : "bg-slate-900 text-white"
+            ].join(" ")}
           >
-            {ctaLabel}
-            <ChevronRight className="h-4 w-4 opacity-90" aria-hidden="true" />
+            {finalCtaLabel}
           </Link>
 
           {/* Menu mobile */}
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden">
-                <Menu className="h-5 w-5" />
-                <span className="sr-only">Ouvrir le menu</span>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className={["md:hidden", isDarkBar ? "text-white group-hover:text-slate-900" : "text-slate-900"].join(" ")}
+              >
+                <Menu className="h-6 w-6" />
+                <span className="sr-only">{t("sr_open_menu")}</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[88vw] sm:w-[380px] p-0">
-              <SheetHeader className="px-5 pb-0 pt-4">
+
+            <SheetContent side="right" className="w-[88vw] sm:w-[380px] p-0 bg-white border-l-0 flex flex-col">
+              <SheetHeader className="px-6 pb-0 pt-6 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <SheetTitle className="sr-only">Navigation</SheetTitle>
-                  <Link
-                    href="/"
-                    onClick={() => setOpen(false)}
-                    className="inline-flex items-center gap-2"
-                    aria-label="Accueil"
-                  >
-                    {Logo ?? <span className="text-base font-black text-[#0030A8]">MoneyLife</span>}
+
+                  <Link href="/" onClick={() => setOpen(false)} aria-label={t("sr_home")}>
+                    <img
+                      src="https://firebasestorage.googleapis.com/v0/b/moneylife-c3b0b.firebasestorage.app/o/Logo%20Black.png?alt=media&token=490c0a26-6d62-4a9b-a7b9-1f1d439aedbd"
+                      alt="CreditX"
+                      className="h-8 w-auto"
+                    />
                   </Link>
-                  <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
-                    <X className="h-5 w-5" />
-                    <span className="sr-only">Fermer</span>
+
+                  <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-900">
+                    <X className="h-6 w-6" />
                   </Button>
                 </div>
               </SheetHeader>
 
-              <div className="mt-4 border-t border-slate-200/70" />
+              <div className="mt-8 border-t border-slate-100 flex-shrink-0" />
 
-              <nav className="flex flex-col gap-1 px-5 py-4" aria-label="Navigation mobile">
+              <nav className="flex-1 overflow-y-auto flex flex-col gap-2 px-4 py-6" aria-label={t("sr_nav_mobile")}>
                 {links.map((l) => {
                   const active = isActive(l.href);
+                  
+                  if (l.disabled) {
+                    return (
+                      <div
+                        key={"m-" + l.href + l.label}
+                        className="flex items-center justify-between rounded-2xl px-4 py-3 text-[16px] font-semibold text-slate-400 cursor-default"
+                      >
+                        {l.label}
+                        <span className="px-2 py-1 rounded bg-slate-100 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                          {t("soon")}
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  // 👈 NOUVEAU : Si sous-menu, on l'affiche en accordéon / décalé sur mobile
+                  if (l.subLinks) {
+                    return (
+                      <div key={"m-" + l.href + l.label} className="flex flex-col mb-2">
+                        <div className="px-4 py-2 text-[13px] font-bold uppercase tracking-widest text-slate-400">
+                          {l.label}
+                        </div>
+                        <div className="flex flex-col gap-1 pl-2">
+                          {l.subLinks.map((sub) => (
+                            <Link
+                              key={"m-sub-" + sub.href}
+                              href={sub.href}
+                              onClick={() => setOpen(false)}
+                              className="rounded-xl px-4 py-3 text-[16px] font-semibold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                            >
+                              {sub.label}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   return (
                     <Link
                       key={"m-" + l.href + l.label}
@@ -175,35 +311,37 @@ export default function NavBar({
                       target={l.external ? "_blank" : undefined}
                       rel={l.external ? "noopener noreferrer" : undefined}
                       onClick={() => setOpen(false)}
-                      aria-current={active ? "page" : undefined}
                       className={[
-                        "rounded-xl px-3 py-3 text-[15px] transition",
+                        "rounded-2xl px-4 py-3 text-[16px] font-semibold transition-colors",
                         active
-                          ? "bg-slate-100 text-slate-900"
-                          : "text-slate-700 hover:bg-slate-50 hover:text-slate-900",
+                          ? "bg-slate-50 text-blue-600"
+                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
                       ].join(" ")}
                     >
                       {l.label}
                     </Link>
                   );
                 })}
-
-                <Link
-                  href={ctaHref}
-                  onClick={() => setOpen(false)}
-                  className="
-                    mt-2 inline-flex items-center justify-center gap-2
-                    rounded-full bg-[#11243E] px-4 py-3
-                    text-white text-[15px] font-semibold
-                    shadow-[0_10px_22px_rgba(17,36,62,0.20)]
-                    transition-colors hover:bg-[#1B3766]
-                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#11243E] focus-visible:ring-offset-2
-                  "
-                >
-                  {ctaLabel}
-                  <ChevronRight className="h-4 w-4 opacity-90" aria-hidden="true" />
-                </Link>
               </nav>
+
+              <div className="p-6 border-t border-slate-100 bg-slate-50 flex-shrink-0 flex flex-col gap-4">
+                 <Link
+                    href={ctaHref}
+                    onClick={() => setOpen(false)}
+                    className="
+                      flex w-full items-center justify-center gap-2
+                      rounded-full bg-slate-900 px-6 py-3.5
+                      text-white text-[15px] font-bold
+                      shadow-xl transition-all hover:bg-slate-800 active:scale-95
+                    "
+                  >
+                    {finalCtaLabel}
+                  </Link>
+                 <div className="flex w-full justify-center py-3 bg-white rounded-full shadow-sm border border-slate-200">
+                   <LanguageSwitcher />
+                 </div>
+              </div>
+
             </SheetContent>
           </Sheet>
         </div>

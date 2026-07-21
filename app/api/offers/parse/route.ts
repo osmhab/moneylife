@@ -6,19 +6,6 @@ import { FieldValue } from "firebase-admin/firestore";
 import { v4 as uuidv4 } from "uuid";
 import { ImageAnnotatorClient } from "@google-cloud/vision";
 
-import { parseOfferPdf } from "lib/offers/parseOfferPdf";
-import {
-  parseSwissLifeMeta,
-  buildCoveragesFromMeta,
-} from "lib/offers/parsers/swisslife/general_ai";
-import {
-  parseAxaMeta,
-  buildCoveragesFromAxaMeta,
-} from "lib/offers/parsers/axa/general_ai"; 
-import {
-  parseBaloiseMeta,
-  buildCoveragesFromBaloiseMeta,
-} from "lib/offers/parsers/baloise/general_ai";
 
 import type {
   InsurerCode,
@@ -51,6 +38,18 @@ function normalizeInsurer(raw: string): InsurerCode | "" {
 export async function POST(req: Request) {
   try {
     const { filePath } = await req.json();
+
+
+    const [{ parseOfferPdf }, swisslife, axa, baloise] = await Promise.all([
+      import("lib/offers/parseOfferPdf"),
+      import("lib/offers/parsers/swisslife/general_ai"),
+      import("lib/offers/parsers/axa/general_ai"),
+      import("lib/offers/parsers/baloise/general_ai"),
+    ]);
+
+    const { parseSwissLifeMeta, buildCoveragesFromMeta } = swisslife;
+    const { parseAxaMeta, buildCoveragesFromAxaMeta } = axa;
+    const { parseBaloiseMeta, buildCoveragesFromBaloiseMeta } = baloise;
 
     if (!filePath || typeof filePath !== "string") {
       return NextResponse.json(
@@ -207,7 +206,6 @@ if (insurer === "Swiss Life") {
       insurerHint: insurer,
       clientUid: uid,
       requestId: fileId,
-      ocrText: rawText,
     });
   }
 }
@@ -254,7 +252,6 @@ if (!offer && insurer === "AXA") {
       insurerHint: insurer,
       clientUid: uid,
       requestId: fileId,
-      ocrText: rawText,
     });
   }
 }
@@ -301,7 +298,6 @@ if (!offer && insurer === "Bâloise") {
       insurerHint: insurer,
       clientUid: uid,
       requestId: fileId,
-      ocrText: rawText,
     });
   }
 }
