@@ -9,7 +9,8 @@
 // aligné dessus (applinks:creditx.ch) — les deux DOIVENT rester cohérents,
 // sinon aucun Universal Link ne s'ouvre dans l'app.
 //
-// appID = <TeamID>.<BundleID>. Team OrderNow Sàrl (728HA9R48A), bundle ch.creditx.CreditX.
+// appID = <TeamID>.<BundleID>. Team CreditX Sàrl (ex-OrderNow Sàrl, 728HA9R48A),
+// bundle ch.creditx.CreditX. Le Team ID ne change PAS avec la raison sociale.
 // Chemins captés :
 //   - /invite/couple        → invitation conjoint ;
 //   - /{fr,de}/dashboard/*   → boutons des e-mails (routés vers la bonne page).
