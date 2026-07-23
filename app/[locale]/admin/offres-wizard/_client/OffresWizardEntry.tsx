@@ -1427,11 +1427,20 @@ export default function OffresWizardEntry() {
                       >
                         Dossier
                       </button>
-                      <button 
+                      <button
                         onClick={() => window.open(`/admin/clients/${selectedClient360.uid}/documents`, '_blank')}
                         className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors flex items-center gap-1.5"
                       >
                         <FolderLock size={12} />
+                      </button>
+                      {/* Piste d'audit FINMA — préfixe de locale explicite (pas de
+                          middleware next-intl : un lien sans locale tomberait en 404). */}
+                      <button
+                        onClick={() => window.open(`/${locale}/admin/audit/${selectedClient360.uid}`, '_blank')}
+                        className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors flex items-center gap-1.5"
+                        title="Piste d'audit (FINMA)"
+                      >
+                        <ShieldCheck size={12} /> Audit
                       </button>
                     </div>
                   </div>

@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useLocale } from "next-intl";
 import { auth } from "@/lib/firebase";
 import { toast } from "sonner";
 
@@ -44,6 +45,7 @@ import {
   UserRound,
   ArrowRight,
   Archive,
+  ShieldCheck,
   Undo2,
   Trash2,
   UserPlus,
@@ -100,6 +102,7 @@ async function copyToClipboard(text: string) {
 }
 
 export default function ClientsCrmPageClient() {
+  const locale = useLocale();
   const [q, setQ] = useState("");
   const qDebounced = useDebouncedValue(q, 250);
 
@@ -649,6 +652,14 @@ export default function ClientsCrmPageClient() {
                           className="inline-flex items-center gap-1 text-sm font-medium hover:underline"
                         >
                           Voir <ArrowRight className="h-4 w-4" />
+                        </Link>
+
+                        <Link
+                          href={`/${locale}/admin/audit/${c.uid}`}
+                          title="Piste d'audit (FINMA)"
+                          className="h-9 w-9 inline-flex items-center justify-center rounded-xl border bg-background hover:bg-muted transition"
+                        >
+                          <ShieldCheck className="h-4 w-4" />
                         </Link>
 
                         {isActive ? (
