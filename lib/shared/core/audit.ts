@@ -18,6 +18,14 @@
 // côtés. L'écriture réelle se fait via app/lib/server/audit.ts (web) et
 // directement dans engine/src/index.ts (moteur), avec leur propre Admin SDK.
 
+/**
+ * Durée de conservation légale : 10 ans (CO art. 958f — documents commerciaux ;
+ * aligné avec LSFin/FIDLEG et LBA). Au-delà, la nLPD impose de NE PLUS conserver.
+ * Chaque événement porte donc un `retainUntil` = date + 10 ans, et une purge
+ * planifiée efface ce qui a dépassé ce terme (événement + document archivé).
+ */
+export const AUDIT_RETENTION_YEARS = 10;
+
 export type AuditEventType =
   | "ACCOUNT_CREATED"
   | "ACCOUNT_DELETED"
@@ -44,10 +52,14 @@ export interface AuditFieldChange {
 /** Référence à un document justificatif, conservé en Storage (chemin de rétention). */
 export interface AuditDocumentRef {
   fileName?: string;
-  storagePath?: string; // chemin Storage de RÉTENTION (hors clients/{uid})
-  sourceUrl?: string; // lien d'origine (peut expirer)
+  storagePath?: string; // chemin Storage de RÉTENTION (auditArchive/…, hors clients/{uid})
+  sourceUrl?: string; // lien d'origine (sous clients/{uid}, PURGÉ à la suppression)
   docType?: string; // ex. "Certificat LPP", "Police 3a"
   method?: "scan" | "import" | "manuel"; // comment le document est entré dans l'app
+  // Le document a-t-il été COPIÉ dans l'archive de rétention ? Si false, seul le
+  // lien d'origine existe — il disparaîtra à la suppression du compte. Sert à
+  // repérer les pièces non sécurisées (best-effort côté copie).
+  retained?: boolean;
 }
 
 export interface AuditEvent {

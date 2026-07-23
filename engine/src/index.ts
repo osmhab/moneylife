@@ -16,8 +16,9 @@ import {
   buildRetraiteMatrix 
 } from "../../lib/shared/calculs/matrices";
 
-import { diffProfile } from "../../lib/shared/core/audit";
+import { diffProfile, AUDIT_RETENTION_YEARS } from "../../lib/shared/core/audit";
 import type { AuditEventType, AuditFieldChange } from "../../lib/shared/core/audit";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 
 // Initialisation globale de l'admin SDK
 if (admin.apps.length === 0) {
@@ -44,12 +45,18 @@ async function logAudit(uid: string, type: AuditEventType, fields: {
   meta?: Record<string, unknown>;
 }): Promise<void> {
   try {
+    // Terme de conservation = maintenant + 10 ans. La purge planifiée s'appuie
+    // dessus. Timestamp Firestore pour rester comparable/indexable.
+    const retainUntil = new Date();
+    retainUntil.setFullYear(retainUntil.getFullYear() + AUDIT_RETENTION_YEARS);
+
     const doc: Record<string, unknown> = {
       type,
       actorType: fields.actorType ?? "client",
       actorUid: fields.actorUid ?? uid,
       summary: fields.summary,
       at: admin.firestore.FieldValue.serverTimestamp(),
+      retainUntil: admin.firestore.Timestamp.fromDate(retainUntil),
     };
     if (fields.changes && fields.changes.length) doc.changes = fields.changes;
     if (fields.document) doc.document = fields.document;
@@ -57,6 +64,35 @@ async function logAudit(uid: string, type: AuditEventType, fields: {
     await db.collection("auditTrail").doc(uid).collection("events").add(doc);
   } catch (e) {
     console.error(`[audit] echec (uid=${uid}, type=${type}) :`, e);
+  }
+}
+
+const AUDIT_BUCKET = "moneylife-c3b0b.firebasestorage.app";
+
+/**
+ * Copie un document justificatif dans l'ARCHIVE DE RÉTENTION (auditArchive/…),
+ * hors clients/{uid} → il survit à la suppression du compte. Le lien d'origine,
+ * lui, est sous clients/{uid} et sera purgé : sans cette copie, la piste d'audit
+ * pointerait vers un fichier disparu.
+ *
+ * Best-effort : en cas d'échec (fichier absent, URL non parsable), on renvoie
+ * `retained: false` — l'événement est quand même écrit, avec le lien d'origine.
+ */
+async function archiveDocument(uid: string, sourceUrl: string, key: string): Promise<{ storagePath?: string; retained: boolean }> {
+  try {
+    // Chemin de l'objet Storage extrait de l'URL de téléchargement Firebase :
+    // https://…/o/<chemin-url-encodé>?alt=media&token=…
+    const m = sourceUrl.match(/\/o\/([^?]+)/);
+    if (!m) return { retained: false };
+    const srcPath = decodeURIComponent(m[1]);
+    const base = srcPath.split("/").pop() || "document";
+    const destPath = `auditArchive/${uid}/${key}/${base}`;
+    const bucket = admin.storage().bucket(AUDIT_BUCKET);
+    await bucket.file(srcPath).copy(bucket.file(destPath));
+    return { storagePath: destPath, retained: true };
+  } catch (e) {
+    console.error(`[audit] archivage document échoué (uid=${uid}) :`, e);
+    return { retained: false };
   }
 }
 
@@ -211,12 +247,19 @@ export const onPlanUpdate = onDocumentWritten({
     }
 
     if (type) {
-      const doc = src ? {
-        fileName: after?.metadata?.sourceDocTitle || undefined,
-        sourceUrl: src,
-        docType: after?.metadata?.sourceDocType || undefined,
-        method,
-      } : null;
+      let doc: Record<string, unknown> | null = null;
+      if (src) {
+        // Copie le document dans l'archive de rétention (survit à la suppression).
+        const archived = await archiveDocument(uid, src, `${event.params.planId}-${Date.now()}`);
+        doc = {
+          fileName: after?.metadata?.sourceDocTitle || undefined,
+          sourceUrl: src,
+          docType: after?.metadata?.sourceDocType || undefined,
+          method,
+          storagePath: archived.storagePath,
+          retained: archived.retained,
+        };
+      }
       await logAudit(uid, type, {
         summary,
         document: doc,
@@ -431,3 +474,41 @@ export const onAuthUserCreated = functionsV1
     });
     console.log(`[audit] ACCOUNT_CREATED ${user.uid} (${providers})`);
   });
+
+/**
+ * Trigger PLANIFIÉ : purgeExpiredAudit
+ *
+ * La conservation FINMA est de 10 ans — au-delà, la nLPD impose de NE PLUS garder.
+ * Cette purge mensuelle efface les événements d'audit dont `retainUntil` est
+ * dépassé, ET leurs documents archivés dans auditArchive/.
+ *
+ * Requête collectionGroup sur `retainUntil` (index simple auto-provisionné à la
+ * 1re exécution ; le log donne le lien de création si besoin). Best-effort par
+ * événement : un échec n'interrompt pas la purge des autres.
+ */
+export const purgeExpiredAudit = onSchedule(
+  { schedule: "0 3 1 * *", timeZone: "Europe/Zurich", region: "europe-west1" },
+  async () => {
+    const now = admin.firestore.Timestamp.now();
+    const bucket = admin.storage().bucket(AUDIT_BUCKET);
+    let purged = 0;
+
+    const expired = await db
+      .collectionGroup("events")
+      .where("retainUntil", "<=", now)
+      .limit(500)
+      .get();
+
+    for (const d of expired.docs) {
+      try {
+        const path = (d.data() as any)?.document?.storagePath;
+        if (path) await bucket.file(path).delete().catch(() => undefined);
+        await d.ref.delete();
+        purged++;
+      } catch (e) {
+        console.error("[audit/purge] échec sur", d.ref.path, e);
+      }
+    }
+    console.log(`[audit/purge] ${purged} événement(s) au-delà de 10 ans purgé(s).`);
+  }
+);
