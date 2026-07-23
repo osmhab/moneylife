@@ -305,14 +305,26 @@ export default function OffresWizardEntry() {
       dob: client.dateNaissance || req?.client?.dateNaissance || req?.client?.dob || "",
       // Correction ici : req utilise .address (anglais) et client utilise .adresse (français)
       address: client.adresse || req?.client?.address || req?.client?.adresse || "",
-      aiEmails: client.aiEmails
+      aiEmails: client.aiEmails,
+      // Signal d'ACTIVITÉ : le doc racine `clients/{uid}` voit son `updatedAt`
+      // rafraîchi à chaque lancement de l'app (ensureClientDoc). Sert à trancher
+      // les doublons d'e-mail — cf. dédup ci-dessous.
+      _activity: client.updatedAt?.seconds || client._sortTime || 0,
     };
   });
 
-  // Dédoublonnage par email
-  const deduplicatedClients = Array.from(
-    new Map(mergedClients.map(c => [c.email !== "Email non renseigné" ? c.email : c.uid, c])).values()
-  );
+  // Dédoublonnage par e-mail.
+  // Un même e-mail peut porter DEUX fiches : inscription e-mail puis Google (2 uid),
+  // ou compte supprimé-recréé (une fiche devient orpheline). On garde alors la plus
+  // RÉCEMMENT ACTIVE (updatedAt max), jamais la plus ancienne — sinon une fiche
+  // orpheline/vide masquerait le vrai compte du client dans le CRM.
+  const bestByKey = new Map<string, typeof mergedClients[number]>();
+  for (const c of mergedClients) {
+    const key = c.email !== "Email non renseigné" ? c.email : c.uid;
+    const existing = bestByKey.get(key);
+    if (!existing || c._activity > existing._activity) bestByKey.set(key, c);
+  }
+  const deduplicatedClients = Array.from(bestByKey.values());
 
   // Filtrage par recherche (on inclut l'UID dans la recherche au cas où)
   const uniqueClients = deduplicatedClients.filter(c => 
