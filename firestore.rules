@@ -195,6 +195,23 @@ service cloud.firestore {
     }
 
     // ===============================
+    // ✅ PISTE D'AUDIT FINMA (auditTrail) — INALTÉRABLE
+    // ===============================
+    // Racine `auditTrail/{uid}/events/…`, HORS clients/{uid} : survit donc a la
+    // suppression du compte (preuve conservable apres droit a l'effacement).
+    // Ecriture SERVEUR uniquement (Admin SDK, qui contourne ces regles) :
+    //   - create/update/delete: false pour TOUS -> append-only, non falsifiable ;
+    //   - read: interne seulement (consultation CRM + export PDF).
+    match /auditTrail/{uid}/events/{eventId} {
+      allow read: if isInternal();
+      allow create, update, delete: if false;
+    }
+    match /auditTrail/{uid} {
+      allow read: if isInternal();
+      allow write: if false;
+    }
+
+    // ===============================
     // PAR DÉFAUT
     // ===============================
     match /{document=**} {

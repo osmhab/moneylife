@@ -16,11 +16,49 @@ import {
   buildRetraiteMatrix 
 } from "../../lib/shared/calculs/matrices";
 
+import { diffProfile } from "../../lib/shared/core/audit";
+import type { AuditEventType, AuditFieldChange } from "../../lib/shared/core/audit";
+
 // Initialisation globale de l'admin SDK
 if (admin.apps.length === 0) {
   admin.initializeApp();
 }
 const db = admin.firestore();
+// Ignore les champs `undefined` a l'ecriture (recommandation Firebase) : sans ca,
+// un seul champ optionnel absent (ex. document.fileName d'un evenement d'audit)
+// fait echouer TOUT le document. A appeler avant toute operation.
+db.settings({ ignoreUndefinedProperties: true });
+
+/**
+ * Écrit un événement dans la PISTE D'AUDIT FINMA (auditTrail/{uid}/events).
+ * Racine, donc SURVIT à la suppression du compte ; append-only (cf. règles).
+ * Capturé côté MOTEUR : le client ne peut pas empêcher l'enregistrement.
+ * Non bloquant — mais un échec est loggué (un trou = risque de conformité).
+ */
+async function logAudit(uid: string, type: AuditEventType, fields: {
+  actorType?: "client" | "admin" | "system";
+  actorUid?: string | null;
+  summary: string;
+  changes?: AuditFieldChange[];
+  document?: Record<string, unknown> | null;
+  meta?: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    const doc: Record<string, unknown> = {
+      type,
+      actorType: fields.actorType ?? "client",
+      actorUid: fields.actorUid ?? uid,
+      summary: fields.summary,
+      at: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (fields.changes && fields.changes.length) doc.changes = fields.changes;
+    if (fields.document) doc.document = fields.document;
+    if (fields.meta) doc.meta = fields.meta;
+    await db.collection("auditTrail").doc(uid).collection("events").add(doc);
+  } catch (e) {
+    console.error(`[audit] echec (uid=${uid}, type=${type}) :`, e);
+  }
+}
 
 /**
  * Trigger : onClientDataUpdate
@@ -32,11 +70,25 @@ export const onClientDataUpdate = onDocumentUpdated({
 }, async (event) => {
   console.log("--- SIGNAL REÇU (RÉGION EUROPE) ---");
   const uid = event.params.uid;
-  
+
   const newData = event.data?.after.data() as ClientData;
   if (!newData) {
     console.log("Aucune donnée reçue après mise à jour.");
     return;
+  }
+
+  // AUDIT : trace toute modification RÉELLE d'information (hors déclencheurs
+  // techniques, filtrés par diffProfile). Capture serveur = aucune modif ne peut
+  // échapper à la piste. Limite connue : le trigger ne connaît pas l'auteur exact
+  // d'une écriture client-side — on attribue au client (propriétaire du profil).
+  const beforeData = event.data?.before.data() as Record<string, unknown> | undefined;
+  const changes = diffProfile(beforeData, newData as unknown as Record<string, unknown>);
+  if (changes.length > 0) {
+    const noms = changes.map((c) => c.label).join(", ");
+    await logAudit(uid, "PROFILE_UPDATED", {
+      summary: `Modification des informations : ${noms}.`,
+      changes,
+    });
   }
 
   try {
@@ -127,12 +179,60 @@ export const onPlanUpdate = onDocumentWritten({
   const uid = event.params.uid;
   console.log(`--- PLAN MODIFIÉ/CRÉÉ/SUPPRIMÉ POUR L'UTILISATEUR ${uid} ---`);
 
+  // AUDIT : ajout / modification / remplacement / suppression de plan.
+  try {
+    const before = event.data?.before?.data() as any;
+    const after = event.data?.after?.data() as any;
+    const plan = after || before || {};
+    const inst = plan.institutionName || plan.data?.institutionName || "";
+    const label = plan.type || "plan";
+    const src = after?.metadata?.sourceFileUrl || after?.metadata?.sourceFile;
+    // Comment le document est entré : scan/import laisse un sourceFile, sinon manuel.
+    const method = after?.metadata?.isManualEntry
+      ? "manuel"
+      : src ? "scan" : undefined;
+
+    let type: AuditEventType | null = null;
+    let summary = "";
+    if (!before && after) {
+      type = "PLAN_ADDED";
+      summary = `Ajout d'un plan ${label}${inst ? " (" + inst + ")" : ""}` +
+        (method ? ` — saisie ${method}` : "") + ".";
+    } else if (before && !after) {
+      type = "PLAN_DELETED";
+      summary = `Suppression du plan ${before.type || ""}${before.institutionName ? " (" + before.institutionName + ")" : ""}.`;
+    } else if (before && after) {
+      // Remplacement annuel (metadata.replacedAt fraîchement posé) vs simple édition.
+      const replaced = after?.metadata?.replacedAt && after?.metadata?.replacedAt !== before?.metadata?.replacedAt;
+      type = replaced ? "PLAN_REPLACED" : "PLAN_UPDATED";
+      summary = replaced
+        ? `Remplacement du document du plan ${label}${inst ? " (" + inst + ")" : ""}.`
+        : `Modification du plan ${label}${inst ? " (" + inst + ")" : ""}.`;
+    }
+
+    if (type) {
+      const doc = src ? {
+        fileName: after?.metadata?.sourceDocTitle || undefined,
+        sourceUrl: src,
+        docType: after?.metadata?.sourceDocType || undefined,
+        method,
+      } : null;
+      await logAudit(uid, type, {
+        summary,
+        document: doc,
+        meta: { planId: event.params.planId, institutionName: inst, planType: label },
+      });
+    }
+  } catch (e) {
+    console.error("[audit] plan :", e);
+  }
+
   try {
     // On écrit un timestamp pour forcer le déclenchement de onClientDataUpdate
     await db.doc(`clients/${uid}/DonneePersonnelles/current`).set({
       _lastEngineTrigger: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
-    
+
     console.log(`Recalcul forcé pour l'analyse de ${uid}`);
   } catch (error) {
     console.error("Erreur lors du trigger de plan :", error);
@@ -265,6 +365,15 @@ export const onAuthUserDeleted = functionsV1
     const uid = user.uid;
     console.log(`[cleanup] compte Auth supprimé : ${uid} — nettoyage en cascade`);
 
+    // AUDIT AVANT le nettoyage : la piste vit dans auditTrail/{uid} (racine), qui
+    // n'est PAS touchée par la cascade → la preuve de suppression est conservée.
+    await logAudit(uid, "ACCOUNT_DELETED", {
+      actorType: "system",
+      actorUid: null,
+      summary: `Suppression définitive du compte${user.email ? " (" + user.email + ")" : ""} et de ses données.`,
+      meta: { email: user.email ?? null },
+    });
+
     // 1. Firestore : clients/{uid} + toutes ses sous-collections (plans,
     //    documents, notifications, devices, DonneePersonnelles, Analyse…).
     try {
@@ -300,4 +409,25 @@ export const onAuthUserDeleted = functionsV1
     } catch (e) {
       console.error(`[cleanup] echec offers_requests_3e :`, e);
     }
+  });
+
+/**
+ * Trigger : onAuthUserCreated (v1)
+ *
+ * Trace la CRÉATION de compte dans la piste d'audit FINMA, avec date/heure
+ * (serverTimestamp), e-mail et fournisseur (mot de passe / Google / Apple).
+ * Capture serveur = tout compte créé est trace, quelle que soit la voie.
+ */
+export const onAuthUserCreated = functionsV1
+  .region("europe-west1")
+  .auth.user()
+  .onCreate(async (user) => {
+    const providers = (user.providerData || []).map((p) => p.providerId).join(", ") || "inconnu";
+    await logAudit(user.uid, "ACCOUNT_CREATED", {
+      actorType: "client",
+      actorUid: user.uid,
+      summary: `Création du compte${user.email ? " (" + user.email + ")" : ""} — connexion : ${providers}.`,
+      meta: { email: user.email ?? null, providers },
+    });
+    console.log(`[audit] ACCOUNT_CREATED ${user.uid} (${providers})`);
   });
