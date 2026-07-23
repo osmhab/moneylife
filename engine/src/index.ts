@@ -1,6 +1,7 @@
 //engine/src/index.ts
 import { onDocumentUpdated, onDocumentWritten, onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
+import * as functionsV1 from "firebase-functions/v1";
 
 // Utilisation de l'alias configuré pour le moteur partagé
 import { ClientData, Legal_Settings } from "../../lib/shared/core/types";
@@ -243,3 +244,60 @@ export const onNotificationCreated = onDocumentCreated({
     console.error("[push] échec d'envoi :", error);
   }
 });
+
+/**
+ * Trigger : onAuthUserDeleted (v1)
+ *
+ * Nettoyage EN CASCADE quand un compte Auth est supprimé (console ou code).
+ * Firebase n'efface PAS les données Firestore/Storage d'un utilisateur supprimé :
+ * sans cette fonction, chaque compte de test supprimé laisse un doc `clients/{uid}`
+ * orphelin (+ plans, documents, fichiers), qui repollue le CRM — c'est l'origine
+ * du bug de doublon corrigé côté admin.
+ *
+ * L'API Auth `onDelete` n'existe qu'en v1 (pas d'équivalent v2) ; v1 et v2
+ * cohabitent dans le même codebase. Chaque étape est best-effort et isolée :
+ * l'échec d'une (ex. aucun fichier Storage) ne doit pas empêcher les autres.
+ */
+export const onAuthUserDeleted = functionsV1
+  .region("europe-west1")
+  .auth.user()
+  .onDelete(async (user) => {
+    const uid = user.uid;
+    console.log(`[cleanup] compte Auth supprimé : ${uid} — nettoyage en cascade`);
+
+    // 1. Firestore : clients/{uid} + toutes ses sous-collections (plans,
+    //    documents, notifications, devices, DonneePersonnelles, Analyse…).
+    try {
+      await db.recursiveDelete(db.collection("clients").doc(uid));
+      console.log(`[cleanup] Firestore clients/${uid} supprimé`);
+    } catch (e) {
+      console.error(`[cleanup] echec Firestore clients/${uid} :`, e);
+    }
+
+    // 2. Storage : tous les fichiers sous clients/{uid}/ (scans, photos de profil…).
+    try {
+      await admin
+        .storage()
+        .bucket("moneylife-c3b0b.firebasestorage.app")
+        .deleteFiles({ prefix: `clients/${uid}/` });
+      console.log(`[cleanup] Storage clients/${uid}/ purgé`);
+    } catch (e) {
+      console.error(`[cleanup] echec Storage clients/${uid}/ :`, e);
+    }
+
+    // 3. Demandes d'offres (collection racine, hors clients/{uid}) rattachées à ce client.
+    try {
+      const reqs = await db
+        .collection("offers_requests_3e")
+        .where("clientUid", "==", uid)
+        .get();
+      const batch = db.batch();
+      reqs.docs.forEach((d) => batch.delete(d.ref));
+      if (!reqs.empty) {
+        await batch.commit();
+        console.log(`[cleanup] ${reqs.size} demande(s) offers_requests_3e supprimée(s)`);
+      }
+    } catch (e) {
+      console.error(`[cleanup] echec offers_requests_3e :`, e);
+    }
+  });
