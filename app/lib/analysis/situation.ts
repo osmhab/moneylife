@@ -31,6 +31,13 @@ export interface SituationInput {
   allocations?: Record<string, number>;
   /** Lissage des prestations d'invalidité (réserve les années d'excédent). */
   isSmoothingIG?: boolean;
+  /** PLAFOND COUPLE AVS (marié/partenariat), MENSUEL — AFFICHAGE UNIQUEMENT.
+   *  Total AVS du MÉNAGE (les deux conjoints ensemble) plafonné à 150 % du max
+   *  individuel, projeté par la route via computeAvsCoupleForClient. NE change PAS
+   *  le calcul de la lacune (qui reste sur la rente INDIVIDUELLE de la personne) :
+   *  la carte affiche la rente individuelle en principal + ce plafond en note « * ».
+   *  Non additionné : c'est un total ménage, pas la rente de la personne. */
+  avsCouplePlafondMensuel?: number;
 }
 
 /** Une couche de prestation composant la couverture (AVS, LPP, LAA, 3e pilier…). */
@@ -86,6 +93,10 @@ export interface SituationAnalysis {
   capManquantRetraite: number;
   /** Sources de capital retraite par plan (pour les sliders d'allocation). */
   retraiteSources: RetraiteSource[];
+  /** Plafond couple AVS retraite MENSUEL (total ménage, marié/partenariat), pour
+   *  affichage en note « * » sous la rente individuelle. Absent si célibataire ou
+   *  profil incomplet. N'entre JAMAIS dans la lacune (rente individuelle seule). */
+  avsCouplePlafondMensuel?: number;
   retraite: RiskCard;
   invaliditeMaladie: RiskCard;
   invaliditeAccident: RiskCard;
@@ -106,7 +117,7 @@ const PLAFOND_3A_ANNUEL = 7258;
 
 /** Calcule les lacunes + scores affichés par SituationPrevoyancePage. */
 export function computeSituationAnalysis(input: SituationInput): SituationAnalysis | null {
-  const { cloudData, plans, allocation3a = 100, allocations, isSmoothingIG = false } = input;
+  const { cloudData, plans, allocation3a = 100, allocations, isSmoothingIG = false, avsCouplePlafondMensuel } = input;
   if (!cloudData?.projections || !cloudData?.Enter_salaireAnnuel) return null;
 
   // Allocation retraite effective d'un plan (0–100) : override live > valeur stockée
@@ -137,7 +148,9 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
 
   // ---- RETRAITE ----
   const cibleRetAnnuelle = salaireAnnuel * 0.8;
-  const retAvsAnnuelle = getVal(retProj, "AVS/AI");   // rente fixe (pas de slider)
+  // Rente AVS retraite = rente INDIVIDUELLE de la personne (matrice). Le plafond
+  // couple (avsCouplePlafondMensuel) est purement AFFICHÉ, jamais additionné ici.
+  const retAvsAnnuelle = getVal(retProj, "AVS/AI");
   const retLppAnnuelle = getVal(retProj, "LPP");
 
   // Inclut le 3a/3b (prévoyance privée) ET l'ÉPARGNE LIBRE (cash) : décision de
@@ -155,9 +168,9 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   });
 
   // ── ALLOCATION RETRAITE PAR PLAN (sliders) ────────────────────────────────
-  // Chaque source a un CAPITAL retraite + un % alloué. La LPP est capitalisée
-  // (rente × 25) pour être uniforme avec les capitaux (à 100 % elle reproduit
-  // exactement la rente LPP actuelle). Chaque source → rente = capital·alloc/25/12.
+  // Chaque source a un CAPITAL retraite (affiché) + un % alloué. Le % pilote la
+  // rente prise en compte dans la lacune (retLppEffectifAnnuel) ; le capital, lui,
+  // n'est qu'AFFICHÉ (« X destinés à la retraite »).
   const retraiteSources: { planId: string; label: string; type: string; capital: number; allocation: number }[] = [];
 
   const lppPlans = plans.filter(
@@ -168,11 +181,22 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
     const lppPlan = lppPlans[0];
     const lppAlloc = lppPlan ? allocOf(lppPlan) : 100;
     retLppEffectifAnnuel = retLppAnnuelle * (lppAlloc / 100);
+    // Capital AFFICHÉ = capital projeté du CERTIFICAT (le chiffre que le client
+    // reconnaît), et non « rente × 25 ». Cet ancien calcul reconvertissait la
+    // rente LPP (versée à ~6.8%) au taux de 4% (×25), gonflant le capital (ex.
+    // 350'945 devenait ~540'000). Repli sur l'ancien calcul si le certificat ne
+    // porte pas de projection. N'affecte PAS la lacune (basée sur la rente).
+    const ld = lppPlan?.data || {};
+    const lppCapitalCertificat =
+      parseAmount(ld.Enter_lppCapitalProjete65) ||
+      parseAmount(ld.capitalRetraiteGlobal) ||
+      parseAmount(ld.capitalRetraiteProjete) ||
+      Math.round(retLppAnnuelle * 25);
     retraiteSources.push({
       planId: lppPlan?.id ?? "lpp",
       label: lppPlan ? planLabel(lppPlan) : "LPP (2e pilier)",
       type: "LPP_BASE",
-      capital: Math.round(retLppAnnuelle * 25),
+      capital: Math.round(lppCapitalCertificat),
       allocation: lppAlloc,
     });
   }
@@ -344,6 +368,12 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
     capManquantRetraite: Math.max(0, cibleRetAnnuelle - prestationsRetAnnuelle) * 25 - capitalUtilise,
     // Sources retraite PAR PLAN (pour les sliders d'allocation côté UI).
     retraiteSources,
+    // Plafond couple (affichage seul) : uniquement s'il dépasse la rente individuelle,
+    // sinon il n'apporte rien à montrer.
+    ...(typeof avsCouplePlafondMensuel === "number" &&
+    avsCouplePlafondMensuel > retAvsAnnuelle / 12
+      ? { avsCouplePlafondMensuel }
+      : {}),
     retraite: {
       besoin: cibleRetraiteMensuelle,
       couverture: renteTotaleAffichee,

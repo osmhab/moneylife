@@ -14,6 +14,7 @@ import { collection, getDocs, query } from "firebase/firestore";
 import { useTranslations } from "next-intl";
 
 import SubscriptionWizardDrawer from "../../_components/SubscriptionWizardDrawer";
+import { floorRenteIGMensuelle } from "@/lib/analysis/new3a";
 
 // --- UTILITAIRE DE PRÉDICTION ACTUARIELLE ---
 function calculatePredictedRate(model: any, age: number, isSmoker: boolean, isFemale: boolean, floor: number = 1.0) {
@@ -139,8 +140,9 @@ export default function Resultat3aPage() {
         if (periodesMaladie || periodesAccident) {
           const maxMaladie = periodesMaladie?.length > 0 ? Math.max(...periodesMaladie.map((p: any) => p.lacune || 0)) : 0;
           const maxAccident = periodesAccident?.length > 0 ? Math.max(...periodesAccident.map((p: any) => p.lacune || 0)) : 0;
-          
-          calcMaladie = Math.max(0, Math.round(Math.max(maxMaladie, maxAccident)));
+
+          // Plancher assurable : lacune positive mais < 250/mois (3'000/an) → 250/mois ; 0 reste 0.
+          calcMaladie = floorRenteIGMensuelle(Math.max(0, Math.round(Math.max(maxMaladie, maxAccident))));
         }
 
         let calcDeces = 50000;

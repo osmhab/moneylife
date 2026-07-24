@@ -93,4 +93,58 @@ describe("computeSituationAnalysis", () => {
     expect(r.fiscal.investi3aAnnuel).toBe(0);
     expect(r.fiscal.plafond3a).toBe(7_258);
   });
+
+  it("source LPP : capital AFFICHÉ = capital projeté du certificat, pas rente×25", () => {
+    // Un plan LPP portant le capital projeté du certificat (350'945). L'ancien calcul
+    // affichait rente×25 = 18000×25 = 450'000 (gonflé). Le fix retient 350'945.
+    const lppPlan = {
+      id: "lpp1",
+      type: "LPP",
+      status: "ACTIVE",
+      data: { Enter_lppCapitalProjete65: 350_945, allocationRetraite: 100 },
+    };
+    const r = computeSituationAnalysis({ cloudData: cloudData(), plans: [lppPlan] })!;
+    const src = r.retraiteSources.find((s) => s.type === "LPP_BASE")!;
+    expect(src.capital).toBe(350_945); // certificat, pas 18000×25=450000
+    // La rente/lacune reste inchangée (basée sur la rente LPP de la matrice, pas le capital).
+    expect(r.retraite.couverture).toBe(3_500);
+  });
+
+  it("source LPP : repli sur rente×25 si le certificat ne porte pas de projection", () => {
+    const lppPlan = { id: "lpp1", type: "LPP", status: "ACTIVE", data: { allocationRetraite: 100 } };
+    const r = computeSituationAnalysis({ cloudData: cloudData(), plans: [lppPlan] })!;
+    const src = r.retraiteSources.find((s) => s.type === "LPP_BASE")!;
+    expect(src.capital).toBe(18_000 * 25); // fallback = rente×25
+  });
+
+  it("plafond couple : AFFICHÉ à part, sans toucher la lacune (rente individuelle)", () => {
+    // Individuel AVS = 2000/mois. Plafond couple = 3150/mois (total ménage).
+    const r = computeSituationAnalysis({
+      cloudData: cloudData(),
+      plans: [],
+      avsCouplePlafondMensuel: 3_150,
+    })!;
+    // La couverture reste sur la rente INDIVIDUELLE : (24000+18000)/12 = 3500.
+    expect(r.retraite.couverture).toBe(3_500);
+    // La couche AVS reste individuelle (2000), pas le total ménage.
+    expect(r.retraite.layers.find((l) => l.key === "avs")!.amount).toBe(2_000);
+    // Le plafond couple est exposé pour l'affichage en note « * ».
+    expect(r.avsCouplePlafondMensuel).toBe(3_150);
+  });
+
+  it("plafond couple : non exposé si ≤ rente individuelle (rien à montrer)", () => {
+    // Individuel AVS = 2000/mois. Plafond couple 1800 < individuel → non affiché.
+    const r = computeSituationAnalysis({
+      cloudData: cloudData(),
+      plans: [],
+      avsCouplePlafondMensuel: 1_800,
+    })!;
+    expect(r.avsCouplePlafondMensuel).toBeUndefined();
+    expect(r.retraite.couverture).toBe(3_500); // inchangé
+  });
+
+  it("plafond couple : absent (célibataire) → champ non présent", () => {
+    const r = computeSituationAnalysis({ cloudData: cloudData(), plans: [] })!;
+    expect(r.avsCouplePlafondMensuel).toBeUndefined();
+  });
 });

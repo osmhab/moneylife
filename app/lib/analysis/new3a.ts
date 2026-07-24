@@ -56,6 +56,21 @@ export interface New3aOffer {
 }
 
 const PLAFOND_3A = 7258;
+
+/**
+ * Rente d'invalidité (perte de gain) MINIMALE assurable, en annuel puis mensuel.
+ * En dessous, une lacune positive n'est pas assurable utilement → on ne descend
+ * jamais sous ce plancher (mais une lacune NULLE reste à 0 : aucune couverture).
+ * Décision produit : plancher 3'000/an = 250/mois.
+ */
+export const RENTE_IG_MIN_ANNUELLE = 3000;
+export const RENTE_IG_MIN_MENSUELLE = RENTE_IG_MIN_ANNUELLE / 12; // 250
+
+/** Applique le plancher : 0 reste 0 ; (0, min) → min ; ≥ min → inchangé. */
+export function floorRenteIGMensuelle(renteMensuelle: number): number {
+  if (renteMensuelle > 0 && renteMensuelle < RENTE_IG_MIN_MENSUELLE) return RENTE_IG_MIN_MENSUELLE;
+  return renteMensuelle;
+}
 const YIELD_RATES: Record<RiskProfile, number> = {
   guaranteed: 0.005,
   prudent: 0.025,
@@ -99,7 +114,8 @@ export function deriveTargets(situation: SituationAnalysis): {
 } {
   const maxLacuneIG = Math.max(situation.invaliditeMaladie.lacune, situation.invaliditeAccident.lacune);
   return {
-    maladie: Math.max(0, Math.round(maxLacuneIG)), // rente mensuelle cible
+    // Rente mensuelle cible, avec plancher assurable (0 reste 0 ; sinon ≥ 250/mois).
+    maladie: floorRenteIGMensuelle(Math.max(0, Math.round(maxLacuneIG))),
     deces: Math.max(0, Math.round(situation.deces.lacune / 1000) * 1000),
     retraite: Math.max(0, situation.capManquantRetraite),
     existing3a: situation.fiscal.investi3aAnnuel,

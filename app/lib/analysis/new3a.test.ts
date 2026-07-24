@@ -61,6 +61,25 @@ describe("deriveTargets", () => {
     expect(t.deces).toBe(48000);
     expect(t.retraite).toBe(90000);
   });
+
+  it("plancher rente IG : lacune positive < 250/mois (3'000/an) → 250/mois", () => {
+    const s = baseSituation({
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 180, score: 0 }, // 2'160/an
+      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 120, score: 0 },
+    });
+    expect(deriveTargets(s).maladie).toBe(250);
+  });
+
+  it("plancher rente IG : lacune ≥ 250/mois inchangée ; lacune nulle reste 0", () => {
+    const above = baseSituation({
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 300, score: 0 }, // 3'600/an
+      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 0, score: 0 },
+    });
+    expect(deriveTargets(above).maladie).toBe(300);
+
+    const none = baseSituation(); // toutes lacunes à 0
+    expect(deriveTargets(none).maladie).toBe(0);
+  });
 });
 
 describe("computeNew3aOffer", () => {

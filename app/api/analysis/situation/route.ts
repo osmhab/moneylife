@@ -9,6 +9,7 @@ import { db } from "@/lib/firebase/admin";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { computeSituationAnalysis } from "@/lib/analysis/situation";
 import { computePremierPilierSnapshot } from "@/lib/analysis/premierPilier";
+import { computeAvsCoupleForClient, isCoupleEtatCivil } from "@/lib/calculs/avsAi";
 import { LEGAL_2025 } from "@/lib/core/legal";
 import { Legal_Echelle44_2025 } from "@/lib/registry/echelle44";
 
@@ -45,7 +46,44 @@ export async function POST(req: NextRequest) {
     const cloudData = { ...(analyseSnap.data() || {}), ...(persoSnap.data() || {}) };
     const plans = plansSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    const analysis = computeSituationAnalysis({ cloudData, plans, allocations });
+    // ── PLAFOND COUPLE AVS (retraite) — AFFICHAGE SEUL ───────────────────────
+    // Pour un client marié/partenariat, la rente AVS de MÉNAGE (les deux conjoints)
+    // est plafonnée à 150 % du max individuel. On la projette pour l'AFFICHER en note
+    // sous la rente individuelle (« Plafond couple * »). Elle N'entre PAS dans la
+    // lacune : la personne ne touche PAS ce total à elle seule. La rente conjoint vient
+    // de son salaire s'il est saisi, sinon on suppose des carrières comparables (salaire
+    // conjoint = salaire du client → le ménage atteint le plafond réaliste, cohérent avec
+    // le splitting AVS). Dès qu'un vrai salaire conjoint est enregistré, ce fallback s'efface.
+    let avsCouplePlafondMensuel: number | undefined;
+    try {
+      const perso = (persoSnap.data() || {}) as any;
+      if (isCoupleEtatCivil(perso.Enter_etatCivil)) {
+        const clientForCouple = {
+          ...perso,
+          Enter_spouseSalaireAnnuel:
+            Number(perso.Enter_spouseSalaireAnnuel) > 0
+              ? perso.Enter_spouseSalaireAnnuel
+              : perso.Enter_salaireAnnuel,
+        };
+        const couple = computeAvsCoupleForClient(
+          clientForCouple,
+          LEGAL_2025,
+          Legal_Echelle44_2025.rows
+        );
+        if (couple.renteCoupleMensuelle > 0) {
+          avsCouplePlafondMensuel = couple.renteCoupleMensuelle;
+        }
+      }
+    } catch {
+      /* profil incomplet → pas de plafond affiché */
+    }
+
+    const analysis = computeSituationAnalysis({
+      cloudData,
+      plans,
+      allocations,
+      avsCouplePlafondMensuel,
+    });
     if (!analysis) {
       return NextResponse.json(
         { error: "Analyse indisponible (profil ou projections incomplets)" },
