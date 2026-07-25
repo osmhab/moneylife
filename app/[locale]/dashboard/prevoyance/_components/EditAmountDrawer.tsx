@@ -114,9 +114,18 @@ export default function EditAmountDrawer({ isOpen, onClose, planId, fieldPath, l
         if (localValue.capital !== value.capital) learningPayloads.push({ fieldKey: capitalKey, old: value.capital, new: localValue.capital, lbl: `Capital ${age} ans` });
       } else {
         updatePayload[fieldPath] = localValue;
-        
+
         if (fieldPath === "data.typeCapitalDeces" && localValue === "primes") {
             updatePayload["data.capitalDecesFixe"] = 0;
+        }
+
+        // Le pilier (3a/3b) vit dans DEUX champs qui doivent rester cohérents :
+        // data.typeContrat (affichage) ET le `type` canonique lu par le fiscal, les
+        // filtres, le remplacement, etc. Éditer seulement typeContrat laissait un 3b
+        // compté comme 3a (faux « dépassement du plafond 3a »). On synchronise donc
+        // le type ici. Les comptes bancaires restent PILIER_3A_BANK (toujours 3a).
+        if (fieldPath === "data.typeContrat" && plan && plan.type !== "PILIER_3A_BANK") {
+            updatePayload["type"] = localValue === "3b" ? "PILIER_3B" : "PILIER_3A_POLICE";
         }
 
         // 👈 RECALCUL DEPUIS LE TIROIR

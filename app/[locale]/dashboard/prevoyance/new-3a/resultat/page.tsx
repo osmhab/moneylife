@@ -88,7 +88,8 @@ export default function Resultat3aPage() {
   const [existing3a, setExisting3a] = useState(0);
 
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const roundTo5Cents = (num: number) => Math.round(num * 20) / 20;
+  // Arrondi au CENTIME (2 décimales), plus aux 5 centimes : précision des primes préservée.
+  const round2 = (num: number) => Math.round(num * 100) / 100;
 
   useEffect(() => {
     if (typeof window !== 'undefined' && !document.getElementById('google-material-symbols')) {
@@ -225,7 +226,7 @@ export default function Resultat3aPage() {
           requiredMonthlyPremium = annualPremium / 12;
         }
       }
-      const idealEpargne = Math.max(0, roundTo5Cents(requiredMonthlyPremium));
+      const idealEpargne = Math.max(0, round2(requiredMonthlyPremium));
       setRecoEpargne(idealEpargne);
 
       let epargnePremium = numPrimeEpargne;
@@ -241,7 +242,7 @@ export default function Resultat3aPage() {
         }
         
         let suggestedPremium = Math.max(idealEpargne, maxAffordableEpargne);
-        suggestedPremium = Math.max(50, roundTo5Cents(suggestedPremium));
+        suggestedPremium = Math.max(50, round2(suggestedPremium));
         
         if (numPrimeEpargne !== suggestedPremium) {
           epargnePremium = suggestedPremium;
@@ -259,10 +260,10 @@ export default function Resultat3aPage() {
       setProjectedRetirement(projected);
 
       setPremiums({
-        ret: roundTo5Cents(epargnePremium),
-        inc: roundTo5Cents(incCost),
-        dec: roundTo5Cents(decCost),
-        pay: roundTo5Cents(payCost)
+        ret: round2(epargnePremium),
+        inc: round2(incCost),
+        dec: round2(decCost),
+        pay: round2(payCost)
       });
       
       setIsCalculating(false);
@@ -279,7 +280,7 @@ export default function Resultat3aPage() {
   const split3b = grossTotal - split3a;
   const isSpillover = split3b > 0 && (existing3a > 0 || split3a > 0);
 
-  const taxSaving = roundTo5Cents(split3a * 0.25); 
+  const taxSaving = round2(split3a * 0.25); 
   const finalTotal = includeTaxSavings ? Math.max(0, grossTotal - taxSaving) : grossTotal;
 
   // 👈 NOUVEAU : On utilise les traductions pour les profils
@@ -298,7 +299,7 @@ export default function Resultat3aPage() {
       ...baseAnalysis, 
       sol: {
         priceRet: selRet ? premiums.ret : 0, priceInc: selInc ? premiums.inc : 0, priceDec: selDec ? premiums.dec : 0, pricePay: selPay ? premiums.pay : 0,
-        total: roundTo5Cents(grossTotal), split3a: roundTo5Cents(split3a), split3b: roundTo5Cents(split3b), isSpillover: isSpillover,
+        total: round2(grossTotal), split3a: round2(split3a), split3b: round2(split3b), isSpillover: isSpillover,
         benchmarks: {
           retraite: benchmarks[0]?.provider || "Offre sur mesure", deces: benchmarks[0]?.provider || "Offre sur mesure", incapacite: benchmarks[0]?.provider || "Offre sur mesure"
         }
@@ -309,7 +310,8 @@ export default function Resultat3aPage() {
     };
   }, [premiums, targets, selRet, selInc, selDec, selPay, grossTotal, benchmarks, projectedRetirement, split3a, split3b, isSpillover]);
 
-  const formatCHF = (val: number) => new Intl.NumberFormat('fr-CH', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val).replace(/\s/g, "'");
+  // 2 décimales partout (primes ET capitaux) : on ne perd plus la précision (ex. 604.80).
+  const formatCHF = (val: number) => new Intl.NumberFormat('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val).replace(/\s/g, "'");
   const formatCHFCents = (val: number) => new Intl.NumberFormat('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val).replace(/\s/g, "'");
 
   return (

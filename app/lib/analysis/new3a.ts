@@ -77,7 +77,9 @@ const YIELD_RATES: Record<RiskProfile, number> = {
   balanced: 0.045,
   dynamic: 0.07,
 };
-const roundTo5Cents = (n: number) => Math.round(n * 20) / 20;
+// Arrondi au CENTIME (2 décimales), pas aux 5 centimes : on ne sacrifie plus la
+// précision des primes (ex. 604.83 reste 604.83, pas 604.85).
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Taux actuariel prédit par un modèle Ridge `learner_models_3a` (sans clamp, avec
@@ -185,7 +187,7 @@ export function computeNew3aOffer(input: {
       requiredMonthlyPremium = annualPremium / 12;
     }
   }
-  const idealEpargne = Math.max(0, roundTo5Cents(requiredMonthlyPremium));
+  const idealEpargne = Math.max(0, round2(requiredMonthlyPremium));
 
   // Prime d'épargne : valeur éditée par le client si fournie, sinon suggestion automatique
   // (max entre l'idéal pour combler la lacune et ce que le budget permet — chemin "non édité").
@@ -201,7 +203,7 @@ export function computeNew3aOffer(input: {
       maxAffordableEpargne = budget / (1 + payRate) - appliedInc - appliedDec;
     }
     epargnePremium = Math.max(idealEpargne, maxAffordableEpargne);
-    epargnePremium = Math.max(50, roundTo5Cents(epargnePremium));
+    epargnePremium = Math.max(50, round2(epargnePremium));
   }
 
   const payCost = selPay ? (epargnePremium + (selInc ? incCost : 0) + (selDec ? decCost : 0)) * payRate : 0;
@@ -212,10 +214,10 @@ export function computeNew3aOffer(input: {
       : (annualContribution * (Math.pow(1 + rate, yearsToRetirement) - 1)) / rate;
 
   const premiums = {
-    ret: roundTo5Cents(epargnePremium),
-    inc: roundTo5Cents(incCost),
-    dec: roundTo5Cents(decCost),
-    pay: roundTo5Cents(payCost),
+    ret: round2(epargnePremium),
+    inc: round2(incCost),
+    dec: round2(decCost),
+    pay: round2(payCost),
   };
 
   const grossTotal =
@@ -225,7 +227,7 @@ export function computeNew3aOffer(input: {
   let split3a = Math.min(grossTotal, maxDeductibleMonthly);
   if (split3a < 50) split3a = 0;
   const split3b = grossTotal - split3a;
-  const taxSaving = roundTo5Cents(split3a * 0.25);
+  const taxSaving = round2(split3a * 0.25);
 
   return {
     selRet,
