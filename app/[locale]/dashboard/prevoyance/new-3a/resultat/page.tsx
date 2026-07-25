@@ -14,29 +14,10 @@ import { collection, getDocs, query } from "firebase/firestore";
 import { useTranslations } from "next-intl";
 
 import SubscriptionWizardDrawer from "../../_components/SubscriptionWizardDrawer";
-import { floorRenteIGMensuelle } from "@/lib/analysis/new3a";
+import { floorRenteIGMensuelle, computeNew3aOffer } from "@/lib/analysis/new3a";
 
-// --- UTILITAIRE DE PRÉDICTION ACTUARIELLE ---
-function calculatePredictedRate(model: any, age: number, isSmoker: boolean, isFemale: boolean, floor: number = 1.0) {
-  if (!model || !Array.isArray(model.beta) || model.beta.length < 4) {
-    return Math.exp(model?.fallbackLogMean || -5);
-  }
-  
-  const beta = model.beta;
-  const s = isSmoker ? 1 : 0;
-  const f = isFemale ? 1 : 0;
-  
-  const logRate = beta[0] * 1 + beta[1] * age + beta[2] * s + beta[3] * f;
-  let rate = Math.exp(logRate);
-
-  if (isSmoker && floor > 1.0) {
-    const logRateNS = beta[0] * 1 + beta[1] * age + beta[2] * 0 + beta[3] * f;
-    const rateNonSmoker = Math.exp(logRateNS);
-    rate = Math.max(rate, rateNonSmoker * floor);
-  }
-
-  return rate;
-}
+// (La tarification actuarielle vit désormais UNIQUEMENT dans le moteur `new3a.ts`,
+//  appelé par cette page comme par l'iOS — plus de copie dupliquée ici.)
 
 // --- COMPOSANT MATERIAL ICON ---
 const MaterialIcon = ({ name, color = "inherit", size = 24, fill = true }: { name: string, color?: string, size?: number, fill?: boolean }) => (
@@ -82,6 +63,8 @@ export default function Resultat3aPage() {
   const [projectedRetirement, setProjectedRetirement] = useState(0); 
   
   const [benchmarks, setBenchmarks] = useState<any[]>([]);
+  // Provider best-of-breed retenu PAR micro-produit (épargne/invalidité/décès/libération).
+  const [providers, setProviders] = useState({ ret: "", inc: "", dec: "", pay: "" });
   const [wizardConfig, setWizardConfig] = useState<any>(null);
   const [clientAge, setClientAge] = useState(35);
   const [clientGender, setClientGender] = useState("M"); 
@@ -187,90 +170,55 @@ export default function Resultat3aPage() {
     setIsCalculating(true);
 
     const calculate = setTimeout(() => {
-      const numPrimeEpargne = Number(targets.primeEpargne) || 0;
-      const numMaladie = Number(targets.maladie) || 0;
-      const numDeces = Number(targets.deces) || 0;
+      // UNIFIÉ : on appelle le MOTEUR `computeNew3aOffer` (même code que l'iOS) au lieu
+      // de dupliquer la tarification ici. Il gère best-of-breed + arbitrage éclaté/regroupé
+      // + libérations par contrat. On reconstruit la situation minimale que lit
+      // `deriveTargets`, et on passe l'état interactif de la page en overrides.
+      const card = { besoin: 0, couverture: 0, lacune: 0, score: 0, layers: [] };
+      const situation: any = {
+        totalScore: 0, salaireMensuel: 0, retraiteBaseMensuelle: 0,
+        capManquantRetraite: Number(targets.retraite) || 0,
+        retraiteSources: [],
+        retraite: card, invaliditeMaladie: card, invaliditeAccident: card, deces: card,
+        fiscal: { investi3aAnnuel: existing3a, plafond3a: 7258, pourcentUtilise: 0, gainFiscalAnnuel: 0 },
+      };
 
-      let incCost = 0;
-      let decCost = 0;
-      let payRate = 0.03; 
-
-      const riskProfile = wizardConfig?.riskProfile || "balanced";
-      const isSmoker = wizardConfig?.isSmoker === true;
-      const isFemale = clientGender === "F";
-      
-      const ref = benchmarks.length > 0 ? benchmarks[0] : null;
-
-      if (ref) {
-        const deathRate = calculatePredictedRate(ref.deathUnit, clientAge, isSmoker, isFemale, ref.smokerFloors?.death);
-        const disRate = calculatePredictedRate(ref.disabilityUnit, clientAge, isSmoker, isFemale, ref.smokerFloors?.disability);
-        
-        decCost = (Number(targets.deces) * deathRate) / 12;
-        incCost = (Number(targets.maladie) * 12 * disRate) / 12; 
-        payRate = calculatePredictedRate(ref.waiverRate, clientAge, isSmoker, isFemale, ref.smokerFloors?.waiver);
-      } else {
-        decCost = Number(targets.deces) * 0.00015;
-        incCost = Number(targets.maladie) * 0.015;
-      }
-
-      const yieldRates: Record<string, number> = { guaranteed: 0.005, prudent: 0.025, balanced: 0.045, dynamic: 0.07 };
-      const rate = yieldRates[riskProfile] || 0.045;
-      const yearsToRetirement = Math.max(1, 65 - clientAge);
-
-      let requiredMonthlyPremium = 0;
-      if (targets.retraite > 0) {
-        if (rate === 0) {
-          requiredMonthlyPremium = targets.retraite / (yearsToRetirement * 12);
-        } else {
-          const annualPremium = (targets.retraite * rate) / (Math.pow(1 + rate, yearsToRetirement) - 1);
-          requiredMonthlyPremium = annualPremium / 12;
-        }
-      }
-      const idealEpargne = Math.max(0, round2(requiredMonthlyPremium));
-      setRecoEpargne(idealEpargne);
-
-      let epargnePremium = numPrimeEpargne;
-
-      if (!hasUserEditedEpargne) {
-        const budget = wizardConfig?.monthlyBudget || 250;
-        const appliedInc = selInc ? incCost : 0;
-        const appliedDec = selDec ? decCost : 0;
-        
-        let maxAffordableEpargne = budget - appliedInc - appliedDec;
-        if (selPay) {
-          maxAffordableEpargne = budget / (1 + payRate) - appliedInc - appliedDec;
-        }
-        
-        let suggestedPremium = Math.max(idealEpargne, maxAffordableEpargne);
-        suggestedPremium = Math.max(50, round2(suggestedPremium));
-        
-        if (numPrimeEpargne !== suggestedPremium) {
-          epargnePremium = suggestedPremium;
-          setTargets(prev => ({ ...prev, primeEpargne: suggestedPremium }));
-        }
-      }
-
-      const payCost = selPay ? (epargnePremium + (selInc ? incCost : 0) + (selDec ? decCost : 0)) * payRate : 0;
-      const annualContribution = epargnePremium * 12;
-      
-      let projected = 0;
-      if (rate === 0) projected = annualContribution * yearsToRetirement;
-      else projected = annualContribution * (Math.pow(1 + rate, yearsToRetirement) - 1) / rate;
-      
-      setProjectedRetirement(projected);
-
-      setPremiums({
-        ret: round2(epargnePremium),
-        inc: round2(incCost),
-        dec: round2(decCost),
-        pay: round2(payCost)
+      const offer = computeNew3aOffer({
+        wizard: {
+          objective: wizardConfig?.objective || [],
+          philosophy: wizardConfig?.philosophy ?? null,
+          riskProfile: wizardConfig?.riskProfile ?? "balanced",
+          isSmoker: wizardConfig?.isSmoker ?? null,
+          monthlyBudget: wizardConfig?.monthlyBudget || 250,
+        },
+        situation,
+        clientAge,
+        clientGender,
+        benchmarks,
+        overrides: {
+          selRet, selInc, selDec, selPay,
+          maladie: Number(targets.maladie) || 0,
+          deces: Number(targets.deces) || 0,
+          hasUserEditedEpargne,
+          primeEpargne: hasUserEditedEpargne ? (Number(targets.primeEpargne) || 0) : undefined,
+        },
       });
-      
+
+      setProviders(offer.providers);
+      setRecoEpargne(offer.recoEpargne);
+      setProjectedRetirement(offer.projectedRetirement);
+      setPremiums(offer.premiums);
+
+      // Auto-suggestion de la prime d'épargne (chemin non édité), comme avant.
+      if (!hasUserEditedEpargne && (Number(targets.primeEpargne) || 0) !== offer.premiums.ret) {
+        setTargets(prev => ({ ...prev, primeEpargne: offer.premiums.ret }));
+      }
+
       setIsCalculating(false);
-    }, 600); 
+    }, 600);
 
     return () => clearTimeout(calculate);
-  }, [targets.primeEpargne, targets.maladie, targets.deces, benchmarks, wizardConfig, clientAge, clientGender, selInc, selDec, selPay, hasUserEditedEpargne]);
+  }, [targets.primeEpargne, targets.maladie, targets.deces, targets.retraite, existing3a, benchmarks, wizardConfig, clientAge, clientGender, selRet, selInc, selDec, selPay, hasUserEditedEpargne]);
 
   const grossTotal = (selRet ? premiums.ret : 0) + (selInc ? premiums.inc : 0) + (selDec ? premiums.dec : 0) + (selPay ? premiums.pay : 0);
   const maxDeductibleMonthly = Math.max(0, 7258 - existing3a) / 12;
@@ -301,14 +249,14 @@ export default function Resultat3aPage() {
         priceRet: selRet ? premiums.ret : 0, priceInc: selInc ? premiums.inc : 0, priceDec: selDec ? premiums.dec : 0, pricePay: selPay ? premiums.pay : 0,
         total: round2(grossTotal), split3a: round2(split3a), split3b: round2(split3b), isSpillover: isSpillover,
         benchmarks: {
-          retraite: benchmarks[0]?.provider || "Offre sur mesure", deces: benchmarks[0]?.provider || "Offre sur mesure", incapacite: benchmarks[0]?.provider || "Offre sur mesure"
+          retraite: providers.ret || "Offre sur mesure", deces: providers.dec || "Offre sur mesure", incapacite: providers.inc || "Offre sur mesure"
         }
       },
       ret: { ...baseAnalysis.ret, cap: projectedRetirement }, 
       inc: { maladie: { periodes: [{ lacune: targets.maladie }] }, accident: { periodes: [{ lacune: targets.maladie }] } },
       dec: { ...baseAnalysis.dec, lacune: targets.deces }
     };
-  }, [premiums, targets, selRet, selInc, selDec, selPay, grossTotal, benchmarks, projectedRetirement, split3a, split3b, isSpillover]);
+  }, [premiums, targets, selRet, selInc, selDec, selPay, grossTotal, benchmarks, providers, projectedRetirement, split3a, split3b, isSpillover]);
 
   // 2 décimales partout (primes ET capitaux) : on ne perd plus la précision (ex. 604.80).
   const formatCHF = (val: number) => new Intl.NumberFormat('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val).replace(/\s/g, "'");
@@ -338,7 +286,7 @@ export default function Resultat3aPage() {
                   capitalRet: projectedRetirement || 0,
                   coverageInc: targets.maladie || 0,
                   coverageDec: targets.deces || 0,
-                  provider: benchmarks[0]?.provider || "Sur Mesure"
+                  provider: providers.ret || "Sur Mesure"
                 };
                 // On stocke ça dans la mémoire de session
                 sessionStorage.setItem("creditx_temp_offer", JSON.stringify(exactOfferData));
@@ -368,7 +316,7 @@ export default function Resultat3aPage() {
               price={premiums.ret} 
               isCalculating={isCalculating} 
               formatCHFCents={formatCHFCents} 
-              isAdmin={!!adminUid} provider={benchmarks[0]?.provider || "Sur Mesure"}
+              isAdmin={!!adminUid} provider={providers.ret || "Sur Mesure"}
             >
               {selRet && (
                 <div className="mt-3 space-y-3">
@@ -466,7 +414,7 @@ export default function Resultat3aPage() {
               title={t("income_prot_title")} desc={t("income_prot_desc")} icon="ecg_heart" 
               checked={selInc} onChange={setSelInc} price={premiums.inc} 
               isCalculating={isCalculating} formatCHFCents={formatCHFCents}
-              isAdmin={!!adminUid} provider={benchmarks[0]?.provider || "Sur Mesure"}
+              isAdmin={!!adminUid} provider={providers.inc || "Sur Mesure"}
             >
               {selInc && (
                 <div className="mt-3 flex flex-col gap-2">
@@ -544,7 +492,7 @@ export default function Resultat3aPage() {
               title={t("family_prot_title")} desc={t("family_prot_desc")} icon="heart_broken" 
               checked={selDec} onChange={setSelDec} price={premiums.dec} 
               isCalculating={isCalculating} formatCHFCents={formatCHFCents}
-              isAdmin={!!adminUid} provider={benchmarks[0]?.provider || "Sur Mesure"}
+              isAdmin={!!adminUid} provider={providers.dec || "Sur Mesure"}
             >
               {selDec && (
                 <div className="mt-3 flex flex-col gap-2">
@@ -621,7 +569,7 @@ export default function Resultat3aPage() {
               title={t("pay_prot_title")} desc={t("pay_prot_desc")} icon="bolt" 
               checked={selPay} onChange={setSelPay} price={premiums.pay} 
               isCalculating={isCalculating} formatCHFCents={formatCHFCents} 
-              isAdmin={!!adminUid} provider={benchmarks[0]?.provider || "Sur Mesure"}
+              isAdmin={!!adminUid} provider={providers.pay || "Sur Mesure"}
             />
           </div>
 

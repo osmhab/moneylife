@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeNew3aOffer, calculatePredictedRate, deriveTargets, type New3aWizard } from "./new3a";
+import { computeNew3aOffer, calculatePredictedRate, deriveTargets, pickCheapestInsurer, pickBestSaver, type New3aWizard } from "./new3a";
 import type { SituationAnalysis } from "./situation";
 
 const ridge = (rate: number) => ({ beta: [Math.log(rate), 0, 0, 0], fallbackLogMean: Math.log(rate), nObs: 50 });
@@ -102,11 +102,22 @@ describe("computeNew3aOffer", () => {
     expect(offre.premiums.inc).toBeGreaterThan(0);
   });
 
-  it("le profil dynamique projette plus de capital que le garanti (rendement supérieur)", () => {
+  it("profil de risque : module la projection MÊME avec un rendement provider", () => {
+    // benchmark("A") a un yieldMedian > 0 → rendement provider retenu, PUIS modulé
+    // par le profil (dynamique majore, garanti minore) : l'ordre doit être respecté.
     const s = baseSituation({ capManquantRetraite: 100000 });
     const garanti = computeNew3aOffer({ wizard: wizard({ riskProfile: "guaranteed" }), situation: s, clientAge: 35, clientGender: "M", benchmarks: [benchmark("A")] });
     const dynamique = computeNew3aOffer({ wizard: wizard({ riskProfile: "dynamic" }), situation: s, clientAge: 35, clientGender: "M", benchmarks: [benchmark("A")] });
     expect(dynamique.projectedRetirement).toBeGreaterThan(garanti.projectedRetirement);
+  });
+
+  it("épargne : à profil égal, un meilleur rendement provider projette plus de capital", () => {
+    const s = baseSituation({ capManquantRetraite: 100000 });
+    const faible = { ...benchmark("A"), yieldMedian: 2 };
+    const fort = { ...benchmark("B"), yieldMedian: 6 };
+    const o1 = computeNew3aOffer({ wizard: wizard({ riskProfile: "balanced" }), situation: s, clientAge: 35, clientGender: "M", benchmarks: [faible] });
+    const o2 = computeNew3aOffer({ wizard: wizard({ riskProfile: "balanced" }), situation: s, clientAge: 35, clientGender: "M", benchmarks: [fort] });
+    expect(o2.projectedRetirement).toBeGreaterThan(o1.projectedRetirement);
   });
 
   it("cale le total sur le budget quand l'épargne idéale y tient (réconciliation)", () => {
@@ -155,5 +166,102 @@ describe("computeNew3aOffer", () => {
     expect(offre.split3a).toBe(0);
     expect(offre.split3b).toBeGreaterThan(0);
     expect(offre.taxSaving).toBe(0);
+  });
+});
+
+describe("best-of-breed provider selection", () => {
+  // Modèle Ridge à taux plat (beta age/fumeur/femme = 0 → rate = `rate` quel que soit l'âge).
+  const unit = (rate: number, nObs = 50) => ({ beta: [Math.log(rate), 0, 0, 0], fallbackLogMean: Math.log(rate), nObs });
+  const mk = (
+    provider: string,
+    o: { death: number; dis: number; waiver: number; yieldMedian: number; deathObs?: number }
+  ) => ({
+    provider,
+    deathUnit: unit(o.death, o.deathObs ?? 50),
+    disabilityUnit: unit(o.dis),
+    waiverRate: unit(o.waiver),
+    smokerFloors: { death: 1, disability: 1, waiver: 1 },
+    yieldMedian: o.yieldMedian,
+  });
+
+  // Baloise a le décès le moins cher (0.0005) MAIS sur 0 benchmark (repli) → doit être écarté.
+  const benches = [
+    mk("AXA", { death: 0.001, dis: 0.02, waiver: 0.03, yieldMedian: 5.04 }),
+    mk("Baloise", { death: 0.0005, dis: 0.015, waiver: 0.025, yieldMedian: 4.1, deathObs: 0 }),
+    mk("SwissLife", { death: 0.0008, dis: 0.008, waiver: 0.02, yieldMedian: 0 }),
+  ];
+
+  it("décès : écarte le modèle nObs<3 (repli) et prend le moins cher FIABLE", () => {
+    // Baloise 0.0005 exclu (nObs=0) → reste AXA 0.001 vs SwissLife 0.0008 → SwissLife.
+    expect(pickCheapestInsurer(benches, "deathUnit", "death", 40, false, false)?.provider).toBe("SwissLife");
+  });
+
+  it("invalidité : prend le taux le plus bas", () => {
+    // AXA 0.02, Baloise 0.015, SwissLife 0.008 → SwissLife.
+    expect(pickCheapestInsurer(benches, "disabilityUnit", "disability", 40, false, false)?.provider).toBe("SwissLife");
+  });
+
+  it("épargne : meilleur yieldMedian > 0 (SwissLife=0 écarté)", () => {
+    expect(pickBestSaver(benches)?.provider).toBe("AXA");
+  });
+
+  it("aucun modèle fiable → null (repli forfaitaire côté offre)", () => {
+    expect(pickCheapestInsurer([], "deathUnit", "death", 40, false, false)).toBeNull();
+    expect(pickBestSaver([{ provider: "X", yieldMedian: 0 }])).toBeNull();
+  });
+
+  it("computeNew3aOffer : providers best-of-breed PAR produit (mix d'assureurs)", () => {
+    const s = baseSituation({
+      capManquantRetraite: 100000,
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 0 },
+      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0 },
+    });
+    const o = computeNew3aOffer({
+      wizard: wizard({ objective: ["protection_income", "protection_family"] }),
+      situation: s, clientAge: 40, clientGender: "M", benchmarks: benches,
+    });
+    expect(o.providers.dec).toBe("SwissLife"); // décès le moins cher fiable
+    expect(o.providers.inc).toBe("SwissLife"); // invalidité la moins chère
+    expect(o.providers.ret).toBe("AXA");       // meilleur rendement épargne
+    expect(o.provider).toBe("AXA");            // legacy = épargne
+  });
+
+  it("computeNew3aOffer : sans benchmark → providers 'Sur mesure'", () => {
+    const o = computeNew3aOffer({
+      wizard: wizard(), situation: baseSituation({ deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0 } }),
+      clientAge: 40, clientGender: "M", benchmarks: [],
+    });
+    expect(o.providers.dec).toBe("Sur mesure");
+    expect(o.providers.ret).toBe("Sur mesure");
+  });
+
+  it("comparaison : sur ces données l'ÉCLATÉ gagne + une libération PAR contrat", () => {
+    const s = baseSituation({
+      capManquantRetraite: 100000,
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 0 },
+      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0 },
+    });
+    const o = computeNew3aOffer({
+      wizard: wizard({ objective: ["protection_income", "protection_family"] }),
+      situation: s, clientAge: 40, clientGender: "M", benchmarks: benches,
+    });
+    expect(o.comparison.recommended).toBe("eclate");
+    expect(o.comparison.regroupe).not.toBeNull();
+    // Éclaté : épargne@AXA + invalidité/décès@SwissLife → 2 contrats → 2 libérations.
+    expect(o.waivers.map((w) => w.provider).sort()).toEqual(["AXA", "SwissLife"]);
+    expect(o.comparison.eclate.nbContrats).toBe(2);
+  });
+
+  it("comparaison : le REGROUPÉ gagne si le meilleur rendement a une libération punitive", () => {
+    // A = meilleur rendement (8) MAIS libération énorme (0.5) et pas de données invalidité/décès.
+    // B = rendement quasi égal (7.9) + libération minuscule (0.001). Regrouper chez B doit gagner
+    //     (capital ~identique, mais la libération de A ronge la prime épargne).
+    const A = { provider: "A", yieldMedian: 8, deathUnit: unit(0.001, 0), disabilityUnit: unit(0.01, 0), waiverRate: unit(0.5), smokerFloors: { death: 1, disability: 1, waiver: 1 } };
+    const B = { provider: "B", yieldMedian: 7.9, deathUnit: unit(0.001), disabilityUnit: unit(0.01), waiverRate: unit(0.001), smokerFloors: { death: 1, disability: 1, waiver: 1 } };
+    const s = baseSituation({ capManquantRetraite: 100000 }); // épargne seule (pas d'inc/dec)
+    const o = computeNew3aOffer({ wizard: wizard(), situation: s, clientAge: 35, clientGender: "M", benchmarks: [A, B] });
+    expect(o.comparison.recommended).toBe("regroupe");
+    expect(o.providers.ret).toBe("B");
+    expect(o.comparison.regroupe!.net).toBeGreaterThan(o.comparison.eclate.net);
   });
 });
