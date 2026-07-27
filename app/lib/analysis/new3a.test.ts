@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeNew3aOffer, calculatePredictedRate, deriveTargets, pickCheapestInsurer, pickBestSaver, type New3aWizard } from "./new3a";
+import { computeNew3aOffer, calculatePredictedRate, deriveTargets, pickCheapestInsurer, pickBestSaver, allocateBudget, type New3aWizard } from "./new3a";
 import type { SituationAnalysis } from "./situation";
 
 const ridge = (rate: number) => ({ beta: [Math.log(rate), 0, 0, 0], fallbackLogMean: Math.log(rate), nObs: 50 });
@@ -128,11 +128,34 @@ describe("computeNew3aOffer", () => {
     expect(offre.grossTotal).toBeCloseTo(300, 0);
   });
 
-  it("la lacune retraite peut faire dépasser le budget (prime idéale prioritaire, comme le web)", () => {
+  it("budget = plafond DUR : la prime ne dépasse pas le budget (idéal exposé, non forcé)", () => {
     const s = baseSituation({ capManquantRetraite: 500000 });
     const offre = computeNew3aOffer({ wizard: wizard({ monthlyBudget: 300 }), situation: s, clientAge: 40, clientGender: "M", benchmarks: [benchmark("A")] });
+    expect(offre.grossTotal).toBeLessThanOrEqual(305);   // plafonné au budget (~300)
+    expect(offre.recoEpargne).toBeGreaterThan(300);       // l'idéal reste un conseil affiché
+  });
+
+  it("bouton Recommandation (fillGap) : cale sur l'idéal, quitte à dépasser le budget", () => {
+    const s = baseSituation({ capManquantRetraite: 500000 });
+    const offre = computeNew3aOffer({ wizard: wizard({ monthlyBudget: 300 }), situation: s, clientAge: 40, clientGender: "M", benchmarks: [benchmark("A")], overrides: { fillGap: true } });
     expect(offre.grossTotal).toBeGreaterThan(300);
-    expect(offre.recoEpargne).toBeGreaterThan(300);
+    expect(offre.premiums.ret).toBeGreaterThan(300);
+  });
+
+  it("fillGap active AUSSI les couvertures risque ciblées à lacune (pas que l'épargne)", () => {
+    const s = baseSituation({
+      capManquantRetraite: 100000,
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 30 },
+      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 1000, score: 30 },
+      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 40 },
+    });
+    const o = computeNew3aOffer({
+      wizard: wizard({ objective: ["protection_income", "protection_family"], monthlyBudget: 100 }),
+      situation: s, clientAge: 40, clientGender: "M", benchmarks: [benchmark("A")],
+      overrides: { selInc: false, selDec: false, fillGap: true }, // désactivées au départ
+    });
+    expect(o.selInc).toBe(true);  // invalidité ciblée + lacune → activée par la reco
+    expect(o.selDec).toBe(true);  // décès ciblé + lacune → activé par la reco
   });
 
   it("respecte les overrides d'édition (toggle décès off + prime d'épargne éditée)", () => {
@@ -263,5 +286,58 @@ describe("best-of-breed provider selection", () => {
     expect(o.comparison.recommended).toBe("regroupe");
     expect(o.providers.ret).toBe("B");
     expect(o.comparison.regroupe!.net).toBeGreaterThan(o.comparison.eclate.net);
+  });
+});
+
+describe("allocateBudget (slider recommandation)", () => {
+  const situ = () => baseSituation({
+    capManquantRetraite: 100000,
+    invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 20 },
+    invaliditeAccident: { besoin: 0, couverture: 0, lacune: 1000, score: 20 },
+    deces: { besoin: 0, couverture: 0, lacune: 100000, score: 60 },
+  });
+  const wiz = wizard({ objective: ["protection_income", "protection_family"] });
+  const alloc = (budget: number) => allocateBudget({
+    situation: situ(), wizard: wiz, clientAge: 40, clientGender: "M", benchmarks: [benchmark("A")], budget,
+  });
+
+  it("budget max → toutes les couvertures à lacune activées + recoMax > 0", () => {
+    const a = alloc(100000);
+    expect(a.selInc).toBe(true);
+    expect(a.selDec).toBe(true);
+    expect(a.recoMax).toBeGreaterThan(0);
+  });
+
+  it("budget minimal → épargne seule (aucun risque ne rentre)", () => {
+    const a = alloc(55);
+    expect(a.selInc).toBe(false);
+    expect(a.selDec).toBe(false);
+  });
+
+  it("budget serré → la PLUS GROSSE lacune d'abord (invalidité, score le plus bas)", () => {
+    const a = alloc(65);
+    expect(a.selInc).toBe(true);
+    expect(a.selDec).toBe(false);
+  });
+
+  it("priorité inversée : si le DÉCÈS a la plus grosse lacune, il passe d'abord", () => {
+    const s = baseSituation({
+      capManquantRetraite: 100000,
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 70 },
+      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 1000, score: 70 },
+      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 15 },
+    });
+    const a = allocateBudget({ situation: s, wizard: wizard({ objective: ["protection_income", "protection_family"] }), clientAge: 40, clientGender: "M", benchmarks: [benchmark("A")], budget: 65 });
+    expect(a.selDec).toBe(true);
+    expect(a.selInc).toBe(false);
+  });
+
+  it("respecte les objectifs : sans objectif décès, on ne comble PAS le décès même à budget max", () => {
+    const a = allocateBudget({
+      situation: situ(), wizard: wizard({ objective: ["protection_income"] }), // pas de protection_family
+      clientAge: 40, clientGender: "M", benchmarks: [benchmark("A")], budget: 100000,
+    });
+    expect(a.selInc).toBe(true);   // objectif invalidité présent
+    expect(a.selDec).toBe(false);  // décès NON ciblé → jamais activé
   });
 });

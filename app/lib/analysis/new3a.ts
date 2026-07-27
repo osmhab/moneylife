@@ -33,6 +33,9 @@ export interface New3aOverrides {
   /** Capital décès cible édité. */
   deces?: number;
   hasUserEditedEpargne?: boolean;
+  /** Bouton « Recommandation » : cale l'épargne sur l'idéal qui comble la lacune retraite,
+   *  quitte à DÉPASSER le budget. Par défaut (false) le budget est un plafond dur. */
+  fillGap?: boolean;
 }
 
 /** Une libération (payment protect) rattachée au contrat d'un assureur. */
@@ -255,8 +258,17 @@ export function computeNew3aOffer(input: {
   // toujours actives), sauf surcharge explicite par l'édition du client.
   const selRet = ov.selRet ?? true;
   const selPay = ov.selPay ?? true;
-  const selInc = ov.selInc ?? objectives.includes("protection_income");
-  const selDec = ov.selDec ?? (objectives.includes("protection_family") || objectives.includes("protection"));
+  let selInc = ov.selInc ?? objectives.includes("protection_income");
+  let selDec = ov.selDec ?? (objectives.includes("protection_family") || objectives.includes("protection"));
+
+  // Bouton « Recommandation » (fillGap) : combler TOUTES les lacunes ciblées, pas seulement
+  // l'épargne — on active donc aussi invalidité/décès s'ils sont ciblés ET à lacune réelle.
+  if (ov.fillGap) {
+    const incGap = Math.max(situation.invaliditeMaladie.lacune, situation.invaliditeAccident.lacune) > 0;
+    const decGap = situation.deces.lacune > 0;
+    if (objectives.includes("protection_income") && incGap) selInc = true;
+    if ((objectives.includes("protection_family") || objectives.includes("protection")) && decGap) selDec = true;
+  }
 
   const derived = deriveTargets(situation);
   const targets = {
@@ -306,7 +318,11 @@ export function computeNew3aOffer(input: {
       const appliedInc = selInc ? incCost * (1 + (selPay ? p.incWaiver : 0)) : 0;
       const appliedDec = selDec ? decCost * (1 + (selPay ? p.decWaiver : 0)) : 0;
       const maxAffordable = (budget - appliedInc - appliedDec) / (1 + wRet);
-      epargne = Math.max(recoEpargne, maxAffordable);
+      // Budget = plafond DUR : l'épargne = ce que le budget permet, JAMAIS au-delà — on ne
+      // force PLUS le client à combler sa lacune (sinon un budget de 100 proposait 1275).
+      // Le montant idéal reste exposé (recoEpargne, « Conseillé »). SAUF opt-in explicite
+      // `fillGap` (bouton « Recommandation ») → on cale sur l'idéal, quitte à dépasser.
+      epargne = ov.fillGap ? Math.max(recoEpargne, maxAffordable) : maxAffordable;
       epargne = Math.max(50, round2(epargne));
     }
 
@@ -428,4 +444,73 @@ function summarize(s: Scenario): ScenarioSummary {
     nbContrats: s.nbContrats,
     providers: s.providers,
   };
+}
+
+// ─── SLIDER « RECOMMANDATION » : prime totale sur-mesure → allocation auto ───────
+/** Prime totale MINIMALE du slider (plancher : épargne seule minimale). */
+export const RECOMMENDATION_MIN = 100;
+/** Épargne minimale conservée quand on ajoute des couvertures risque. */
+const EPARGNE_MIN_ALLOC = 50;
+
+export interface BudgetAllocation {
+  /** Couvertures risque auto-activées pour ce budget. */
+  selInc: boolean;
+  selDec: boolean;
+  /** Prime totale sur-mesure = MAX du slider (comble TOUTES les lacunes). */
+  recoMax: number;
+}
+
+/**
+ * Alloue une prime totale (budget du slider « Recommandation ») entre épargne et
+ * couvertures risque. L'épargne est le socle ; on ajoute les couvertures risque à
+ * LACUNE réelle, la PLUS GROSSE d'abord (score le plus bas), tant qu'elles rentrent
+ * en gardant un minimum d'épargne. Le MAX (recoMax) comble toutes les lacunes.
+ *
+ * Retourne les toggles à appliquer ; l'appelant relance `computeNew3aOffer` avec
+ * ce budget → l'épargne devient le résidu. Le client peut ensuite éditer à la main.
+ */
+export function allocateBudget(input: {
+  situation: SituationAnalysis;
+  wizard: New3aWizard;
+  clientAge: number;
+  clientGender: string;
+  benchmarks: any[];
+  budget: number;
+}): BudgetAllocation {
+  const { situation, wizard, clientAge, clientGender, benchmarks, budget } = input;
+
+  // Offre « tout activé », budget très large → primes de risque pleines + épargne reco.
+  const full = computeNew3aOffer({
+    wizard: { ...wizard, monthlyBudget: 1_000_000 },
+    situation, clientAge, clientGender, benchmarks,
+    overrides: { selRet: true, selInc: true, selDec: true, selPay: true },
+  });
+  const incP = full.premiums.inc;
+  const decP = full.premiums.dec;
+  const reco = full.recoEpargne;
+  const base = full.premiums.ret + incP + decP;
+  const waiverEff = base > 0 ? full.premiums.pay / base : 0; // taux libération effectif
+
+  // MAX = prime qui comble TOUT (épargne reco + invalidité + décès + libération).
+  const recoMax = round2((reco + incP + decP) * (1 + waiverEff));
+
+  // Couvertures risque : on ne comble QUE celles ciblées par les OBJECTIFS (étape 1),
+  // à lacune réelle, PLUS GROSSE lacune d'abord (score le plus bas).
+  const objectives = wizard.objective || [];
+  const incDesired = objectives.includes("protection_income");
+  const decDesired = objectives.includes("protection_family") || objectives.includes("protection");
+  const invScore = Math.min(situation.invaliditeMaladie.score, situation.invaliditeAccident.score);
+  const risks = [
+    { key: "inc", cost: incP * (1 + waiverEff), score: invScore, gap: Math.max(situation.invaliditeMaladie.lacune, situation.invaliditeAccident.lacune), desired: incDesired },
+    { key: "dec", cost: decP * (1 + waiverEff), score: situation.deces.score, gap: situation.deces.lacune, desired: decDesired },
+  ].filter((r) => r.desired && r.gap > 0).sort((a, b) => a.score - b.score);
+
+  let selInc = false, selDec = false, riskCost = 0;
+  for (const r of risks) {
+    if (budget - riskCost - r.cost >= EPARGNE_MIN_ALLOC) {
+      riskCost += r.cost;
+      if (r.key === "inc") selInc = true; else selDec = true;
+    }
+  }
+  return { selInc, selDec, recoMax };
 }

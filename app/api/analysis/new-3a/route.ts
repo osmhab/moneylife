@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase/admin";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { computeSituationAnalysis } from "@/lib/analysis/situation";
-import { computeNew3aOffer, type New3aWizard, type New3aOverrides } from "@/lib/analysis/new3a";
+import { computeNew3aOffer, allocateBudget, RECOMMENDATION_MIN, type New3aWizard, type New3aOverrides } from "@/lib/analysis/new3a";
 
 export const dynamic = "force-dynamic";
 
@@ -31,10 +31,15 @@ export async function POST(req: NextRequest) {
 
   let wizard: New3aWizard;
   let overrides: New3aOverrides | undefined;
+  let budget: number | undefined;
+  let autoAllocate = false;
   try {
     const body = await req.json();
     wizard = body?.wizard ?? body;
     overrides = body?.overrides;
+    // Slider « Recommandation » : prime totale visée → allocation auto.
+    if (body?.budget != null) budget = Number(body.budget);
+    autoAllocate = body?.autoAllocate === true;
   } catch {
     return NextResponse.json({ error: "Corps de requête invalide" }, { status: 400 });
   }
@@ -62,9 +67,27 @@ export async function POST(req: NextRequest) {
     const clientAge = Number(cloudData.Enter_age) || ageFromDateNaissance(cloudData.Enter_dateNaissance);
     const clientGender = cloudData.Enter_civilite === "Mme" ? "F" : "M";
 
-    const offer = computeNew3aOffer({ wizard, situation, clientAge, clientGender, benchmarks, overrides });
+    // Slider « Recommandation » : allocation auto d'un budget total + max du slider.
+    // On calcule toujours l'allocation pour exposer recoMax (borne haute du slider).
+    const sliderBudget = budget ?? wizard.monthlyBudget ?? 250;
+    const alloc = allocateBudget({ situation, wizard, clientAge, clientGender, benchmarks, budget: sliderBudget });
 
-    return NextResponse.json({ offer, meta: { nbModels: benchmarks.length, clientAge } });
+    // Si le client a bougé le slider (autoAllocate) : on impose le budget + les couvertures
+    // auto-sélectionnées (épargne + libération toujours actives), l'épargne devient le résidu.
+    // Sinon : chiffrage normal avec l'état interactif de la page (overrides).
+    const effWizard: New3aWizard = autoAllocate ? { ...wizard, monthlyBudget: sliderBudget } : wizard;
+    const effOverrides: New3aOverrides | undefined = autoAllocate
+      ? { ...overrides, selRet: true, selPay: true, selInc: alloc.selInc, selDec: alloc.selDec, hasUserEditedEpargne: false }
+      : overrides;
+
+    const offer = computeNew3aOffer({ wizard: effWizard, situation, clientAge, clientGender, benchmarks, overrides: effOverrides });
+
+    return NextResponse.json({
+      offer,
+      recoMin: RECOMMENDATION_MIN,
+      recoMax: alloc.recoMax,
+      meta: { nbModels: benchmarks.length, clientAge },
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Erreur serveur" }, { status: 500 });
   }
