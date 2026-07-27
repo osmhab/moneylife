@@ -72,7 +72,8 @@ function computeTotals(plans: any[], clientAge: number): Totals {
       acc.epl += Number(d.Enter_lppEPLPossible) || 0;
       acc.rachat += Number(d.Enter_lppRachatPossible) || 0;
       acc.invalidite += Number(d.Enter_renteInvaliditeMaladie) || 0;
-      acc.deces += Number(d.Enter_CapitalPlusRenteMal) || 0;
+      // Capital décès = "plus rente" + capital INDÉPENDANT (versé toujours, en plus).
+      acc.deces += (Number(d.Enter_CapitalPlusRenteMal) || 0) + (Number(d.Enter_CapitalDecesIndependantMal) || 0);
     } else {
       acc.current += Number(d.valeurRachatActuelle) || Number(d.soldeActuel) || 0;
       // Priorité à la projection AFFICHÉE (projection assureur, ou capital retraite

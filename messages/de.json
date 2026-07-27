@@ -575,6 +575,8 @@
       "death_rent_accident": "Todesfallkapital + Rente (Unfall)",
       "death_only_illness": "Nur Todesfallkapital (Krankheit)",
       "death_only_accident": "Nur Todesfallkapital (Unfall)",
+      "death_independent_illness": "Unabhängiges Todesfallkapital (Krankheit)",
+      "death_independent_accident": "Unabhängiges Todesfallkapital (Unfall)",
       "fund_emp_save": "Sparen (Arbeitnehmer)",
       "fund_empr_save": "Sparen (Arbeitgeber)",
       "fund_emp_risk": "Risiko (Arbeitnehmer)",

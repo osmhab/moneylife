@@ -575,6 +575,8 @@
       "death_rent_accident": "Cap. décès + rente (Accident)",
       "death_only_illness": "Cap. décès seul (Maladie)",
       "death_only_accident": "Cap. décès seul (Accident)",
+      "death_independent_illness": "Cap. décès indépendant (Maladie)",
+      "death_independent_accident": "Cap. décès indépendant (Accident)",
       "fund_emp_save": "Épargne (Employé)",
       "fund_empr_save": "Épargne (Employeur)",
       "fund_emp_risk": "Risque (Employé)",
