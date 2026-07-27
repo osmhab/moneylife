@@ -49,6 +49,18 @@ export interface BenefitLayer {
   amount: number;
 }
 
+/** Un PALIER d'évolution de la couverture invalidité (une carte du carrousel) : la
+ *  couverture change quand un enfant cesse d'ouvrir droit à une rente (18 ans). */
+export interface IGStep {
+  /** Année de début du palier. */
+  fromYear: number;
+  /** Nombre d'enfants ouvrant droit à une rente pendant ce palier. */
+  nbEnfants: number;
+  couverture: number;
+  lacune: number;
+  layers: BenefitLayer[];
+}
+
 export interface RiskCard {
   besoin: number;
   couverture: number;
@@ -56,6 +68,16 @@ export interface RiskCard {
   score: number;
   /** Décomposition de la couverture par pilier (somme ≈ couverture). Pour le graphique en couches. */
   layers: BenefitLayer[];
+  /** ÉVOLUTION (invalidité) : couverture MINIMALE à terme, quand les rentes d'enfant
+   *  s'arrêtent (18/25 ans). Présent seulement si la couverture baisse dans le futur. */
+  futureCouverture?: number;
+  /** Lacune à terme (une fois les enfants grandis), si supérieure à la lacune actuelle. */
+  futureLacune?: number;
+  /** Année à partir de laquelle la couverture minimale s'applique (null/absent si pas de baisse). */
+  futureFromYear?: number | null;
+  /** CARROUSEL (invalidité) : paliers de couverture au fil du départ des enfants
+   *  (du plus d'enfants au moins). Présent seulement s'il y a plus d'un palier. */
+  igSteps?: IGStep[];
 }
 
 /** Une source de capital retraite (LPP / 3a / 3b / épargne), avec son allocation (slider). */
@@ -244,11 +266,25 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   // ---- INVALIDITÉ (helper commun maladie/accident) ----
   const cibleIGMensuelle = (salaireAnnuel * 0.9) / 12;
 
+  // Nombre d'enfants ouvrant droit à une rente à l'année `year` (règle du moteur cloud
+  // qui produit la projection : < 18 ans). Sert à étiqueter les PALIERS du carrousel.
+  const enfantsList: any[] = cloudData.Enter_enfants || [];
+  const nbEnfantsEligiblesAt = (year: number): number =>
+    enfantsList.filter((e: any) => {
+      const m = String(e?.Enter_dateNaissance || "").match(/\b(19|20)\d{2}\b/);
+      const by = m ? parseInt(m[0], 10) : 0;
+      return by > 0 && year - by < 18;
+    }).length;
+
   function analyseIG(proj: any): {
     lacune: number;
     score: number;
     couverture: number;
     layers: BenefitLayer[];
+    futureCouverture: number;
+    futureLacune: number;
+    futureFromYear: number | null;
+    steps: IGStep[];
   } {
     const annees = proj?.headerYears || [];
     let reserveSurplus = 0;
@@ -266,11 +302,17 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
 
     const bonusLissage = isSmoothingIG && nbAnneesLacune > 0 ? reserveSurplus / nbAnneesLacune / 12 : 0;
 
-    // Période CONTRAIGNANTE = couverture mensuelle minimale (qu'il y ait lacune ou non).
-    // C'est elle qui définit la lacune affichée ET dont on expose la décomposition par pilier.
-    type Periode = { apres: number; avs: number; lpp: number; laa: number; a3: number };
-    let binding: Periode | null = null;
-    annees.forEach((_: number, idx: number) => {
+    // DEUX périodes : ACTUELLE = 1re année de rente (idx 2 : si invalide AUJOURD'HUI, avec
+    // les enfants d'aujourd'hui) ; CONTRAIGNANTE = couverture MINIMALE (souvent plus tard,
+    // quand les rentes d'enfant s'arrêtent à 18/25 ans) → alimente la lacune FUTURE.
+    type Periode = { year: number; apres: number; avs: number; lpp: number; laa: number; a3: number };
+    let current: Periode | null = null;
+    let worst: Periode | null = null;
+    // PALIERS (carrousel) : une carte par niveau de couverture distinct (change quand un
+    // enfant cesse d'ouvrir droit à une rente). Du plus d'enfants au moins.
+    const steps: IGStep[] = [];
+    let lastStepKey = "";
+    annees.forEach((yr: number, idx: number) => {
       if (idx < 2) return;
       const avs = getVal(proj, "AVS/AI", idx) / 12;
       const lpp = getVal(proj, "LPP", idx) / 12;
@@ -278,32 +320,55 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
       const a3 = rente3a / 12;
       const rentesM = avs + lpp + laa + a3;
       const apres = isSmoothingIG
-        ? rentesM > cibleIGMensuelle
-          ? cibleIGMensuelle
-          : rentesM + bonusLissage
+        ? rentesM > cibleIGMensuelle ? cibleIGMensuelle : rentesM + bonusLissage
         : rentesM;
-      if (!binding || apres < binding.apres) binding = { apres, avs, lpp, laa, a3 };
+      const p: Periode = { year: yr, apres, avs, lpp, laa, a3 };
+      if (!current) current = p;                      // 1re année de rente = ACTUELLE
+      if (!worst || apres < worst.apres) worst = p;   // pire période = CONTRAIGNANTE
+
+      const stepKey = `${Math.round(avs)}|${Math.round(lpp)}|${Math.round(laa)}`;
+      if (stepKey !== lastStepKey) {
+        lastStepKey = stepKey;
+        steps.push({
+          fromYear: yr,
+          nbEnfants: nbEnfantsEligiblesAt(yr),
+          couverture: rentesM,
+          lacune: Math.max(0, cibleIGMensuelle - rentesM),
+          layers: ([
+            { key: "avs", label: "AVS / AI", amount: avs },
+            { key: "lpp", label: "LPP (2e pilier)", amount: lpp },
+            { key: "laa", label: "LAA (accident)", amount: laa },
+            { key: "3a", label: "3e pilier", amount: a3 },
+          ] as BenefitLayer[]).filter((l) => l.amount > 0),
+        });
+      }
     });
 
-    const b = binding as Periode | null;
-    const maxLacune = b ? Math.max(0, cibleIGMensuelle - b.apres) : 0;
-    const revenuTotal = cibleIGMensuelle - maxLacune;
+    const c = current as Periode | null;
+    const w = worst as Periode | null;
+
+    // ACTUELLE : couverture + lacune + décomposition par pilier (avec les enfants actuels).
+    const couverture = c ? c.avs + c.lpp + c.laa + c.a3 : 0;
+    const lacune = c ? Math.max(0, cibleIGMensuelle - c.apres) : 0;
+    const revenuTotal = cibleIGMensuelle - lacune;
     const score = Math.round((revenuTotal / (salaireAnnuel / 12)) * 100);
 
-    const layers: BenefitLayer[] = b
+    const layers: BenefitLayer[] = c
       ? ([
-          { key: "avs", label: "AVS / AI", amount: b.avs },
-          { key: "lpp", label: "LPP (2e pilier)", amount: b.lpp },
-          { key: "laa", label: "LAA (accident)", amount: b.laa },
-          { key: "3a", label: "3e pilier", amount: b.a3 },
+          { key: "avs", label: "AVS / AI", amount: c.avs },
+          { key: "lpp", label: "LPP (2e pilier)", amount: c.lpp },
+          { key: "laa", label: "LAA (accident)", amount: c.laa },
+          { key: "3a", label: "3e pilier", amount: c.a3 },
         ] as BenefitLayer[]).filter((l) => l.amount > 0)
       : [];
 
-    // Couverture RÉELLE = ce que paient les piliers à la pire période (= somme des
-    // couches). Non plafonnée à la cible → cohérente avec le graphique en couches.
-    const couverture = b ? b.avs + b.lpp + b.laa + b.a3 : 0;
+    // FUTURE : le pire cas s'il est PLUS BAS que l'actuel (= la couverture baisse quand les
+    // enfants grandissent). `futureFromYear` = année où ça baisse (null si aucune baisse).
+    const futureCouverture = w ? w.avs + w.lpp + w.laa + w.a3 : couverture;
+    const futureLacune = w ? Math.max(0, cibleIGMensuelle - w.apres) : lacune;
+    const futureFromYear = w && c && w.apres < c.apres - 1 ? w.year : null;
 
-    return { lacune: maxLacune, score, couverture, layers };
+    return { lacune, score, couverture, layers, futureCouverture, futureLacune, futureFromYear, steps };
   }
 
   const igMaladie = analyseIG(invM);
@@ -391,6 +456,10 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
       lacune: igMaladie.lacune,
       score: igMaladie.score,
       layers: igMaladie.layers,
+      futureCouverture: igMaladie.futureCouverture,
+      futureLacune: igMaladie.futureLacune,
+      futureFromYear: igMaladie.futureFromYear,
+      igSteps: igMaladie.steps.length > 1 ? igMaladie.steps : undefined,
     },
     invaliditeAccident: {
       besoin: cibleIGMensuelle,
@@ -398,6 +467,10 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
       lacune: igAccident.lacune,
       score: igAccident.score,
       layers: igAccident.layers,
+      futureCouverture: igAccident.futureCouverture,
+      futureLacune: igAccident.futureLacune,
+      futureFromYear: igAccident.futureFromYear,
+      igSteps: igAccident.steps.length > 1 ? igAccident.steps : undefined,
     },
     deces: {
       besoin: besoinDecesTotal,
