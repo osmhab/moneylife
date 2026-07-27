@@ -71,6 +71,9 @@ function sumFromPlans(plans: any[], category: 'retraite' | 'deces' | 'invalidite
         acc.lppRente += Number(d.Enter_renteConjointLPP) || 0;
         acc.lppRenteEnfant += Number(d.Enter_renteOrphelinLPP) || 0;
         acc.lppCapital += Number(d.Enter_CapitalPlusRenteMal) || 0;
+        // Capital décès INDÉPENDANT : versé TOUJOURS, en plus du "plus rente" (et de la
+        // rente de survivant). Additif inconditionnel → toujours dans le capital décès.
+        acc.lppCapital += Number(d.Enter_CapitalDecesIndependantMal) || 0;
       } else {
         acc.priveCapital += isBank ? (Number(d.soldeActuel) || 0) : computeDeathBenefitAssurance(d);
       }

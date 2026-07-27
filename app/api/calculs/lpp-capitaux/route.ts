@@ -46,11 +46,15 @@ export async function POST(req: NextRequest) {
 
   const c = parsed.data.data as never;
 
+  const cd = parsed.data.data as Record<string, unknown>;
   const capitaux = {
     maladieAucune: calcCapitalDecesMaladieAucuneRenteLPP(c, LEGAL_2025),
     accidentAucune: calcCapitalDecesAccidentAucuneRenteLAA(c, LEGAL_2025),
     maladiePlus: calcCapitalDecesMaladiePlusRenteLPP(c),
     accidentPlus: calcCapitalDecesAccidentPlusRenteLPP(c),
+    // Capital décès INDÉPENDANT (versé toujours, en plus) — lu directement des données du plan.
+    independantMal: Number(cd.Enter_CapitalDecesIndependantMal) || 0,
+    independantAcc: Number(cd.Enter_CapitalDecesIndependantAcc) || 0,
   };
 
   return NextResponse.json({ capitaux });

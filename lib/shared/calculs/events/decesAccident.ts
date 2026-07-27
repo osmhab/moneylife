@@ -215,11 +215,15 @@ export function computeDecesAccident(
   const lppAccidentPlusRente = client.Enter_CapitalPlusRenteAcc ?? 0;
   const lppGenericPlusRente = client.Enter_CapitalPlusRente ?? 0;
 
+  // Capital décès INDÉPENDANT : versé TOUJOURS (rente due ou non), en plus des autres.
+  const lppIndependant = Number(client.Enter_CapitalDecesIndependantAcc) || 0;
+
   const totalCapitalsAccident =
     (laaUniqueIfNonDue || 0) +
     lppAccidentAucuneRente +
     lppAccidentPlusRente +
-    lppGenericPlusRente;
+    lppGenericPlusRente +
+    lppIndependant;
 
   return {
     annual: {

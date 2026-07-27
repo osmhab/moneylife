@@ -26,6 +26,7 @@ const FINANCIAL_FIELDS = [
   "Enter_renteConjointLPP", "Enter_lppRenteConjointAccident",
   "Enter_renteOrphelinLPP", "Enter_lppRenteOrphelinAccident",
   "Enter_CapitalPlusRenteMal", "Enter_CapitalAucuneRenteMal", "Enter_CapitalPlusRenteAcc", "Enter_CapitalAucuneRenteAcc",
+  "Enter_CapitalDecesIndependantMal", "Enter_CapitalDecesIndependantAcc",
   "Enter_lppCotisationEpargneEmploye", "Enter_lppCotisationEpargneEmployeur",
   "Enter_lppCotisationRisqueFraisEmploye", "Enter_lppCotisationRisqueFraisEmployeur",
   "Enter_lppRachatPossible", "Enter_lppEPLPossible",

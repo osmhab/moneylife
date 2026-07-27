@@ -101,6 +101,9 @@ export interface ClientData {
   Enter_CapitalAucuneRenteAcc?: number;
   Enter_CapitalPlusRenteMal?: number;
   Enter_CapitalPlusRenteAcc?: number;
+  // Capital décès INDÉPENDANT (versé toujours, en plus). Cf. schema.ts.
+  Enter_CapitalDecesIndependantMal?: number;
+  Enter_CapitalDecesIndependantAcc?: number;
 
   /* Vieillesse */
   Enter_rentevieillesseLPP65?: number;

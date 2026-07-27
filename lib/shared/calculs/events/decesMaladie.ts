@@ -180,7 +180,9 @@ export function computeDecesMaladie(
     sourcePlus = "Enter_CapitalPlusRente";
   }
 
-  const totalCapitalsMaladie = lppMaladieAucuneRente + lppMaladiePlusRente;
+  // Capital décès INDÉPENDANT : versé TOUJOURS (rente due ou non), en plus des deux autres.
+  const lppIndependant = Number(client.Enter_CapitalDecesIndependantMal) || 0;
+  const totalCapitalsMaladie = lppMaladieAucuneRente + lppMaladiePlusRente + lppIndependant;
 
   return {
     annual: {

@@ -3,15 +3,19 @@ export const INSTITUTION_RULES: Record<string, string> = {
     "AXA": `
   - COTISATIONS : Les montants sont indiqués comme "mensuels". Tu DOIS impérativement les multiplier par 12 pour obtenir le montant ANNUEL.
   
-  - CAPITAL DÉCÈS (RÈGLE CRUCIALÈ) : 
-    1. Repère le "Capital-décès minimal" et le "Capital-décès issu du compte supplémentaire" (ou "avoir de vieillesse supplémentaire").
-    2. Fais la SOMME de ces deux montants.
-    3. Comme AXA ne distingue pas Maladie/Accident pour le capital, recopie cette SOMME dans les 4 champs suivants :
-       - Enter_CapitalPlusRenteMal
-       - Enter_CapitalAucuneRenteMal
-       - Enter_CapitalPlusRenteAcc
-       - Enter_CapitalAucuneRenteAcc
-    4. S'il y a une "Rente de conjoint" ou "Rente de survivant", remplis Enter_renteConjointLPP et Enter_lppRenteConjointAccident avec la même valeur (mirroring).`,
+  - CAPITAL DÉCÈS (RÈGLE CRUCIALE) — deux formats possibles :
+
+    FORMAT A (certificats récents, section "Prestations en cas de décès" avec lignes DISTINCTES) :
+      Repère ces trois lignes séparées et mappe CHACUNE (AXA ne distingue pas Maladie/Accident → recopie la MÊME valeur dans le champ Mal ET le champ Acc) :
+       - "Capital au décès ... EN COMPLÉMENT de la rente de partenaire/conjoint" → Enter_CapitalPlusRenteMal ET Enter_CapitalPlusRenteAcc.
+       - "Capital au décès ... SI AUCUNE rente de partenaire/conjoint n'est due" → Enter_CapitalAucuneRenteMal ET Enter_CapitalAucuneRenteAcc.
+       - "Capital au décès INDÉPENDANT" (versé dans tous les cas, en plus) → Enter_CapitalDecesIndependantMal ET Enter_CapitalDecesIndependantAcc.
+      ⚠️ Ne fais PAS la somme de ces lignes : chacune va dans son propre champ. Si une ligne est absente, mets 0.
+
+    FORMAT B (anciens certificats avec "Capital-décès minimal" + "Capital-décès issu du compte supplémentaire") :
+      Fais la SOMME de ces deux montants et recopie cette SOMME dans Enter_CapitalPlusRenteMal, Enter_CapitalAucuneRenteMal, Enter_CapitalPlusRenteAcc, Enter_CapitalAucuneRenteAcc. Laisse Enter_CapitalDecesIndependantMal/Acc à 0.
+
+    Dans les deux formats : s'il y a une "Rente de conjoint/partenaire" ou "Rente de survivant", remplis Enter_renteConjointLPP et Enter_lppRenteConjointAccident avec la même valeur (mirroring) ; idem "Rente d'orphelin" → Enter_renteOrphelinLPP et Enter_lppRenteOrphelinAccident.`,
     
     "CPVAL": `
   - SALAIRES : Utilise le "Traitement assuré annuel" pour remplir Enter_salaireAssureLPP et Enter_lppSalaireAssureRisque.

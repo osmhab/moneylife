@@ -78,6 +78,16 @@ export interface RiskCard {
   /** CARROUSEL (invalidité) : paliers de couverture au fil du départ des enfants
    *  (du plus d'enfants au moins). Présent seulement s'il y a plus d'un palier. */
   igSteps?: IGStep[];
+  /** RENTES DE SURVIVANTS (décès uniquement) — complète les CAPITAUX ci-dessus.
+   *  Rente mensuelle versée aux proches (conjoint·e survivant·e + orphelins) via
+   *  l'AVS (1er pilier) et la LPP (2e pilier). Décroît quand les orphelins cessent
+   *  d'ouvrir droit à rente (18/25 ans) → carrousel `renteSteps`. */
+  renteMensuelle?: number;
+  /** Décomposition mensuelle de la rente de survivants (AVS + LPP) — période actuelle. */
+  renteLayers?: BenefitLayer[];
+  /** CARROUSEL des rentes de survivants : un palier par période (orphelins qui grandissent).
+   *  Réutilise IGStep (couverture = rente mensuelle totale ; lacune non pertinente = 0). */
+  renteSteps?: IGStep[];
 }
 
 /** Une source de capital retraite (LPP / 3a / 3b / épargne), avec son allocation (slider). */
@@ -396,6 +406,34 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   const scoreDecLocal = besoinDecesTotal > 0 ? Math.round((capExistants / besoinDecesTotal) * 100) : 100;
   const scoreDecFinal = lacuneDeces > 50000 ? Math.min(scoreDecLocal, 65) : scoreDecLocal;
 
+  // ---- RENTES DE SURVIVANTS (décès) : conjoint·e + orphelins, AVS + LPP, MENSUEL ----
+  // Complète les CAPITAUX ci-dessus (revenu récurrent vs somme unique). La rente décroît
+  // quand les orphelins cessent d'ouvrir droit (18/25 ans) → un palier par période (carrousel).
+  const decAnnees: number[] = decM?.headerYears || [];
+  const decRenteSteps: IGStep[] = [];
+  let lastDecKey = "";
+  decAnnees.forEach((yr: number, idx: number) => {
+    const avsM = getVal(decM, "AVS/AI", idx) / 12;
+    const lppM = getVal(decM, "LPP", idx) / 12;
+    const totM = avsM + lppM;
+    if (totM <= 0) return;
+    const key = `${Math.round(avsM)}|${Math.round(lppM)}`;
+    if (key === lastDecKey) return;
+    lastDecKey = key;
+    decRenteSteps.push({
+      fromYear: yr,
+      nbEnfants: nbEnfantsEligiblesAt(yr),
+      couverture: totM,
+      lacune: 0, // pas de cible « lacune » sur une rente de survivants (informatif)
+      layers: ([
+        { key: "avs", label: "AVS survivants", amount: avsM },
+        { key: "lpp", label: "LPP (conjoint + orphelins)", amount: lppM },
+      ] as BenefitLayer[]).filter((l) => l.amount > 0),
+    });
+  });
+  const decRenteMensuelle = decRenteSteps.length > 0 ? decRenteSteps[0].couverture : 0;
+  const decRenteLayers = decRenteSteps.length > 0 ? decRenteSteps[0].layers : [];
+
   // ---- FISCAL (3a) ----
   const cotisations3a = listePlans3a.reduce((acc: number, p: any) => {
     const typeStr = (p.type || "").toLowerCase();
@@ -481,6 +519,10 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
         { key: "lpp", label: "LPP / LAA", amount: capDecesLppLaa },
         { key: "3a", label: "3e pilier", amount: garantiesSaisies3a.capitalDeces },
       ] as BenefitLayer[]).filter((l) => l.amount > 0),
+      // Rentes de survivants (mensuel) — s'ajoutent aux capitaux ci-dessus.
+      renteMensuelle: decRenteMensuelle || undefined,
+      renteLayers: decRenteLayers.length ? decRenteLayers : undefined,
+      renteSteps: decRenteSteps.length > 1 ? decRenteSteps : undefined,
     },
     fiscal: {
       investi3aAnnuel: cotisations3a,

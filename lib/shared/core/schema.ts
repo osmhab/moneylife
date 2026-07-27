@@ -96,6 +96,11 @@ export const ClientDataSchema = z.object({
   Enter_CapitalAucuneRenteAcc: z.coerce.number().nonnegative().optional(),
   Enter_CapitalPlusRenteMal: z.coerce.number().nonnegative().optional(),
   Enter_CapitalPlusRenteAcc: z.coerce.number().nonnegative().optional(),
+  // Capital décès INDÉPENDANT : versé TOUJOURS (que la rente de survivant soit due ou non),
+  // en PLUS des capitaux "plus rente" / "aucune rente". Certains certificats AXA le listent
+  // séparément ("Capital au décès indépendant"). Mirroring Mal/Acc si non distingué.
+  Enter_CapitalDecesIndependantMal: z.coerce.number().nonnegative().optional(),
+  Enter_CapitalDecesIndependantAcc: z.coerce.number().nonnegative().optional(),
 
   /* -------- Vieillesse (Projections) -------- */
   Enter_rentevieillesseLPP65: z.coerce.number().nonnegative().optional(),
