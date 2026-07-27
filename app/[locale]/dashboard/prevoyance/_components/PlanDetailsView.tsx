@@ -447,7 +447,76 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
       </div>
 
       <div className="px-6 space-y-8 mt-6">
-        
+
+        {/* Contrôle expert (revue payée) — INDÉPENDANT du scan : s'affiche dès qu'un plan
+            a une revue en cours/terminée, quel que soit son mode d'ajout. L'admin y voit
+            le bouton « Valider » ; le client, l'état (en cours / certifié). */}
+        {(plan.reviewStatus === "PENDING" || plan.reviewStatus === "COMPLETED") && (
+          <section className="animate-in fade-in slide-in-from-top-4 duration-700">
+            <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-[32px] p-6 border border-indigo-100 shadow-sm">
+              {plan.reviewStatus === "PENDING" ? (
+                !!adminUid ? (
+                  <div className="flex flex-col gap-3">
+                    <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl text-orange-800 text-xs font-bold leading-snug">
+                      <AlertTriangle size={14} className="inline mr-1 -mt-0.5" />
+                      {t("ai.admin_alert")}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!targetUid || !plan.id) return;
+                        const toastId = toast.loading(t("ai.toast_validating"));
+                        try {
+                          await updateDoc(doc(db, "clients", targetUid, "plans", plan.id), {
+                            reviewStatus: "COMPLETED",
+                            "metadata.reviewedAt": serverTimestamp(),
+                            "metadata.reviewedBy": adminUid
+                          });
+                          const clientSnap = await getDoc(doc(db, "clients", targetUid, "DonneePersonnelles", "current"));
+                          const clientData = clientSnap.exists() ? clientSnap.data() : {};
+                          await fetch("/api/send-review-completed", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              clientUid: targetUid,
+                              email: clientData.Enter_email,
+                              firstName: clientData.Enter_prenom || "Client",
+                              institutionName: plan.institutionName,
+                              planType: plan.type
+                            }),
+                          });
+                          toast.success(t("ai.toast_success"), { id: toastId });
+                        } catch (e) {
+                          console.error(e);
+                          toast.error(t("ai.toast_err"), { id: toastId });
+                        }
+                      }}
+                      className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl py-3 px-4 font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 shadow-md shadow-emerald-200"
+                    >
+                      <CheckCircle2 size={16} /> {t("ai.btn_validate")}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-3 bg-indigo-100/50 border border-indigo-200 text-indigo-700 py-4 px-4 rounded-xl">
+                    <Loader2 size={16} className="animate-spin shrink-0" />
+                    <div className="text-left">
+                      <span className="block text-[11px] font-black uppercase tracking-widest">{t("expert.pending_title")}</span>
+                      <span className="block text-[10px] font-bold opacity-70 mt-0.5">{t("expert.pending_desc")}</span>
+                    </div>
+                  </div>
+                )
+              ) : (
+                <div className="flex items-center justify-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-700 py-4 px-4 rounded-xl">
+                  <CheckCircle2 size={16} className="shrink-0" />
+                  <div className="text-left">
+                    <span className="block text-[11px] font-black uppercase tracking-widest">{t("expert.cert_title")}</span>
+                    <span className="block text-[10px] font-bold opacity-70 mt-0.5">{t("expert.cert_desc")}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         {((plan.metadata as any)?.sourceFile?.includes("SCAN") || (plan.metadata as any)?.sourceFileUrl?.includes("SCAN")) && (
           <section className="animate-in fade-in slide-in-from-top-4 duration-700">
             <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-[32px] p-6 border border-indigo-100 shadow-sm relative overflow-hidden">
@@ -463,89 +532,23 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
                     {t("ai.desc")}
                   </p>
                   
-                  <div className="mt-5 pt-5 border-t border-indigo-200/50">
-                    {plan.reviewStatus === "PENDING" ? (
-                      !!adminUid ? (
-                        <div className="flex flex-col gap-3">
-                          <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl text-orange-800 text-xs font-bold leading-snug">
-                            <AlertTriangle size={14} className="inline mr-1 -mt-0.5" />
-                            {t("ai.admin_alert")}
-                          </div>
-                          <button 
-                            onClick={async () => {
-                              if (!targetUid || !plan.id) return;
-                              const toastId = toast.loading(t("ai.toast_validating"));
-                              try {
-                                await updateDoc(doc(db, "clients", targetUid, "plans", plan.id), {
-                                  reviewStatus: "COMPLETED",
-                                  "metadata.reviewedAt": serverTimestamp(),
-                                  "metadata.reviewedBy": adminUid
-                                });
-
-                                const clientSnap = await getDoc(doc(db, "clients", targetUid, "DonneePersonnelles", "current"));
-                                const clientData = clientSnap.exists() ? clientSnap.data() : {};
-
-                                // Appel INCONDITIONNEL (avant : conditionné à l'e-mail).
-                                // La route crée la notification puis envoie l'e-mail ;
-                                // sans e-mail en base, le client garde sa notification.
-                                await fetch("/api/send-review-completed", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
-                                    clientUid: targetUid,
-                                    email: clientData.Enter_email,
-                                    firstName: clientData.Enter_prenom || "Client",
-                                    institutionName: plan.institutionName,
-                                    planType: plan.type
-                                  }),
-                                });
-
-                                toast.success(t("ai.toast_success"), { id: toastId });
-                              } catch (e) {
-                                console.error(e);
-                                toast.error(t("ai.toast_err"), { id: toastId });
-                              }
-                            }}
-                            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl py-3 px-4 font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2 shadow-md shadow-emerald-200"
-                          >
-                            <CheckCircle2 size={16} /> {t("ai.btn_validate")}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-3 bg-indigo-100/50 border border-indigo-200 text-indigo-700 py-4 px-4 rounded-xl">
-                          <Loader2 size={16} className="animate-spin shrink-0" />
-                          <div className="text-left">
-                            <span className="block text-[11px] font-black uppercase tracking-widest">{t("expert.pending_title")}</span>
-                            <span className="block text-[10px] font-bold opacity-70 mt-0.5">{t("expert.pending_desc")}</span>
-                          </div>
-                        </div>
-                      )
-                    ) : plan.reviewStatus === "COMPLETED" ? (
-                      <div className="flex items-center justify-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-700 py-4 px-4 rounded-xl">
-                        <CheckCircle2 size={16} className="shrink-0" />
-                        <div className="text-left">
-                          <span className="block text-[11px] font-black uppercase tracking-widest">{t("expert.cert_title")}</span>
-                          <span className="block text-[10px] font-bold opacity-70 mt-0.5">{t("expert.cert_desc")}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <p className="text-[11px] font-black uppercase tracking-widest text-indigo-800/60 mb-3">{t("expert.sales_need")}</p>
-                        <button 
-                          onClick={() => setIsExpertSalesModalOpen(true)} 
-                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 px-4 font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-between group shadow-md shadow-indigo-200"
-                        >
-                          <span className="flex items-center gap-2">
-                            <Check size={16} /> {t("expert.sales_btn")}
-                          </span>
-                          <span className="bg-indigo-800/30 px-2 py-1 rounded-md text-[10px]">{t("expert.sales_price")}</span>
-                        </button>
-                        <p className="text-[10px] text-indigo-800/50 font-bold mt-2 text-center leading-tight">
-                          {t("expert.sales_desc")}
-                        </p>
-                      </>
-                    )}
-                  </div>
+                  {plan.reviewStatus !== "PENDING" && plan.reviewStatus !== "COMPLETED" && (
+                    <div className="mt-5 pt-5 border-t border-indigo-200/50">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-indigo-800/60 mb-3">{t("expert.sales_need")}</p>
+                      <button
+                        onClick={() => setIsExpertSalesModalOpen(true)}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 px-4 font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-between group shadow-md shadow-indigo-200"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Check size={16} /> {t("expert.sales_btn")}
+                        </span>
+                        <span className="bg-indigo-800/30 px-2 py-1 rounded-md text-[10px]">{t("expert.sales_price")}</span>
+                      </button>
+                      <p className="text-[10px] text-indigo-800/50 font-bold mt-2 text-center leading-tight">
+                        {t("expert.sales_desc")}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
