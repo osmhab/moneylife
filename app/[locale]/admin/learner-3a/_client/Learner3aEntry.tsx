@@ -80,6 +80,10 @@ export default function Learner3aEntry() {
     disabilityContractStart: firstOfNextMonthISO(),
     disabilityLevels: [{ date: firstOfNextMonthISO(), amount: 0 }] as { date: string; amount: number }[],
     disabilityPremium: 0,
+    // Certains assureurs (ex. PAX) ne facturent pas la libération des primes à part : elle est
+    // INCLUSE dans la prime de rente. Dans ce cas la prime totale contient déjà la libération
+    // → le moteur ne devra PAS ajouter de ligne libération séparée (sinon double comptage).
+    waiverIncludedInRentePremium: false,
     premiumWaiverValue: 0, 
     premiumWaiverPremium: 0,
     savingPremiumAnnual: 0,
@@ -100,7 +104,7 @@ export default function Learner3aEntry() {
   ];
   // Champs (de formData) rattachés à chaque couverture — pour la remise à 0 des inactives.
   const COVERAGE_FIELDS: Record<string, string[]> = {
-    disability: ["disabilityContractStart", "disabilityLevels", "disabilityPremium"],
+    disability: ["disabilityContractStart", "disabilityLevels", "disabilityPremium", "waiverIncludedInRentePremium"],
     death: ["deathCapital", "deathPremium"],
     waiver: ["premiumWaiverValue", "premiumWaiverPremium"],
     savings: ["annualPremiumTotal", "savingPremiumAnnual", "userYieldRate", "projectedCapitalAtRetirement", "initialCapitalTransfer", "surrenderValues"],
@@ -449,8 +453,19 @@ export default function Learner3aEntry() {
                 <Button type="button" variant="outline" size="sm" className="h-8 text-[11px] w-full border-dashed" onClick={addRenteLevel}>
                   <Plus className="h-3 w-3 mr-1" /> Ajouter un niveau
                 </Button>
+                {/* Libération incluse (ex. PAX) : la prime de rente contient déjà la libération. */}
+                <div className="flex items-center justify-between p-2 bg-orange-50 rounded-lg border border-orange-100">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle size={14} className="text-orange-600" />
+                    <Label className="text-[10px] text-orange-800 font-bold uppercase">Libération incluse dans la prime ?</Label>
+                  </div>
+                  <Switch
+                    checked={formData.waiverIncludedInRentePremium}
+                    onCheckedChange={v => handleChange("waiverIncludedInRentePremium", v)}
+                  />
+                </div>
                 <div className="space-y-1 pt-1">
-                  <Label className="text-[10px]">Prime Inval. TOTALE (an)</Label>
+                  <Label className="text-[10px]">Prime Inval. TOTALE (an){formData.waiverIncludedInRentePremium ? " · libération incluse" : ""}</Label>
                   <Input
                     type="number"
                     className="border-purple-200 font-bold"
