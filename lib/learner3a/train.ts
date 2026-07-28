@@ -137,11 +137,25 @@ export function buildProviderModelsServer(allBenchmarks: any[]): Map<string, Pro
         y_death.push(deathPrem / deathCap);
       }
 
-      const disRente = safeNum(b.disabilityRente, 0);
+      // Rente d'invalidité : niveaux différés (format AXA). Seul un benchmark à UN niveau
+      // (rente différée unitaire) alimente le modèle de taux — la prime totale lui est alors
+      // pleinement attribuable. Une grille MULTI-niveaux (>1) n'est pas décomposable en taux
+      // unitaires → ignorée du fit (mais conservée en base). Rétro-compat : anciens champs scalaires.
       const disPrem = safeNum(b.disabilityPremium, 0);
-      if (disRente > 0 && disPrem > 0) {
-        X_dis.push(makeFeaturesDisability(b)); // inclut le différé (5e feature)
-        y_dis.push(disPrem / disRente);
+      const levels = Array.isArray(b.disabilityLevels) ? b.disabilityLevels : [];
+      if (levels.length === 1 && disPrem > 0) {
+        const rente = safeNum(levels[0]?.amount, 0);
+        const deferral = safeNum(levels[0]?.deferralYears, 0);
+        if (rente > 0) {
+          X_dis.push([...makeFeatures(b), deferral]);
+          y_dis.push(disPrem / rente);
+        }
+      } else if (levels.length === 0) {
+        const disRente = safeNum(b.disabilityRente, 0);
+        if (disRente > 0 && disPrem > 0) {
+          X_dis.push(makeFeaturesDisability(b)); // ancien format : lit b.disabilityDeferralYears
+          y_dis.push(disPrem / disRente);
+        }
       }
 
       const annTot = safeNum(b.annualPremiumTotal, 0);

@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { 
   Database, TrendingUp, ShieldCheck, History, 
-  PiggyBank, Trash2, ListFilter, Scan, Loader2, RotateCcw, Pencil, User, AlertCircle
+  PiggyBank, Trash2, ListFilter, Scan, Loader2, RotateCcw, Pencil, User, AlertCircle, Plus
 } from "lucide-react";
 
 const PARTNERS = ["SwissLife", "AXA", "Baloise", "PAX"];
@@ -59,8 +59,10 @@ export default function Learner3aEntry() {
     isDeathIncludedInSavings: false, // Précis : Concerne uniquement le décès
     deathCapital: 0,
     deathPremium: 0,
-    disabilityRente: 0,
-    disabilityDeferralYears: 0, // Différé en années avant le 1er versement (0 = rente immédiate)
+    // Rente d'invalidité façon AXA : une suite de NIVEAUX (degrés) différés + croissants.
+    // Chaque niveau = { deferralYears (différé en années, 0 = immédiat), amount (CHF/an) }.
+    // Une SEULE prime totale pour toute la grille (disabilityPremium). "Ajouter un niveau" au besoin.
+    disabilityLevels: [{ deferralYears: 0, amount: 0 }] as { deferralYears: number; amount: number }[],
     disabilityPremium: 0,
     premiumWaiverValue: 0, 
     premiumWaiverPremium: 0,
@@ -82,11 +84,28 @@ export default function Learner3aEntry() {
   ];
   // Champs (de formData) rattachés à chaque couverture — pour la remise à 0 des inactives.
   const COVERAGE_FIELDS: Record<string, string[]> = {
-    disability: ["disabilityRente", "disabilityDeferralYears", "disabilityPremium"],
+    disability: ["disabilityLevels", "disabilityPremium"],
     death: ["deathCapital", "deathPremium"],
     waiver: ["premiumWaiverValue", "premiumWaiverPremium"],
     savings: ["annualPremiumTotal", "savingPremiumAnnual", "userYieldRate", "projectedCapitalAtRetirement", "initialCapitalTransfer", "surrenderValues"],
   };
+  // Répéteur de niveaux de rente (degrés AXA).
+  const addRenteLevel = () => setFormData(p => ({
+    ...p,
+    disabilityLevels: [...p.disabilityLevels, {
+      deferralYears: (p.disabilityLevels[p.disabilityLevels.length - 1]?.deferralYears ?? 0) + 5,
+      amount: 0,
+    }],
+  }));
+  const removeRenteLevel = (i: number) => setFormData(p => ({
+    ...p,
+    disabilityLevels: p.disabilityLevels.filter((_, idx) => idx !== i),
+  }));
+  const updateRenteLevel = (i: number, key: "deferralYears" | "amount", value: number) =>
+    setFormData(p => ({
+      ...p,
+      disabilityLevels: p.disabilityLevels.map((lvl, idx) => idx === i ? { ...lvl, [key]: value } : lvl),
+    }));
   const [active, setActive] = useState<Record<string, boolean>>({
     disability: true, death: false, waiver: false, savings: false,
   });
@@ -97,7 +116,7 @@ export default function Learner3aEntry() {
     const out: Record<string, any> = { ...formData };
     for (const cov of COVERAGES) {
       if (active[cov.key]) continue;
-      for (const f of COVERAGE_FIELDS[cov.key]) out[f] = f === "surrenderValues" ? [] : 0;
+      for (const f of COVERAGE_FIELDS[cov.key]) out[f] = (f === "surrenderValues" || f === "disabilityLevels") ? [] : 0;
     }
     out.coverages = COVERAGES.filter(c => active[c.key]).map(c => c.key);
     return out;
@@ -377,17 +396,35 @@ export default function Learner3aEntry() {
               </div>
               </>)}
 
-              {/* Rente différée UNITAIRE : montant + différé (années) → prime. Différé = 0 = immédiate.
-                  Une grille croissante se price par somme de couches (cf. new3a). */}
+              {/* Rente d'invalidité façon AXA : niveaux (degrés) différés + croissants, UNE prime
+                  totale. Niveau 1 = différé 0 (immédiat) le plus souvent. "Ajouter un niveau". */}
               {active.disability && (
-              <div className="grid grid-cols-3 gap-4 border-b pb-4">
-                <div className="space-y-1"><Label className="text-[10px]">Rente Inval. (an)</Label><Input type="number" value={formData.disabilityRente} onChange={e => handleChange("disabilityRente", parseFloat(e.target.value))} /></div>
-                <div className="space-y-1"><Label className="text-[10px]">Différé (années)</Label><Input type="number" value={formData.disabilityDeferralYears} onChange={e => handleChange("disabilityDeferralYears", parseFloat(e.target.value))} /></div>
-                <div className="space-y-1">
-                  <Label className="text-[10px]">Prime Inval. (an)</Label>
+              <div className="space-y-3 border-b pb-4">
+                <Label className="text-[10px] font-bold uppercase text-purple-800">Rente invalidité — niveaux (différé)</Label>
+                {formData.disabilityLevels.map((lvl, i) => (
+                  <div key={i} className="flex items-end gap-2">
+                    <div className="w-8 h-9 flex items-center justify-center rounded-md bg-purple-100 text-purple-800 text-[11px] font-bold shrink-0">{i + 1}</div>
+                    <div className="space-y-1 flex-1">
+                      <Label className="text-[9px]">Différé (an){i === 0 ? " — 0 = immédiat" : ""}</Label>
+                      <Input type="number" value={lvl.deferralYears} onChange={e => updateRenteLevel(i, "deferralYears", parseFloat(e.target.value))} />
+                    </div>
+                    <div className="space-y-1 flex-1">
+                      <Label className="text-[9px]">Montant (CHF/an)</Label>
+                      <Input type="number" value={lvl.amount} onChange={e => updateRenteLevel(i, "amount", parseFloat(e.target.value))} />
+                    </div>
+                    {formData.disabilityLevels.length > 1 && (
+                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-red-600 shrink-0" onClick={() => removeRenteLevel(i)}><Trash2 className="h-4 w-4" /></Button>
+                    )}
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" className="h-8 text-[11px] w-full border-dashed" onClick={addRenteLevel}>
+                  <Plus className="h-3 w-3 mr-1" /> Ajouter un niveau
+                </Button>
+                <div className="space-y-1 pt-1">
+                  <Label className="text-[10px]">Prime Inval. TOTALE (an)</Label>
                   <Input
                     type="number"
-                    className="border-purple-200"
+                    className="border-purple-200 font-bold"
                     value={formData.disabilityPremium}
                     onChange={e => handleChange("disabilityPremium", parseFloat(e.target.value))}
                   />
