@@ -60,6 +60,7 @@ export default function Learner3aEntry() {
     deathCapital: 0,
     deathPremium: 0,
     disabilityRente: 0,
+    disabilityDeferralYears: 0, // Différé en années avant le 1er versement (0 = rente immédiate)
     disabilityPremium: 0,
     premiumWaiverValue: 0, 
     premiumWaiverPremium: 0,
@@ -317,15 +318,19 @@ export default function Learner3aEntry() {
               </div>
 
               {/* Invalidité et Libération restent libres car souvent payantes à part même chez Baloise */}
-              <div className="grid grid-cols-2 gap-4 border-b pb-4">
-                <div className="space-y-1"><Label className="text-[10px]">Rente Inval.</Label><Input type="number" value={formData.disabilityRente} onChange={e => handleChange("disabilityRente", parseFloat(e.target.value))} /></div>
+              {/* Rente différée UNITAIRE : montant + différé (années avant 1er versement) → prime.
+                  Différé = 0 pour une rente immédiate. Une grille croissante se price par somme
+                  de couches (cf. new3a : décomposition base + incréments). */}
+              <div className="grid grid-cols-3 gap-4 border-b pb-4">
+                <div className="space-y-1"><Label className="text-[10px]">Rente Inval. (an)</Label><Input type="number" value={formData.disabilityRente} onChange={e => handleChange("disabilityRente", parseFloat(e.target.value))} /></div>
+                <div className="space-y-1"><Label className="text-[10px]">Différé (années)</Label><Input type="number" value={formData.disabilityDeferralYears} onChange={e => handleChange("disabilityDeferralYears", parseFloat(e.target.value))} /></div>
                 <div className="space-y-1">
                   <Label className="text-[10px]">Prime Inval. (an)</Label>
-                  <Input 
-                    type="number" 
-                    className="border-purple-200" 
+                  <Input
+                    type="number"
+                    className="border-purple-200"
                     value={formData.disabilityPremium}
-                    onChange={e => handleChange("disabilityPremium", parseFloat(e.target.value))} 
+                    onChange={e => handleChange("disabilityPremium", parseFloat(e.target.value))}
                   />
                 </div>
               </div>
@@ -497,10 +502,18 @@ export default function Learner3aEntry() {
                   </div>
                   <div className="space-y-1">
                     <Label>Coût Inval.</Label>
-                    <Input 
-                      type="number" 
-                      value={editingBenchmark.disabilityPremium} 
-                      onChange={e => handleEditChange("disabilityPremium", parseFloat(e.target.value))} 
+                    <Input
+                      type="number"
+                      value={editingBenchmark.disabilityPremium}
+                      onChange={e => handleEditChange("disabilityPremium", parseFloat(e.target.value))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Différé Inval. (an)</Label>
+                    <Input
+                      type="number"
+                      value={editingBenchmark.disabilityDeferralYears ?? 0}
+                      onChange={e => handleEditChange("disabilityDeferralYears", parseFloat(e.target.value))}
                     />
                   </div>
                   <div className="space-y-1">

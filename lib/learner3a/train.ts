@@ -96,6 +96,15 @@ function makeFeatures(b: any) {
   return [1, age, smoker, genderF];
 }
 
+// Features du modèle INVALIDITÉ : comme makeFeatures + le DIFFÉRÉ (années avant le 1er
+// versement). Une rente différée coûte moins qu'une immédiate à montant égal ; sans cette
+// dimension, mélanger des benchmarks différés et immédiats corromprait le taux. Le
+// coefficient beta[4] n'est identifiable qu'une fois des benchmarks avec différé > 0 saisis
+// (aujourd'hui tout est à 0 → colonne nulle → prédiction immédiate inchangée).
+function makeFeaturesDisability(b: any) {
+  return [...makeFeatures(b), safeNum(b.disabilityDeferralYears, 0)];
+}
+
 export function buildProviderModelsServer(allBenchmarks: any[]): Map<string, ProviderModelDoc> {
   const byProvider = new Map<string, any[]>();
   for (const b of allBenchmarks || []) {
@@ -131,7 +140,7 @@ export function buildProviderModelsServer(allBenchmarks: any[]): Map<string, Pro
       const disRente = safeNum(b.disabilityRente, 0);
       const disPrem = safeNum(b.disabilityPremium, 0);
       if (disRente > 0 && disPrem > 0) {
-        X_dis.push(feat);
+        X_dis.push(makeFeaturesDisability(b)); // inclut le différé (5e feature)
         y_dis.push(disPrem / disRente);
       }
 
