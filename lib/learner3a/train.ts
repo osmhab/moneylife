@@ -59,20 +59,24 @@ function solveLinearSystem(A: number[][], b: number[]) {
 function fitRidgeLogModel(X: number[][], y: number[], lambda = 1.0): RidgeModel {
   const logs: number[] = [];
   const X2: number[][] = [];
+  // Dimension attendue = longueur du 1er vecteur fourni (4 pour décès/libération, 5 pour
+  // l'invalidité qui inclut le DIFFÉRÉ). On n'exige PLUS une longueur fixe de 4 : sinon tous
+  // les vecteurs invalidité (5 features) étaient rejetés → modèle vide (nObs=0) → repli.
+  const expectedP = X.find((r) => Array.isArray(r) && r.length > 0)?.length ?? 4;
   for (let i = 0; i < Math.min(X.length, y.length); i++) {
     const yi = y[i];
     if (!Number.isFinite(yi) || yi <= 0) continue;
     const row = X[i];
-    if (!row || row.length !== 4) continue;
+    if (!row || row.length !== expectedP) continue;
     logs.push(Math.log(yi));
     X2.push(row);
   }
+  const p = X2[0]?.length ?? expectedP;
   if (logs.length < 6) {
     const m = median(logs.length ? logs : [Math.log(0.002)]);
-    return { beta: [m, 0, 0, 0], fallbackLogMean: m, nObs: logs.length };
+    return { beta: [m, ...Array(Math.max(0, p - 1)).fill(0)], fallbackLogMean: m, nObs: logs.length };
   }
 
-  const p = 4;
   const XtX = Array.from({ length: p }, () => Array(p).fill(0));
   const Xty = Array(p).fill(0);
 
