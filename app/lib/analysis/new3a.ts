@@ -8,6 +8,7 @@
 // ⚠️ Règle métier : on ne chiffre JAMAIS un 3a sans ces réponses (cf. memory new-3a-wizard-required).
 
 import type { SituationAnalysis } from "./situation";
+import { computeRentesDifferees, type RentesDiffereesResult } from "./rentesDifferees";
 
 export type RiskProfile = "guaranteed" | "prudent" | "balanced" | "dynamic";
 
@@ -91,6 +92,9 @@ export interface New3aOffer {
   provider: string;
   /** Âge du client (pour l'horizon de souscription). */
   clientAge: number;
+  /** ÉCHÉANCIER de rentes différées (invalidité) : paliers croissants au fil du départ des
+   *  enfants. Présent si l'analyse révèle une lacune future même quand elle est nulle aujourd'hui. */
+  rentesDifferees?: RentesDiffereesResult;
 }
 
 const PLAFOND_3A = 7258;
@@ -243,11 +247,26 @@ export function computeNew3aOffer(input: {
   clientAge: number;
   clientGender: string; // "M" | "F"
   benchmarks: any[];
+  /** Enfants du client (dates de naissance + statut formation) pour l'échéancier différé. */
+  enfants?: any[];
+  /** Date de naissance du client "JJ.MM.AAAA" (cutoff 65 ans de l'échéancier). */
+  clientDateNaissance?: unknown;
   /** Surcharges d'édition interactive (toggles / cibles / prime éditée). */
   overrides?: New3aOverrides;
 }): New3aOffer {
   const { wizard, situation, clientAge, clientGender, benchmarks } = input;
   const ov = input.overrides || {};
+
+  // ÉCHÉANCIER DE RENTES DIFFÉRÉES : la lacune invalidité peut être NULLE aujourd'hui (enfants
+  // couvrant) mais apparaître plus tard. On calcule les paliers pour (a) dimensionner la rente
+  // sur le besoin RÉEL à terme, (b) activer la couverture même sans lacune immédiate.
+  const rentesDifferees = computeRentesDifferees(
+    situation, input.enfants ?? [], input.clientDateNaissance, new Date()
+  );
+  const maxPalierMensuel = rentesDifferees.eligible
+    ? rentesDifferees.paliers.reduce((mx, p) => Math.max(mx, p.montantMensuel), 0)
+    : 0;
+  const hasFutureIGGap = maxPalierMensuel > 0;
 
   const isFemale = clientGender === "F";
   const isSmoker = wizard.isSmoker === true;
@@ -264,7 +283,8 @@ export function computeNew3aOffer(input: {
   // Bouton « Recommandation » (fillGap) : combler TOUTES les lacunes ciblées, pas seulement
   // l'épargne — on active donc aussi invalidité/décès s'ils sont ciblés ET à lacune réelle.
   if (ov.fillGap) {
-    const incGap = Math.max(situation.invaliditeMaladie.lacune, situation.invaliditeAccident.lacune) > 0;
+    // Gap invalidité = lacune actuelle OU lacune future (paliers différés à venir).
+    const incGap = Math.max(situation.invaliditeMaladie.lacune, situation.invaliditeAccident.lacune) > 0 || hasFutureIGGap;
     const decGap = situation.deces.lacune > 0;
     if (objectives.includes("protection_income") && incGap) selInc = true;
     if ((objectives.includes("protection_family") || objectives.includes("protection")) && decGap) selDec = true;
@@ -273,7 +293,9 @@ export function computeNew3aOffer(input: {
   const derived = deriveTargets(situation);
   const targets = {
     primeEpargne: wizard.monthlyBudget || 250,
-    maladie: ov.maladie ?? derived.maladie,
+    // Rente dimensionnée sur le besoin RÉEL : max(lacune actuelle, plus haut palier différé).
+    // → une rente est proposée même quand la lacune d'aujourd'hui est nulle (enfants couvrant).
+    maladie: ov.maladie ?? Math.max(derived.maladie, hasFutureIGGap ? floorRenteIGMensuelle(maxPalierMensuel) : 0),
     deces: ov.deces ?? derived.deces,
     retraite: derived.retraite,
   };
@@ -432,6 +454,7 @@ export function computeNew3aOffer(input: {
     },
     provider: providers.ret,
     clientAge,
+    rentesDifferees,
   };
 }
 

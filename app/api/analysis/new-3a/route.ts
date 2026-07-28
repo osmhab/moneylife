@@ -80,7 +80,11 @@ export async function POST(req: NextRequest) {
       ? { ...overrides, selRet: true, selPay: true, selInc: alloc.selInc, selDec: alloc.selDec, hasUserEditedEpargne: false }
       : overrides;
 
-    const offer = computeNew3aOffer({ wizard: effWizard, situation, clientAge, clientGender, benchmarks, overrides: effOverrides });
+    const offer = computeNew3aOffer({
+      wizard: effWizard, situation, clientAge, clientGender, benchmarks, overrides: effOverrides,
+      enfants: cloudData.Enter_enfants ?? [],
+      clientDateNaissance: cloudData.Enter_dateNaissance,
+    });
 
     return NextResponse.json({
       offer,
