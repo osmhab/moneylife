@@ -207,7 +207,10 @@ export function calculatePredictedRate(
   age: number,
   isSmoker: boolean,
   isFemale: boolean,
-  floor = 1.0
+  floor = 1.0,
+  /** Différé en années (invalidité) : applique le coefficient beta[4] appris → une rente
+   *  différée coûte moins cher. 0 = rente immédiate (décès/libération n'ont pas de différé). */
+  deferral = 0
 ): number {
   if (!model || !Array.isArray(model.beta) || model.beta.length < 4) {
     return Math.exp(model?.fallbackLogMean ?? -5);
@@ -215,10 +218,11 @@ export function calculatePredictedRate(
   const beta = model.beta;
   const s = isSmoker ? 1 : 0;
   const f = isFemale ? 1 : 0;
-  const logRate = beta[0] * 1 + beta[1] * age + beta[2] * s + beta[3] * f;
+  const dTerm = (beta[4] ?? 0) * deferral;
+  const logRate = beta[0] * 1 + beta[1] * age + beta[2] * s + beta[3] * f + dTerm;
   let rate = Math.exp(logRate);
   if (isSmoker && floor > 1.0) {
-    const logRateNS = beta[0] * 1 + beta[1] * age + beta[2] * 0 + beta[3] * f;
+    const logRateNS = beta[0] * 1 + beta[1] * age + beta[2] * 0 + beta[3] * f + dTerm;
     rate = Math.max(rate, Math.exp(logRateNS) * floor);
   }
   return rate;
@@ -301,6 +305,24 @@ export function computeNew3aOffer(input: {
   };
   const existing3a = derived.existing3a;
 
+  // COUCHES de tarification invalidité (Phase 4) : une rente différée croissante = base +
+  // incréments. Chaque couche (incrément) est tarifée au TAUX de SON différé (plus c'est
+  // différé, moins c'est cher). Somme des couches = rente au palier max = targets.maladie.
+  const currentYear = new Date().getFullYear();
+  let incLayers: { deferralYears: number; montantMensuel: number }[];
+  if (rentesDifferees.eligible && rentesDifferees.paliers.length > 0) {
+    incLayers = [];
+    let prev = 0;
+    for (const pal of rentesDifferees.paliers) {
+      const inc = pal.montantMensuel - prev;
+      if (inc > 0) incLayers.push({ deferralYears: Math.max(0, pal.fromYear - currentYear), montantMensuel: inc });
+      prev = pal.montantMensuel;
+    }
+  } else {
+    // Pas d'échéancier (lacune immédiate, ou inéligible) → une seule couche immédiate.
+    incLayers = targets.maladie > 0 ? [{ deferralYears: 0, montantMensuel: targets.maladie }] : [];
+  }
+
   // ═══ TARIFICATION : deux scénarios comparés au COÛT NET ═══════════════════════
   // ÉCLATÉ (best-of-breed) : chaque produit chez son meilleur assureur → possiblement
   // plusieurs contrats, donc plusieurs LIBÉRATIONS. REGROUPÉ : tout chez un seul assureur
@@ -314,7 +336,7 @@ export function computeNew3aOffer(input: {
 
   const priceScenario = (p: {
     retProvider: string; retYield: number; // yieldMedian % (0 → repli profil)
-    incProvider: string; disRate: number | null;
+    incProvider: string; incBench: any | null; // benchmark de l'assureur invalidité (beta + floors)
     decProvider: string; deathRate: number | null;
     retWaiver: number; incWaiver: number; decWaiver: number;
   }): Scenario => {
@@ -328,7 +350,15 @@ export function computeNew3aOffer(input: {
     }
     const recoEpargne = Math.max(0, round2(required));
 
-    const incCost = p.disRate != null ? targets.maladie * p.disRate : targets.maladie * 0.015;
+    // Invalidité PAR COUCHES : chaque couche au taux de son différé (rente différée = moins chère).
+    const incUnit = p.incBench?.disabilityUnit;
+    const incFloor = p.incBench?.smokerFloors?.disability;
+    const incCost = incUnit
+      ? incLayers.reduce(
+          (s, L) => s + calculatePredictedRate(incUnit, clientAge, isSmoker, isFemale, incFloor, L.deferralYears) * L.montantMensuel,
+          0
+        )
+      : targets.maladie * 0.015;
     const decCost = p.deathRate != null ? (targets.deces * p.deathRate) / 12 : targets.deces * 0.00015;
 
     let epargne: number;
@@ -390,7 +420,7 @@ export function computeNew3aOffer(input: {
   // ── ÉCLATÉ : chaque produit chez son meilleur assureur, libération au taux de chaque hôte.
   const eclate = priceScenario({
     retProvider, retYield: saverPick?.value ?? 0,
-    incProvider, disRate: disPick?.value ?? null,
+    incProvider, incBench: disPick ? bmByProvider(benchmarks, incProvider) : null,
     decProvider, deathRate: deathPick?.value ?? null,
     retWaiver: saverPick ? waiverRateOf(bmByProvider(benchmarks, retProvider), clientAge, isSmoker, isFemale) : 0.03,
     incWaiver: disPick ? waiverRateOf(bmByProvider(benchmarks, incProvider), clientAge, isSmoker, isFemale) : 0.03,
@@ -408,7 +438,7 @@ export function computeNew3aOffer(input: {
     const w = waiverRateOf(b, clientAge, isSmoker, isFemale);
     const cand = priceScenario({
       retProvider: b.provider, retYield: Number(b.yieldMedian) || 0,
-      incProvider: b.provider, disRate: dis,
+      incProvider: b.provider, incBench: dis != null ? b : null,
       decProvider: b.provider, deathRate: death,
       retWaiver: w, incWaiver: w, decWaiver: w,
     });
