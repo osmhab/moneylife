@@ -38,6 +38,21 @@ import {
 
 const PARTNERS = ["SwissLife", "AXA", "Baloise", "PAX"];
 
+// 1er du mois suivant (comme AXA : la rente démarre le 1er jour du mois suivant l'offre).
+function firstOfNextMonthISO(): string {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-01`;
+}
+// Différé en années entre deux dates ISO (arrondi à l'année) — 0 si dates manquantes/incohérentes.
+function deferralYearsBetween(startISO: string, levelISO: string): number {
+  if (!startISO || !levelISO) return 0;
+  const a = new Date(startISO).getTime();
+  const b = new Date(levelISO).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.max(0, Math.round((b - a) / (365.25 * 24 * 3600 * 1000)));
+}
+
 export default function Learner3aEntry() {
   const [loading, setLoading] = useState(false);
   const [isScanningRachats, setIsScanningRachats] = useState(false);
@@ -59,10 +74,11 @@ export default function Learner3aEntry() {
     isDeathIncludedInSavings: false, // Précis : Concerne uniquement le décès
     deathCapital: 0,
     deathPremium: 0,
-    // Rente d'invalidité façon AXA : une suite de NIVEAUX (degrés) différés + croissants.
-    // Chaque niveau = { deferralYears (différé en années, 0 = immédiat), amount (CHF/an) }.
-    // Une SEULE prime totale pour toute la grille (disabilityPremium). "Ajouter un niveau" au besoin.
-    disabilityLevels: [{ deferralYears: 0, amount: 0 }] as { deferralYears: number; amount: number }[],
+    // Rente d'invalidité façon AXA : NIVEAUX (degrés) datés + croissants. Chaque niveau =
+    // { date (début de la rente, ISO), amount (CHF/an) }. Le différé est calculé à partir de
+    // disabilityContractStart (début du contrat). UNE seule prime totale (disabilityPremium).
+    disabilityContractStart: firstOfNextMonthISO(),
+    disabilityLevels: [{ date: firstOfNextMonthISO(), amount: 0 }] as { date: string; amount: number }[],
     disabilityPremium: 0,
     premiumWaiverValue: 0, 
     premiumWaiverPremium: 0,
@@ -84,24 +100,21 @@ export default function Learner3aEntry() {
   ];
   // Champs (de formData) rattachés à chaque couverture — pour la remise à 0 des inactives.
   const COVERAGE_FIELDS: Record<string, string[]> = {
-    disability: ["disabilityLevels", "disabilityPremium"],
+    disability: ["disabilityContractStart", "disabilityLevels", "disabilityPremium"],
     death: ["deathCapital", "deathPremium"],
     waiver: ["premiumWaiverValue", "premiumWaiverPremium"],
     savings: ["annualPremiumTotal", "savingPremiumAnnual", "userYieldRate", "projectedCapitalAtRetirement", "initialCapitalTransfer", "surrenderValues"],
   };
-  // Répéteur de niveaux de rente (degrés AXA).
+  // Répéteur de niveaux de rente (degrés AXA) — chaque niveau porte une DATE de début.
   const addRenteLevel = () => setFormData(p => ({
     ...p,
-    disabilityLevels: [...p.disabilityLevels, {
-      deferralYears: (p.disabilityLevels[p.disabilityLevels.length - 1]?.deferralYears ?? 0) + 5,
-      amount: 0,
-    }],
+    disabilityLevels: [...p.disabilityLevels, { date: "", amount: 0 }],
   }));
   const removeRenteLevel = (i: number) => setFormData(p => ({
     ...p,
     disabilityLevels: p.disabilityLevels.filter((_, idx) => idx !== i),
   }));
-  const updateRenteLevel = (i: number, key: "deferralYears" | "amount", value: number) =>
+  const updateRenteLevel = (i: number, key: "date" | "amount", value: string | number) =>
     setFormData(p => ({
       ...p,
       disabilityLevels: p.disabilityLevels.map((lvl, idx) => idx === i ? { ...lvl, [key]: value } : lvl),
@@ -117,6 +130,15 @@ export default function Learner3aEntry() {
     for (const cov of COVERAGES) {
       if (active[cov.key]) continue;
       for (const f of COVERAGE_FIELDS[cov.key]) out[f] = (f === "surrenderValues" || f === "disabilityLevels") ? [] : 0;
+    }
+    // Niveaux de rente actifs : on calcule et fige le différé (années) de chaque niveau à
+    // partir de la date de début du contrat → c'est cette valeur que le modèle consomme.
+    if (active.disability) {
+      out.disabilityLevels = (formData.disabilityLevels || []).map(lvl => ({
+        date: lvl.date,
+        amount: lvl.amount,
+        deferralYears: deferralYearsBetween(formData.disabilityContractStart, lvl.date),
+      }));
     }
     out.coverages = COVERAGES.filter(c => active[c.key]).map(c => c.key);
     return out;
@@ -396,17 +418,23 @@ export default function Learner3aEntry() {
               </div>
               </>)}
 
-              {/* Rente d'invalidité façon AXA : niveaux (degrés) différés + croissants, UNE prime
-                  totale. Niveau 1 = différé 0 (immédiat) le plus souvent. "Ajouter un niveau". */}
+              {/* Rente d'invalidité façon AXA : niveaux (degrés) DATÉS + croissants, UNE prime
+                  totale. Le différé de chaque niveau est calculé depuis « Début du contrat ». */}
               {active.disability && (
               <div className="space-y-3 border-b pb-4">
-                <Label className="text-[10px] font-bold uppercase text-purple-800">Rente invalidité — niveaux (différé)</Label>
-                {formData.disabilityLevels.map((lvl, i) => (
+                <Label className="text-[10px] font-bold uppercase text-purple-800">Rente invalidité — niveaux</Label>
+                <div className="space-y-1">
+                  <Label className="text-[9px]">Début du contrat (référence du différé)</Label>
+                  <Input type="date" value={formData.disabilityContractStart} onChange={e => handleChange("disabilityContractStart", e.target.value)} />
+                </div>
+                {formData.disabilityLevels.map((lvl, i) => {
+                  const dY = deferralYearsBetween(formData.disabilityContractStart, lvl.date);
+                  return (
                   <div key={i} className="flex items-end gap-2">
                     <div className="w-8 h-9 flex items-center justify-center rounded-md bg-purple-100 text-purple-800 text-[11px] font-bold shrink-0">{i + 1}</div>
                     <div className="space-y-1 flex-1">
-                      <Label className="text-[9px]">Différé (an){i === 0 ? " — 0 = immédiat" : ""}</Label>
-                      <Input type="number" value={lvl.deferralYears} onChange={e => updateRenteLevel(i, "deferralYears", parseFloat(e.target.value))} />
+                      <Label className="text-[9px]">Début de la rente{i === 0 ? "" : ` · +${dY} an`}</Label>
+                      <Input type="date" value={lvl.date} onChange={e => updateRenteLevel(i, "date", e.target.value)} />
                     </div>
                     <div className="space-y-1 flex-1">
                       <Label className="text-[9px]">Montant (CHF/an)</Label>
@@ -416,7 +444,8 @@ export default function Learner3aEntry() {
                       <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-red-600 shrink-0" onClick={() => removeRenteLevel(i)}><Trash2 className="h-4 w-4" /></Button>
                     )}
                   </div>
-                ))}
+                  );
+                })}
                 <Button type="button" variant="outline" size="sm" className="h-8 text-[11px] w-full border-dashed" onClick={addRenteLevel}>
                   <Plus className="h-3 w-3 mr-1" /> Ajouter un niveau
                 </Button>
