@@ -146,9 +146,13 @@ export function buildProviderModelsServer(allBenchmarks: any[]): Map<string, Pro
 
       const annTot = safeNum(b.annualPremiumTotal, 0);
       const waiverPrem = safeNum(b.premiumWaiverPremium, 0);
-      if (annTot > 0 && waiverPrem > 0) {
+      // Dénominateur du taux libération : la prime totale si présente, sinon le "Montant
+      // Libéré" (premiumWaiverValue) — permet une entrée benchmark "libération seule"
+      // (couvertures modulaires) sans devoir renseigner une prime totale d'épargne.
+      const waiverBase = annTot > 0 ? annTot : safeNum(b.premiumWaiverValue, 0);
+      if (waiverBase > 0 && waiverPrem > 0) {
         X_waiver.push(feat);
-        y_waiver.push(waiverPrem / annTot);
+        y_waiver.push(waiverPrem / waiverBase);
       }
 
       const yld = safeNum(b.userYieldRate, safeNum(b.historicalPerformance, NaN));

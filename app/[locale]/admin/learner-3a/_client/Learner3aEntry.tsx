@@ -65,10 +65,43 @@ export default function Learner3aEntry() {
     premiumWaiverValue: 0, 
     premiumWaiverPremium: 0,
     savingPremiumAnnual: 0,
-    userYieldRate: 3.0, 
+    userYieldRate: 3.0,
     projectedCapitalAtRetirement: 0,
     surrenderValues: [] as number[]
   });
+
+  // COUVERTURES MODULAIRES : on n'active que ce qu'on veut benchmarker (ex. uniquement
+  // la rente, ou uniquement l'épargne). Évite de saisir des 0 parasites et garde des primes
+  // RÉELLES attribuables à chaque couverture. Les champs des couvertures inactives sont
+  // remis à 0 à la sauvegarde → exclus de l'entraînement (qui ne prend que les valeurs > 0).
+  const COVERAGES = [
+    { key: "disability", label: "Rente invalidité" },
+    { key: "death", label: "Capital décès" },
+    { key: "waiver", label: "Libération des primes" },
+    { key: "savings", label: "Épargne" },
+  ];
+  // Champs (de formData) rattachés à chaque couverture — pour la remise à 0 des inactives.
+  const COVERAGE_FIELDS: Record<string, string[]> = {
+    disability: ["disabilityRente", "disabilityDeferralYears", "disabilityPremium"],
+    death: ["deathCapital", "deathPremium"],
+    waiver: ["premiumWaiverValue", "premiumWaiverPremium"],
+    savings: ["annualPremiumTotal", "savingPremiumAnnual", "userYieldRate", "projectedCapitalAtRetirement", "initialCapitalTransfer", "surrenderValues"],
+  };
+  const [active, setActive] = useState<Record<string, boolean>>({
+    disability: true, death: false, waiver: false, savings: false,
+  });
+  const toggleCoverage = (k: string) => setActive(p => ({ ...p, [k]: !p[k] }));
+
+  // formData avec les couvertures inactives neutralisées (0 / []), + la liste des couvertures.
+  const buildPayload = () => {
+    const out: Record<string, any> = { ...formData };
+    for (const cov of COVERAGES) {
+      if (active[cov.key]) continue;
+      for (const f of COVERAGE_FIELDS[cov.key]) out[f] = f === "surrenderValues" ? [] : 0;
+    }
+    out.coverages = COVERAGES.filter(c => active[c.key]).map(c => c.key);
+    return out;
+  };
 
   const fetchBenchmarks = async () => {
     try {
@@ -136,11 +169,12 @@ export default function Learner3aEntry() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.provider) return toast.error("Veuillez choisir une compagnie");
+    if (!COVERAGES.some(c => active[c.key])) return toast.error("Ajoutez au moins une couverture");
 
     setLoading(true);
     try {
       await addDoc(collection(db, "learner-3a"), {
-        ...formData,
+        ...buildPayload(),
         createdAt: serverTimestamp(),
       });
       toast.success("Benchmark mémorisé !");
@@ -266,6 +300,7 @@ export default function Learner3aEntry() {
             </CardContent>
           </Card>
 
+          {active.savings && (
           <Card className="bg-blue-50/30 border-blue-100">
             <CardHeader className="pb-3"><CardTitle className="text-xs uppercase flex items-center gap-2"><TrendingUp size={14}/> Projection</CardTitle></CardHeader>
             <CardContent className="space-y-3">
@@ -275,22 +310,46 @@ export default function Learner3aEntry() {
               <Input type="number" value={formData.projectedCapitalAtRetirement} onChange={e => handleChange("projectedCapitalAtRetirement", parseFloat(e.target.value))} />
             </CardContent>
           </Card>
+          )}
         </div>
 
         <div className="lg:col-span-2 space-y-6">
           <Card className="border-primary/20">
-            <CardHeader className="pb-3"><CardTitle className="text-xs uppercase flex items-center gap-2"><ShieldCheck size={14}/> Coûts des Risques & Épargne</CardTitle></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-xs uppercase flex items-center gap-2"><ShieldCheck size={14}/> Couvertures à benchmarker</CardTitle></CardHeader>
             <CardContent className="space-y-4">
+              {/* Barre de sélection : on ajoute UNIQUEMENT les couvertures pertinentes. */}
+              <div className="flex flex-wrap gap-2">
+                {COVERAGES.map(c => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => toggleCoverage(c.key)}
+                    className={`text-[11px] font-bold px-3 py-1.5 rounded-full border transition-colors ${active[c.key] ? "bg-primary text-white border-primary" : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted"}`}
+                  >
+                    {active[c.key] ? "✓ " : "+ "}{c.label}
+                  </button>
+                ))}
+              </div>
+
+              {!COVERAGES.some(c => active[c.key]) && (
+                <p className="text-[11px] text-muted-foreground italic py-4 text-center">Ajoutez au moins une couverture ci-dessus.</p>
+              )}
+
+              {active.savings && (
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
                 <Label className="text-[10px] font-bold uppercase text-amber-800">Capital initial transféré (Benchmark)</Label>
                 <Input type="number" className="text-xl font-bold bg-transparent border-none p-0 h-auto focus-visible:ring-0 text-amber-900" value={formData.initialCapitalTransfer} onChange={e => handleChange("initialCapitalTransfer", parseFloat(e.target.value))} />
               </div>
+              )}
 
+              {active.savings && (
               <div className="p-3 bg-primary/5 rounded-xl border border-primary/10">
                 <Label className="text-[10px] font-bold uppercase text-emerald-800">Prime Totale Annuelle</Label>
                 <Input type="number" className="text-xl font-bold bg-transparent border-none p-0 h-auto focus-visible:ring-0" value={formData.annualPremiumTotal} onChange={e => handleChange("annualPremiumTotal", parseFloat(e.target.value))} />
               </div>
+              )}
 
+              {active.death && (<>
               {/* Toggle Décès Inclus (Baloise) */}
               <div className="flex items-center justify-between p-2 bg-orange-50 rounded-lg border border-orange-100">
                 <div className="flex items-center gap-2">
@@ -316,11 +375,11 @@ export default function Learner3aEntry() {
                   />
                 </div>
               </div>
+              </>)}
 
-              {/* Invalidité et Libération restent libres car souvent payantes à part même chez Baloise */}
-              {/* Rente différée UNITAIRE : montant + différé (années avant 1er versement) → prime.
-                  Différé = 0 pour une rente immédiate. Une grille croissante se price par somme
-                  de couches (cf. new3a : décomposition base + incréments). */}
+              {/* Rente différée UNITAIRE : montant + différé (années) → prime. Différé = 0 = immédiate.
+                  Une grille croissante se price par somme de couches (cf. new3a). */}
+              {active.disability && (
               <div className="grid grid-cols-3 gap-4 border-b pb-4">
                 <div className="space-y-1"><Label className="text-[10px]">Rente Inval. (an)</Label><Input type="number" value={formData.disabilityRente} onChange={e => handleChange("disabilityRente", parseFloat(e.target.value))} /></div>
                 <div className="space-y-1"><Label className="text-[10px]">Différé (années)</Label><Input type="number" value={formData.disabilityDeferralYears} onChange={e => handleChange("disabilityDeferralYears", parseFloat(e.target.value))} /></div>
@@ -334,6 +393,9 @@ export default function Learner3aEntry() {
                   />
                 </div>
               </div>
+              )}
+
+              {active.waiver && (
               <div className="grid grid-cols-2 gap-4 border-b pb-4">
                 <div className="space-y-1"><Label className="text-[10px]">Montant Libéré</Label><Input type="number" value={formData.premiumWaiverValue} onChange={e => handleChange("premiumWaiverValue", parseFloat(e.target.value))} /></div>
                 <div className="space-y-1">
@@ -346,7 +408,9 @@ export default function Learner3aEntry() {
                   />
                 </div>
               </div>
+              )}
 
+              {active.savings && (
               <div className="pt-2 flex items-center justify-between">
                 <div>
                   <Label className="text-emerald-700 font-bold text-xs uppercase flex items-center gap-1"><PiggyBank size={14}/> Épargne Pure (Annuel)</Label>
@@ -357,10 +421,12 @@ export default function Learner3aEntry() {
                   <p className="text-xl font-mono font-bold">{(formData.savingPremiumAnnual / 12).toFixed(2)}</p>
                 </div>
               </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
+        {active.savings && (
         <div className="space-y-6">
           <Card className="h-full">
             <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
@@ -387,6 +453,7 @@ export default function Learner3aEntry() {
             </CardContent>
           </Card>
         </div>
+        )}
       </div>
 
       <div className="space-y-4 pt-10 border-t">
