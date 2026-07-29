@@ -414,16 +414,29 @@ export function computeNew3aOffer(input: {
   const disPick = pickCheapestInsurer(benchmarks, "disabilityUnit", "disability", clientAge, isSmoker, isFemale);
   const saverPick = pickBestSaver(benchmarks);
   const retProvider = saverPick?.provider ?? "Sur mesure";
-  const incProvider = disPick?.provider ?? "Sur mesure";
   const decProvider = deathPick?.provider ?? "Sur mesure";
+
+  // RÈGLE ASSUREUR : seul AXA gère les rentes DIFFÉRÉES / à paliers (SwissLife/PAX/Baloise =
+  // rente immédiate uniquement). Dès que l'échéancier invalidité est différé (début futur) ou
+  // étagé (>1 palier), on FORCE AXA sur l'invalidité, SANS comparaison. Sinon (rente immédiate
+  // simple), comparaison normale. Cf. mémoire insurer-deferred-rente-capability.
+  const AXA = "AXA";
+  const axaBench = bmByProvider(benchmarks, AXA);
+  const axaCanInsureDis = (axaBench?.disabilityUnit?.nObs ?? 0) >= MIN_OBS_SELECTION;
+  const needsAXA =
+    rentesDifferees.eligible &&
+    incLayers.length > 0 &&
+    (incLayers.length > 1 || incLayers.some((L) => L.deferralYears > 0));
+  const forceAxaInc = needsAXA && selInc && axaCanInsureDis;
+  const incProvider = forceAxaInc ? AXA : (disPick?.provider ?? "Sur mesure");
 
   // ── ÉCLATÉ : chaque produit chez son meilleur assureur, libération au taux de chaque hôte.
   const eclate = priceScenario({
     retProvider, retYield: saverPick?.value ?? 0,
-    incProvider, incBench: disPick ? bmByProvider(benchmarks, incProvider) : null,
+    incProvider, incBench: forceAxaInc ? axaBench : (disPick ? bmByProvider(benchmarks, incProvider) : null),
     decProvider, deathRate: deathPick?.value ?? null,
     retWaiver: saverPick ? waiverRateOf(bmByProvider(benchmarks, retProvider), clientAge, isSmoker, isFemale) : 0.03,
-    incWaiver: disPick ? waiverRateOf(bmByProvider(benchmarks, incProvider), clientAge, isSmoker, isFemale) : 0.03,
+    incWaiver: (forceAxaInc || disPick) ? waiverRateOf(bmByProvider(benchmarks, incProvider), clientAge, isSmoker, isFemale) : 0.03,
     decWaiver: deathPick ? waiverRateOf(bmByProvider(benchmarks, decProvider), clientAge, isSmoker, isFemale) : 0.03,
   });
 
@@ -433,14 +446,17 @@ export function computeNew3aOffer(input: {
   for (const b of benchmarks || []) {
     const dis = reliableRate(b, "disabilityUnit", "disability", clientAge, isSmoker, isFemale);
     const death = reliableRate(b, "deathUnit", "death", clientAge, isSmoker, isFemale);
-    if (selInc && dis == null) continue;
+    // Quand l'invalidité est forcée AXA (différé), l'hôte `b` n'a PAS besoin de sa propre
+    // dispo → on ne le skippe plus sur ce critère (l'invalidité sera une police AXA à part).
+    if (selInc && !forceAxaInc && dis == null) continue;
     if (selDec && death == null) continue;
     const w = waiverRateOf(b, clientAge, isSmoker, isFemale);
     const cand = priceScenario({
       retProvider: b.provider, retYield: Number(b.yieldMedian) || 0,
-      incProvider: b.provider, incBench: dis != null ? b : null,
+      incProvider: forceAxaInc ? AXA : b.provider,
+      incBench: forceAxaInc ? axaBench : (dis != null ? b : null),
       decProvider: b.provider, deathRate: death,
-      retWaiver: w, incWaiver: w, decWaiver: w,
+      retWaiver: w, incWaiver: forceAxaInc ? waiverRateOf(axaBench, clientAge, isSmoker, isFemale) : w, decWaiver: w,
     });
     if (regroupe === null || cand.net > regroupe.net) regroupe = cand;
   }
