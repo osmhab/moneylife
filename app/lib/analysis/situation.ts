@@ -4,6 +4,8 @@
 // Source unique consommée par le web (à terme) ET l'API/iOS.
 // NB : ne contient PAS le pricing ML (threeA-engine) — c'est une couche séparée.
 
+import { plafond3aAnnuel } from "./plafond3a";
+
 type AnyObj = Record<string, any>;
 
 const parseAmount = (val: any): number => {
@@ -144,8 +146,6 @@ export interface SituationAnalysis {
     tauxMarginal: number;
   };
 }
-
-const PLAFOND_3A_ANNUEL = 7258;
 
 /** Calcule les lacunes + scores affichés par SituationPrevoyancePage. */
 export function computeSituationAnalysis(input: SituationInput): SituationAnalysis | null {
@@ -450,7 +450,9 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
     return acc + (d.occurrence === "annee" ? base : base * 12);
   }, 0);
 
-  const montantDeductible = Math.min(cotisations3a, PLAFOND_3A_ANNUEL);
+  // Plafond 3a : petit (affilié LPP) ou grand (20% du salaire, max) si non affilié.
+  const plafond3a = plafond3aAnnuel(cloudData);
+  const montantDeductible = Math.min(cotisations3a, plafond3a);
   const tauxFisc = salaireDeces > 150000 ? 0.3 : salaireDeces > 80000 ? 0.25 : 0.2;
 
   // ---- SCORE GLOBAL (pondéré selon la situation familiale) ----
@@ -526,8 +528,8 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
     },
     fiscal: {
       investi3aAnnuel: cotisations3a,
-      plafond3a: PLAFOND_3A_ANNUEL,
-      pourcentUtilise: Math.round((montantDeductible / PLAFOND_3A_ANNUEL) * 100),
+      plafond3a,
+      pourcentUtilise: plafond3a > 0 ? Math.round((montantDeductible / plafond3a) * 100) : 0,
       gainFiscalAnnuel: montantDeductible * tauxFisc,
       tauxMarginal: tauxFisc,
     },

@@ -6,6 +6,7 @@ import { db, auth } from "@/lib/firebase";
 import { doc, onSnapshot, collection, getDocs } from "firebase/firestore";
 import { predictLog, ProviderModelDoc } from "lib/engines/threeA-engine";
 import { computeSituationAnalysis } from "@/lib/analysis/situation";
+import { plafond3aAnnuel } from "@/lib/analysis/plafond3a";
 
 // Helper partagé
 const parseAmount = (val: any) => {
@@ -319,7 +320,8 @@ export function usePrevoyanceAnalysis(adminUid?: string, externalPlans?: any[], 
       return acc + primeCalculee;
     }, 0);
 
-    const plafond3a = 7258; 
+    // Plafond 3a : petit (affilié LPP) ou grand (20% du salaire) si non affilié.
+    const plafond3a = plafond3aAnnuel(cloudData);
     const potentielRestantAnnuel = Math.max(0, plafond3a - cotisationsActuelles3a);
 
     const totalPrimes = (selRet ? priceRet : 0) + (selInc ? priceInc : 0) + (selDec ? priceDec : 0) + (selPay ? pricePay : 0);

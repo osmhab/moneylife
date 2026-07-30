@@ -97,7 +97,6 @@ export interface New3aOffer {
   rentesDifferees?: RentesDiffereesResult;
 }
 
-const PLAFOND_3A = 7258;
 
 /**
  * Rente d'invalidité (perte de gain) MINIMALE assurable, en annuel puis mensuel.
@@ -493,7 +492,10 @@ export function computeNew3aOffer(input: {
   const idealEpargne = chosen.recoEpargne;
   const grossTotal = chosen.grossTotal;
 
-  const maxDeductibleMonthly = Math.max(0, PLAFOND_3A - existing3a) / 12;
+  // Plafond 3a selon l'affiliation LPP (petit) ou non (grand = 20% salaire) — calculé
+  // dans situation.fiscal.plafond3a (source unique).
+  const plafond3a = situation.fiscal.plafond3a;
+  const maxDeductibleMonthly = Math.max(0, plafond3a - existing3a) / 12;
   let split3a = Math.min(grossTotal, maxDeductibleMonthly);
   if (split3a < 50) split3a = 0;
   const split3b = grossTotal - split3a;

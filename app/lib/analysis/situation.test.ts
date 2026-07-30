@@ -16,6 +16,7 @@ function cloudData() {
     Enter_salaireAnnuel: 60_000,
     Enter_etatCivil: 0,
     Enter_enfants: [],
+    Enter_Affilie_LPP: true, // affilié (rente LPP présente) → petit plafond 3a (7'258)
     projections: {
       retraite: matrix({ "Besoin (Salaire)": [60_000], "AVS/AI": [24_000], "LPP": [18_000] }, [65]),
       invalidite_maladie: matrix(
