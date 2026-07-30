@@ -56,10 +56,21 @@ describe("computeNew3aOffer — règle AXA forcé sur besoin différé", () => {
   it("besoin IMMÉDIAT (lacune dès aujourd'hui) → comparaison → SwissLife (moins cher)", () => {
     const sit = situation(
       [{ fromYear: 2028, nbEnfants: 2, lacune: 1080, layers: [] }],
-      1080 // lacune immédiate
+      1080 // lacune immédiate ; 12'960/an > min SwissLife (6'000) → éligible
     );
     const offer = call(sit);
     expect(offer.selInc).toBe(true);
     expect(offer.providers?.inc).toBe("SwissLife"); // comparaison normale, moins cher gagne
+  });
+
+  it("écarte un assureur si la rente visée est SOUS son minimum", () => {
+    const sit = situation(
+      [{ fromYear: 2028, nbEnfants: 2, lacune: 333, layers: [] }],
+      333 // 333/mois = ~4'000/an : SOUS le min SwissLife (6'000), AU-DESSUS du min AXA (3'000)
+    );
+    const offer = call(sit);
+    expect(offer.selInc).toBe(true);
+    // SwissLife (moins cher) écarté car min 6'000 > 4'000 → AXA (min 3'000) retenu.
+    expect(offer.providers?.inc).toBe("AXA");
   });
 });

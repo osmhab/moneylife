@@ -113,6 +113,18 @@ export function floorRenteIGMensuelle(renteMensuelle: number): number {
   if (renteMensuelle > 0 && renteMensuelle < RENTE_IG_MIN_MENSUELLE) return RENTE_IG_MIN_MENSUELLE;
   return renteMensuelle;
 }
+
+/** Contraintes produit par assureur pour la rente d'invalidité (confirmées avec Habib) :
+ *  - `minRenteAnnuel` : rente annuelle minimale assurable ;
+ *  - `canDefer` : gère une rente différée / à paliers (SEUL AXA). Cf. mémoire
+ *    insurer-deferred-rente-capability. Assureur absent → aucune contrainte (min 0). */
+export const INSURER_CAPS: Record<string, { minRenteAnnuel: number; canDefer: boolean }> = {
+  AXA: { minRenteAnnuel: 3000, canDefer: true },
+  SwissLife: { minRenteAnnuel: 6000, canDefer: false },
+  Helvetia: { minRenteAnnuel: 6000, canDefer: false },
+  PAX: { minRenteAnnuel: 9600, canDefer: false },
+};
+const insurerMinRenteAnnuel = (provider: string) => INSURER_CAPS[provider]?.minRenteAnnuel ?? 0;
 const YIELD_RATES: Record<RiskProfile, number> = {
   guaranteed: 0.005,
   prudent: 0.025,
@@ -145,10 +157,13 @@ export function pickCheapestInsurer(
   floorKey: "death" | "disability" | "waiver",
   age: number,
   isSmoker: boolean,
-  isFemale: boolean
+  isFemale: boolean,
+  /** Exclut un assureur de la sélection (ex. rente sous son minimum assurable). */
+  excludeProvider?: (provider: string) => boolean
 ): ProviderPick | null {
   let best: ProviderPick | null = null;
   for (const b of benchmarks || []) {
+    if (excludeProvider?.(b.provider)) continue;
     const unit = b?.[unitKey];
     if (!unit || Number(unit.nObs ?? 0) < MIN_OBS_SELECTION) continue;
     const rate = calculatePredictedRate(unit, age, isSmoker, isFemale, b.smokerFloors?.[floorKey]);
@@ -410,8 +425,14 @@ export function computeNew3aOffer(input: {
   };
 
   // Picks best-of-breed (sélection sur la prime / le rendement).
+  // Minimum de rente par assureur : un assureur dont le minimum DÉPASSE la rente visée ne peut
+  // pas l'offrir sans sur-assurer → on l'écarte de l'invalidité. (Le plancher global = 3'000/an
+  // = min AXA → AXA reste toujours éligible.)
+  const neededRenteAnnuel = targets.maladie * 12;
+  const disExclude = (prov: string) => insurerMinRenteAnnuel(prov) > neededRenteAnnuel + 1;
+
   const deathPick = pickCheapestInsurer(benchmarks, "deathUnit", "death", clientAge, isSmoker, isFemale);
-  const disPick = pickCheapestInsurer(benchmarks, "disabilityUnit", "disability", clientAge, isSmoker, isFemale);
+  const disPick = pickCheapestInsurer(benchmarks, "disabilityUnit", "disability", clientAge, isSmoker, isFemale, disExclude);
   const saverPick = pickBestSaver(benchmarks);
   const retProvider = saverPick?.provider ?? "Sur mesure";
   const decProvider = deathPick?.provider ?? "Sur mesure";
@@ -448,7 +469,8 @@ export function computeNew3aOffer(input: {
     const death = reliableRate(b, "deathUnit", "death", clientAge, isSmoker, isFemale);
     // Quand l'invalidité est forcée AXA (différé), l'hôte `b` n'a PAS besoin de sa propre
     // dispo → on ne le skippe plus sur ce critère (l'invalidité sera une police AXA à part).
-    if (selInc && !forceAxaInc && dis == null) continue;
+    // Sinon : l'hôte doit avoir une dispo fiable ET un minimum de rente compatible.
+    if (selInc && !forceAxaInc && (dis == null || disExclude(b.provider))) continue;
     if (selDec && death == null) continue;
     const w = waiverRateOf(b, clientAge, isSmoker, isFemale);
     const cand = priceScenario({
