@@ -61,6 +61,11 @@ export default function Learner3aEntry() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingBenchmark, setEditingBenchmark] = useState<any>(null);
 
+  // Sélection multiple + édition GROUPÉE (ex. corriger le sexe de plusieurs benchmarks d'un coup).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkField, setBulkField] = useState<"gender" | "isSmoker" | "provider">("gender");
+  const [bulkValue, setBulkValue] = useState<string>("M");
+
   const [formData, setFormData] = useState({
     provider: "",
     productName: "",
@@ -282,6 +287,29 @@ export default function Learner3aEntry() {
   const openEditModal = (benchmark: any) => {
     setEditingBenchmark(benchmark);
     setIsEditDialogOpen(true);
+  };
+
+  // ── Sélection multiple + édition groupée ──────────────────────────────────
+  const toggleSelect = (id: string) =>
+    setSelected(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const allSelected = benchmarks.length > 0 && benchmarks.every(b => selected.has(b.id));
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(benchmarks.map(b => b.id)));
+
+  const applyBulk = async () => {
+    if (selected.size === 0) return;
+    setLoading(true);
+    try {
+      const val: any = bulkField === "isSmoker" ? bulkValue === "true" : bulkValue;
+      await Promise.all([...selected].map(id =>
+        updateDoc(doc(db, "learner-3a", id), { [bulkField]: val, updatedAt: serverTimestamp() })
+      ));
+      toast.success(`${selected.size} benchmark(s) mis à jour`);
+      setSelected(new Set());
+      fetchBenchmarks();
+    } catch (e: any) {
+      toast.error(e?.message || "Erreur mise à jour groupée");
+    }
+    setLoading(false);
   };
 
   return (
@@ -539,10 +567,31 @@ export default function Learner3aEntry() {
 
       <div className="space-y-4 pt-10 border-t">
         <h2 className="text-xl font-bold flex items-center gap-2"><ListFilter /> Bibliothèque Benchmarks</h2>
+
+        {/* Barre d'édition GROUPÉE : visible dès qu'au moins un benchmark est coché. */}
+        {selected.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+            <span className="text-xs font-bold text-blue-800">{selected.size} sélectionné(s) — modifier :</span>
+            <select value={bulkField} onChange={e => { setBulkField(e.target.value as any); setBulkValue(e.target.value === "isSmoker" ? "false" : e.target.value === "provider" ? PARTNERS[0] : "M"); }} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
+              <option value="gender">Sexe</option>
+              <option value="isSmoker">Fumeur</option>
+              <option value="provider">Assureur</option>
+            </select>
+            <select value={bulkValue} onChange={e => setBulkValue(e.target.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
+              {bulkField === "gender" && (<><option value="M">Masculin</option><option value="F">Féminin</option></>)}
+              {bulkField === "isSmoker" && (<><option value="false">Non-fumeur</option><option value="true">Fumeur</option></>)}
+              {bulkField === "provider" && PARTNERS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <Button size="sm" className="h-9" disabled={loading} onClick={applyBulk}>Appliquer aux {selected.size}</Button>
+            <Button size="sm" variant="ghost" className="h-9" onClick={() => setSelected(new Set())}>Désélectionner</Button>
+          </div>
+        )}
+
         <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
           <Table>
             <TableHeader className="bg-muted/50">
                 <TableRow>
+                <TableHead className="w-8"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="cursor-pointer" /></TableHead>
                 <TableHead className="text-[10px]">CIE</TableHead>
                 <TableHead className="text-[10px]">PROFIL</TableHead>
                 <TableHead className="text-[10px]">PRIME TOT.</TableHead>
@@ -555,7 +604,10 @@ export default function Learner3aEntry() {
             </TableHeader>
             <TableBody>
                 {benchmarks.map(b => (
-                <TableRow key={b.id} className="text-xs hover:bg-muted/30 transition-colors">
+                <TableRow key={b.id} className={`text-xs hover:bg-muted/30 transition-colors ${selected.has(b.id) ? "bg-blue-50/60" : ""}`}>
+                    <TableCell className="w-8">
+                      <input type="checkbox" checked={selected.has(b.id)} onChange={() => toggleSelect(b.id)} className="cursor-pointer" />
+                    </TableCell>
                     <TableCell className="font-bold">
                       <div className="flex flex-col">
                         <span>{b.provider}</span>
