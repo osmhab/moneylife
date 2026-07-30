@@ -212,6 +212,17 @@ service cloud.firestore {
     }
 
     // ===============================
+    // 🌐 TRADUCTIONS DE L'APP (appTranslations)
+    // ===============================
+    // Libellés d'interface iOS (non sensibles), un document par langue (fr/en/de/it).
+    // Lecture PUBLIQUE : l'app doit pouvoir charger/rafraîchir les textes même avant
+    // connexion. Écriture réservée aux internes (page admin/translations).
+    match /appTranslations/{locale} {
+      allow read: if true;
+      allow write: if isInternal();
+    }
+
+    // ===============================
     // PAR DÉFAUT
     // ===============================
     match /{document=**} {

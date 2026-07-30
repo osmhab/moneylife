@@ -410,8 +410,8 @@ export default function SubscriptionWizardDrawer({ isOpen, onClose, analysisData
       const maxLacuneMaladie = Math.max(...(analysisData?.inc?.maladie?.periodes?.map((p: any) => p.lacune) || [0])) * 12;
       const maxLacuneAccident = Math.max(...(analysisData?.inc?.accident?.periodes?.map((p: any) => p.lacune) || [0])) * 12;
 
-      const epargneCompagnie = monthlySavings > 0 
-        ? (recommendation === "BANQUE" ? "Banque" : (analysisData?.sol?.benchmarks?.retraite || "Non spécifié"))
+      const epargneCompagnie = monthlySavings > 0
+        ? (analysisData?.sol?.benchmarks?.retraite || "Non spécifié")
         : "Non désiré";
 
       const decesCompagnie = analysisData?.dec?.lacune > 0 && (analysisData?.sol?.priceDec === 0)
