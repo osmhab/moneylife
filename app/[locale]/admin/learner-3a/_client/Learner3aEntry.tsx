@@ -36,7 +36,7 @@ import {
   PiggyBank, Trash2, ListFilter, Scan, Loader2, RotateCcw, Pencil, User, AlertCircle, Plus
 } from "lucide-react";
 
-const PARTNERS = ["SwissLife", "AXA", "Baloise", "PAX"];
+const PARTNERS = ["SwissLife", "AXA", "Helvetia", "PAX"];
 
 // 1er du mois suivant (comme AXA : la rente démarre le 1er jour du mois suivant l'offre).
 function firstOfNextMonthISO(): string {
@@ -395,7 +395,7 @@ export default function Learner3aEntry() {
               )}
 
               {active.death && (<>
-              {/* Toggle Décès Inclus (Baloise) */}
+              {/* Toggle Décès Inclus (Helvetia) */}
               <div className="flex items-center justify-between p-2 bg-orange-50 rounded-lg border border-orange-100">
                 <div className="flex items-center gap-2">
                   <AlertCircle size={14} className="text-orange-600" />

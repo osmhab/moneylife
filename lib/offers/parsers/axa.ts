@@ -33,7 +33,7 @@ function detectInsurer(text: string): InsurerCode {
   const t = text.toLowerCase();
   if (t.includes("axa")) return "AXA";
   if (t.includes("swiss life")) return "Swiss Life";
-  if (t.includes("bâloise") || t.includes("baloise")) return "Bâloise";
+  if (t.includes("bâloise") || t.includes("baloise") || t.includes("helvetia")) return "Helvetia";
   if (t.includes("pax")) return "PAX";
   return "AXA";
 }

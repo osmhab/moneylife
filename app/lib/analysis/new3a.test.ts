@@ -207,20 +207,20 @@ describe("best-of-breed provider selection", () => {
     yieldMedian: o.yieldMedian,
   });
 
-  // Baloise a le décès le moins cher (0.0005) MAIS sur 0 benchmark (repli) → doit être écarté.
+  // Helvetia a le décès le moins cher (0.0005) MAIS sur 0 benchmark (repli) → doit être écarté.
   const benches = [
     mk("AXA", { death: 0.001, dis: 0.02, waiver: 0.03, yieldMedian: 5.04 }),
-    mk("Baloise", { death: 0.0005, dis: 0.015, waiver: 0.025, yieldMedian: 4.1, deathObs: 0 }),
+    mk("Helvetia", { death: 0.0005, dis: 0.015, waiver: 0.025, yieldMedian: 4.1, deathObs: 0 }),
     mk("SwissLife", { death: 0.0008, dis: 0.008, waiver: 0.02, yieldMedian: 0 }),
   ];
 
   it("décès : écarte le modèle nObs<3 (repli) et prend le moins cher FIABLE", () => {
-    // Baloise 0.0005 exclu (nObs=0) → reste AXA 0.001 vs SwissLife 0.0008 → SwissLife.
+    // Helvetia 0.0005 exclu (nObs=0) → reste AXA 0.001 vs SwissLife 0.0008 → SwissLife.
     expect(pickCheapestInsurer(benches, "deathUnit", "death", 40, false, false)?.provider).toBe("SwissLife");
   });
 
   it("invalidité : prend le taux le plus bas", () => {
-    // AXA 0.02, Baloise 0.015, SwissLife 0.008 → SwissLife.
+    // AXA 0.02, Helvetia 0.015, SwissLife 0.008 → SwissLife.
     expect(pickCheapestInsurer(benches, "disabilityUnit", "disability", 40, false, false)?.provider).toBe("SwissLife");
   });
 

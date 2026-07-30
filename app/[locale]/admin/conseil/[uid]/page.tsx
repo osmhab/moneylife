@@ -516,7 +516,7 @@ export default function AdminConseilPage() {
                   <div className="space-y-4">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Grandes compagnies partenaires de prévoyance :</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                      {["AXA", "SwissLife", "PAX", "Helvetia", "Baloise"].map(part => (
+                      {["AXA", "SwissLife", "PAX", "Helvetia"].map(part => (
                         <div key={part} className="flex items-center justify-center p-5 bg-slate-50 border border-slate-100 rounded-2xl shadow-sm hover:border-slate-200 transition-colors">
                           <span className="font-black text-slate-800 text-xs uppercase tracking-tight">{part}</span>
                         </div>

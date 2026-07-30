@@ -3,7 +3,7 @@
 // -----------------------------------------------------
 // Assureurs supportés
 // -----------------------------------------------------
-export type InsurerCode = "AXA" | "Swiss Life" | "Bâloise" | "PAX";
+export type InsurerCode = "AXA" | "Swiss Life" | "Helvetia" | "PAX";
 
 // -----------------------------------------------------
 // Forme du contrat (3a / 3b)

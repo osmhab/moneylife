@@ -199,7 +199,8 @@ export const INSTITUTION_RULES: Record<string, string> = {
     "PROFOND": `
     - SALAIRES ASSURÉS : "Salaire assuré 1" correspond à l'Épargne (Enter_salaireAssureLPP) et "Salaire assuré 2" correspond au Risque (Enter_lppSalaireAssureRisque).`,
     
-    "BALOISE": `
+    "HELVETIA": `
+    - NB : Helvetia a fusionné avec la Bâloise → un certificat mentionnant "Bâloise"/"Baloise" est désormais HELVETIA.
     - PROJECTIONS VIEILLESSE : Si les projections s'arrêtent à 64 ans, mets null pour 65 ans. Ne calcule pas de valeurs inexistantes.`,
     
     "AUTRE": `

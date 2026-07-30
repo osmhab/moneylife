@@ -26,7 +26,7 @@ const vision = new ImageAnnotatorClient();
 function normalizeInsurer(raw: string): InsurerCode | "" {
   if (/swiss\s*life/i.test(raw)) return "Swiss Life";
   if (/axa/i.test(raw)) return "AXA";
-  if (/bâloise|baloise/i.test(raw)) return "Bâloise";
+  if (/bâloise|baloise|helvetia/i.test(raw)) return "Helvetia"; // Baloise a fusionné → Helvetia
   if (/\bpax\b/i.test(raw)) return "PAX";
   return "";
 }
@@ -260,8 +260,8 @@ if (!offer && insurer === "AXA") {
 /*                   Bâloise → IA META (sans tableaux)                        */
 /* -------------------------------------------------------------------------- */
 
-if (!offer && insurer === "Bâloise") {
-  console.log("[AI PARSER] Bâloise : GPT-4.1 META (sans tableaux)");
+if (!offer && insurer === "Helvetia") {
+  console.log("[AI PARSER] Helvetia (ex-Bâloise) : GPT-4.1 META (sans tableaux)");
 
   const context: OfferParseContext = {
     ocrText: rawText,
@@ -274,7 +274,7 @@ if (!offer && insurer === "Bâloise") {
     const meta = await parseBaloiseMeta(context);
 
     offer = {
-      insurer: "Bâloise",
+      insurer: "Helvetia",
       contractForm: (meta.contract?.pillar ?? "3a") as ContractForm,
       offerNumber: meta.meta.offerNumber ?? null,
       startDateLabel: meta.contract?.startDate ?? "",

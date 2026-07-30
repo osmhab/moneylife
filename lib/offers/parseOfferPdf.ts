@@ -10,7 +10,7 @@ import { parseAxaOffer } from "./parsers/axa";
 function detectInsurerFromText(text: string): InsurerCode | null {
   if (/AXA/i.test(text)) return "AXA";
   if (/Swiss\s*Life/i.test(text)) return "Swiss Life";
-  if (/Bâloise|Baloise/i.test(text)) return "Bâloise";
+  if (/Bâloise|Baloise|Helvetia/i.test(text)) return "Helvetia";
   if (/\bPAX\b/i.test(text)) return "PAX";
   return null;
 }

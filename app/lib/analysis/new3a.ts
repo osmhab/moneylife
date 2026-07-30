@@ -416,7 +416,7 @@ export function computeNew3aOffer(input: {
   const retProvider = saverPick?.provider ?? "Sur mesure";
   const decProvider = deathPick?.provider ?? "Sur mesure";
 
-  // RÈGLE ASSUREUR : seul AXA gère les rentes DIFFÉRÉES / à paliers (SwissLife/PAX/Baloise =
+  // RÈGLE ASSUREUR : seul AXA gère les rentes DIFFÉRÉES / à paliers (SwissLife/PAX/Helvetia =
   // rente immédiate uniquement). Dès que l'échéancier invalidité est différé (début futur) ou
   // étagé (>1 palier), on FORCE AXA sur l'invalidité, SANS comparaison. Sinon (rente immédiate
   // simple), comparaison normale. Cf. mémoire insurer-deferred-rente-capability.

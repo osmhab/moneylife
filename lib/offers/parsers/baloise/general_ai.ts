@@ -19,7 +19,7 @@ function getOpenAI() {
 
 export interface AiBaloiseMeta {
   meta: {
-    insurer: "Bâloise";
+    insurer: "Bâloise" | "Helvetia";
     productName: string | null;
     offerNumber: string | null;
     offerDate: string | null;

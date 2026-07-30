@@ -20,7 +20,7 @@ const CREDITX_FACTS = [
   "CreditX (raison sociale : CreditX Sàrl, UID CHE-203.347.547) est une entreprise suisse de prévoyance basée en Valais (siège à Conthey, contact à Sion). Son application s'appelle MoneyLife.",
   "CreditX Sàrl est un INTERMÉDIAIRE D'ASSURANCE NON LIÉ enregistré auprès de la FINMA (autorité fédérale de surveillance des marchés financiers) sous le numéro F01536084 — vérifiable sur le registre public de la FINMA. « Non lié » = indépendant : CreditX n'appartient à aucun assureur et compare pour le client.",
   "La plateforme centralise et analyse les documents de prévoyance (2e et 3e pilier), révèle les lacunes (retraite, invalidité, décès) et propose des plans 3a personnalisés. (Crédits hypothécaires et privés à venir.)",
-  "Partenaires de prévoyance officiels : AXA, Swiss Life, Pax, Baloise, Helvetia. CreditX peut ajouter d'autres partenaires selon les produits utiles à ses clients.",
+  "Partenaires de prévoyance officiels : AXA, Swiss Life, Pax, Helvetia. CreditX peut ajouter d'autres partenaires selon les produits utiles à ses clients.",
   "Le service est GRATUIT pour le client : CreditX est rémunéré par des commissions versées par les partenaires à la souscription, sans surcoût pour le client.",
   "Sécurité & données : chiffrement de bout en bout, hébergement sécurisé, audits réguliers ; conformité LPD (loi suisse sur la protection des données) et RGPD. CreditX ne revend jamais les données ; les données de santé sont supprimées après signature.",
   "La proposition affichée est SANS ENGAGEMENT : rien n'est signé tant que le client n'a pas validé ; un conseiller humain accompagne et valide chaque souscription ; le client peut tout arrêter à tout moment.",

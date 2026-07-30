@@ -800,7 +800,7 @@ function SceneOffers({ t }: { t: number }) {
       },
       {
         id: "baloise",
-        insurer: "Baloise",
+        insurer: "Helvetia",
         logoSrc: "/iconeBaloise.svg",
         score: 90,
         capital: 176_000,

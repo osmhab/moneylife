@@ -248,7 +248,7 @@ function RappelContent() {
             <img src="/images/logo-axa.png" alt="AXA" className="object-contain h-8 sm:h-9 w-auto" />
             
             {/* Logo horizontal fin : on augmente la hauteur */}
-            <img src="/images/logo-helvetiaBaloise.png" alt="Helvetia Baloise" className="object-contain h-10 sm:h-12 w-auto" />
+            <img src="/images/logo-helvetiaBaloise.png" alt="Helvetia" className="object-contain h-10 sm:h-12 w-auto" />
             
             {/* Logo vertical : on augmente encore un peu pour équilibrer le texte */}
             <img src="/images/logo-swisslife.png" alt="SwissLife" className="object-contain h-12 sm:h-14 w-auto" />

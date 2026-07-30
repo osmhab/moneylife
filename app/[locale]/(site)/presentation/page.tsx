@@ -209,8 +209,7 @@ export default function PresentationPage() {
             { name: "AXA", color: "text-[#00008F]" },
             { name: "SwissLife", color: "text-[#E2001A]" },
             { name: "Pax", color: "text-slate-900" },
-            { name: "Helvetia", color: "text-[#E3000F]" },
-            { name: "Bâloise", color: "text-[#003359]" }
+            { name: "Helvetia", color: "text-[#E3000F]" }
           ].map((p, i) => (
             <div key={i} className="bg-white rounded-[30px] h-32 flex items-center justify-center shadow-xl p-8 hover:scale-105 transition-transform cursor-pointer">
               <span className={`text-2xl font-black ${p.color}`}>{p.name}</span>

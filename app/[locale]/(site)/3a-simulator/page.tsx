@@ -47,7 +47,7 @@ const initialProfile: ClientProfile = {
 const ALLOWED_PROVIDERS_KEYS = [
   "AXA", "Axa", 
   "Swiss Life", "SwissLife", "Swisslife", 
-  "Baloise", "La Baloise", 
+  "Helvetia", "Baloise", "La Baloise", "Bâloise", "Helvetia Baloise",
   "Pax", "PAX"
 ];
 

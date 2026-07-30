@@ -30,7 +30,7 @@ const profiles = [
     subCards: [
       { provider: "AXA", product: "Epargne 3b 60% Actions", icon: Landmark, color: "text-slate-700", logo: "/images/logo-axa.png" },
       { provider: "SwissLife", product: "Rente Incapacité de gain 24k", icon: ShieldAlert, color: "text-slate-700", logo: "/images/logo-swisslife.png" },
-      { provider: "Helvetia Baloise", product: "Capital Décès 105k", icon: HeartPulse, color: "text-slate-700", logo: "/images/logo-helvetiaBaloise.png" }
+      { provider: "Helvetia", product: "Capital Décès 105k", icon: HeartPulse, color: "text-slate-700", logo: "/images/logo-helvetiaBaloise.png" }
     ]
   },
   {

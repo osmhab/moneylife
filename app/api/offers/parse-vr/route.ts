@@ -27,7 +27,7 @@ const vision = new ImageAnnotatorClient();
 function normalizeInsurer(raw: string): InsurerCode | "" {
   if (/swiss\s*life/i.test(raw)) return "Swiss Life";
   if (/axa/i.test(raw)) return "AXA";
-  if (/bâloise|baloise/i.test(raw)) return "Bâloise";
+  if (/bâloise|baloise|helvetia/i.test(raw)) return "Helvetia"; // Baloise a fusionné → Helvetia
   if (/\bpax\b/i.test(raw)) return "PAX";
   return "";
 }
@@ -189,8 +189,8 @@ if (insurer === "Swiss Life") {
   const offer = await parseAxaOffer(context);
   surrenderValues = offer.surrenderValues ?? [];
   surrenderValuesEpl = null;
-} else if (insurer === "Bâloise") {
-  // Bâloise → parser VR dédié (un seul tableau, pas d'EPL)
+} else if (insurer === "Helvetia") {
+  // Helvetia (ex-Bâloise) → parser VR dédié (un seul tableau, pas d'EPL)
   const tables = await parseBaloiseVRTables(context);
   surrenderValues = tables.surrenderValues ?? [];
   surrenderValuesEpl = null;
@@ -200,7 +200,7 @@ if (insurer === "Swiss Life") {
     {
       ok: false,
       error:
-        "Assureur VR non géré pour le moment (seulement Swiss Life, AXA et Bâloise sont supportés).",
+        "Assureur VR non géré pour le moment (seulement Swiss Life, AXA et Helvetia sont supportés).",
     },
     { status: 422 }
   );
