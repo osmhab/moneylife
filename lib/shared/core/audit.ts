@@ -36,7 +36,8 @@ export type AuditEventType =
   | "PLAN_DELETED"
   | "DOCUMENT_ADDED"
   | "OFFER_SIGNED"
-  | "OFFER_REJECTED";
+  | "OFFER_REJECTED"
+  | "DISCLAIMER_ACK";
 
 /** Qui est à l'origine de l'événement. */
 export type AuditActorType = "client" | "admin" | "system";
@@ -86,6 +87,7 @@ export const AUDIT_LABELS: Record<AuditEventType, string> = {
   DOCUMENT_ADDED: "Ajout d'un document",
   OFFER_SIGNED: "Signature d'une offre",
   OFFER_REJECTED: "Refus d'une offre",
+  DISCLAIMER_ACK: "Acquittement d'un avertissement",
 };
 
 /**
