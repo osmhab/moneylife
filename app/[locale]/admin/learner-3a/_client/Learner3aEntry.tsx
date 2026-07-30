@@ -619,6 +619,22 @@ export default function Learner3aEntry() {
                   <div className="space-y-1"><Label>Âge Début</Label><Input type="number" value={editingBenchmark.age} onChange={e => handleEditChange("age", parseInt(e.target.value))} /></div>
                   <div className="space-y-1"><Label>Âge Fin</Label><Input type="number" value={editingBenchmark.retirementAge} onChange={e => handleEditChange("retirementAge", parseInt(e.target.value))} /></div>
                 </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label>Sexe</Label>
+                    <select value={editingBenchmark.gender ?? "M"} onChange={e => handleEditChange("gender", e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                      <option value="M">Masculin</option>
+                      <option value="F">Féminin</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Fumeur</Label>
+                    <div className="flex items-center justify-between border px-3 rounded-md h-10">
+                      <span className="text-xs text-muted-foreground">{editingBenchmark.isSmoker ? "Oui" : "Non"}</span>
+                      <Switch checked={!!editingBenchmark.isSmoker} onCheckedChange={v => handleEditChange("isSmoker", v)} />
+                    </div>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Capital Transféré</Label>
