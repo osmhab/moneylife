@@ -721,7 +721,9 @@
   "SubscriptionWizardDrawer": {
     "step1": {
       "title": "Epargne",
-      "desc": "Vous avez prévu d'épargner <b>{amount} / mois</b>. Votre horizon de retraite est de <horizon>{years} ans</horizon>. Définissons le véhicule adapté.",
+      "desc": "Vous avez prévu d'épargner <b>{amount} / mois</b>. Votre horizon de retraite est de <horizon>{years} ans</horizon>. Voici ce qu'il faut savoir avant de continuer.",
+      "disclaimer_title": "Un placement de long terme",
+      "disclaimer_body": "Les solutions d'assurance 3e pilier sont assorties d'une valeur de rachat qui se constitue avec le temps : un retrait dans les premières années peut être défavorable. CreditX déconseille de souscrire un 3e pilier pour un horizon inférieur à 10 ans.",
       "q_horizon": "Projets intermédiaires",
       "q_horizon_desc": "Comptez-vous utiliser tout ou partie de ce capital d'ici 15 ans ?",
       "opt_yes": "Oui, c'est possible",

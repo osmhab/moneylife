@@ -721,7 +721,9 @@
   "SubscriptionWizardDrawer": {
     "step1": {
       "title": "Sparen",
-      "desc": "Sie planen <b>{amount} / Monat</b> zu sparen. Ihr Anlagehorizont bis zur Pensionierung beträgt <horizon>{years} Jahre</horizon>. Lassen Sie uns das passende Instrument definieren.",
+      "desc": "Sie planen <b>{amount} / Monat</b> zu sparen. Ihr Anlagehorizont bis zur Pensionierung beträgt <horizon>{years} Jahre</horizon>. Das sollten Sie wissen, bevor Sie fortfahren.",
+      "disclaimer_title": "Eine langfristige Anlage",
+      "disclaimer_body": "Versicherungslösungen der Säule 3a verfügen über einen Rückkaufswert, der sich mit der Zeit aufbaut: Ein Rückzug in den ersten Jahren kann nachteilig sein. CreditX rät von einer Säule 3a ab, wenn Ihr Anlagehorizont weniger als 10 Jahre beträgt.",
       "q_horizon": "Zwischenziele",
       "q_horizon_desc": "Planen Sie, dieses Kapital ganz oder teilweise innerhalb der nächsten 15 Jahre zu verwenden?",
       "opt_yes": "Ja, das ist möglich",

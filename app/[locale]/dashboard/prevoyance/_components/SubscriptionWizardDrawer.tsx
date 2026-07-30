@@ -241,10 +241,8 @@ export default function SubscriptionWizardDrawer({ isOpen, onClose, analysisData
 
   const ageClient = analysisData?.Enter_age || analysisData?.age || 35;
   const horizon = 65 - ageClient;
-  const isHorizonLong = horizon >= 15;
 
   // --- ÉTATS DU FORMULAIRE (DE BASE) ---
-  const [useBefore15Years, setUseBefore15Years] = useState<boolean | null>(null);
   const [riskProfile, setRiskProfile] = useState<"safe" | "conservative" | "balanced" | "growth" | null>(null);
   const [isSmoker, setIsSmoker] = useState<boolean | null>(null);
   const [height, setHeight] = useState("");
@@ -282,13 +280,11 @@ export default function SubscriptionWizardDrawer({ isOpen, onClose, analysisData
 
   const [lsfinStep, setLsfinStep] = useState(0);
 
-  // 1. L'étape 1 force-t-elle la banque ?
-  const isBanqueFromStep1 = !isHorizonLong || useBefore15Years === true;
+  // Politique produit : on ne propose plus QUE de l'assurance — plus de branche bancaire.
+  // L'étape 1 est désormais un disclaimer « long terme » (valeur de rachat, horizon 10 ans).
+  const isBanqueFromStep1 = false;
 
-  // 2. La recommandation finale tient compte de l'étape 1 ET du risque choisi à l'étape 2
-  const recommendation = !hasSavings 
-    ? "PROTECTION PURE" 
-    : (isBanqueFromStep1 || riskProfile === "safe") ? "BANQUE" : "ASSURANCE";
+  const recommendation = !hasSavings ? "PROTECTION PURE" : "ASSURANCE";
 
   const optionsPays = useMemo(() => {
     return optionsPaysBase.map(pays => ({
@@ -483,9 +479,9 @@ export default function SubscriptionWizardDrawer({ isOpen, onClose, analysisData
           lacuneRetraite: analysisData?.ret?.lacune || 0,
         },
         strategie: { 
-          recommandation: recommendation, 
-          horizon: horizon, 
-          useBefore15Years: hasSavings ? useBefore15Years : null, 
+          recommandation: recommendation,
+          horizon: horizon,
+          useBefore15Years: null,
           riskProfile: hasSavings ? riskProfile : "N/A",
           objectives: initialWizardData.objective || [],
           philosophy: initialWizardData.philosophy || null
@@ -599,7 +595,7 @@ export default function SubscriptionWizardDrawer({ isOpen, onClose, analysisData
   };
 
   const isCurrentStepDisabled = () => {
-    if (step === 1 && useBefore15Years === null) return true;
+    // Étape 1 = disclaimer informatif : on peut toujours continuer.
     if (step === "risk_profile" && (
         expAssurance === null || expFonds === null || revenuMensuel === null || 
         engagements === null || fortuneGlobale === null || fortuneLiquide === null || evolutionRevenus === null || 
@@ -874,30 +870,15 @@ export default function SubscriptionWizardDrawer({ isOpen, onClose, analysisData
                   </p>
                 </div>
 
-                <div className="space-y-4">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t("step1.q_horizon")}</p>
-                  <p className="text-lg font-bold leading-tight text-[#1A1A1A]">{t("step1.q_horizon_desc")}</p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <SelectionCard label={t("step1.opt_yes")} selected={useBefore15Years === true} onClick={() => setUseBefore15Years(true)} />
-                    <SelectionCard label={t("step1.opt_no")} selected={useBefore15Years === false} onClick={() => setUseBefore15Years(false)} />
+                <div className="bg-slate-50 border border-slate-100 p-6 rounded-[32px] flex gap-4">
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-black text-white">
+                    <span className="material-symbols-rounded" style={{ fontVariationSettings: "'FILL' 1" }}>hourglass_top</span>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-tighter text-slate-400 mb-1">{t("step1.disclaimer_title")}</p>
+                    <p className="text-sm font-bold leading-snug text-slate-800">{t("step1.disclaimer_body")}</p>
                   </div>
                 </div>
-
-                {useBefore15Years !== null && (
-                  <div className="bg-slate-50 border border-slate-100 p-6 rounded-[32px] flex gap-4 animate-in zoom-in-95 duration-300">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${!isBanqueFromStep1 ? 'bg-black text-white' : 'bg-blue-600 text-white'}`}>
-                      <span className="material-symbols-rounded" style={{ fontVariationSettings: "'FILL' 1" }}>
-                        {!isBanqueFromStep1 ? 'verified_user' : 'account_balance'}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-tighter text-slate-400 mb-1">{t("step1.advice_title")}</p>
-                      <p className="text-sm font-bold leading-snug text-slate-800">
-                        {!isBanqueFromStep1 ? t("step1.advice_ins") : t("step1.advice_bank")}
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
