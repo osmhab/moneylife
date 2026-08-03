@@ -56,7 +56,19 @@ function solveLinearSystem(A: number[][], b: number[]) {
   return M.map(row => row[n]);
 }
 
-function fitRidgeLogModel(X: number[][], y: number[], lambda = 1.0): RidgeModel {
+// Index de la feature "âge" dans les vecteurs [1, age, smoker, genderF, (deferral)].
+const AGE_FEATURE = 1;
+
+type FitOpts = {
+  // Contrainte de MONOTONIE actuarielle : le coefficient d'âge ne peut pas être < 0.
+  // Un risque (décès, invalidité) ne devient JAMAIS moins cher en vieillissant ; une pente
+  // négative = artefact (confusion avec le tabac / gros capitaux jeunes). Si le fit non
+  // contraint donne beta[age] < 0, on refait le fit en RETIRANT la colonne âge (age figé à 0)
+  // → c'est exactement l'optimum ridge sous la contrainte beta[age] ≥ 0 (borne active à 0).
+  enforceAgePositive?: boolean;
+};
+
+function fitRidgeLogModel(X: number[][], y: number[], lambda = 1.0, opts: FitOpts = {}): RidgeModel {
   const logs: number[] = [];
   const X2: number[][] = [];
   // Dimension attendue = longueur du 1er vecteur fourni (4 pour décès/libération, 5 pour
@@ -77,19 +89,36 @@ function fitRidgeLogModel(X: number[][], y: number[], lambda = 1.0): RidgeModel 
     return { beta: [m, ...Array(Math.max(0, p - 1)).fill(0)], fallbackLogMean: m, nObs: logs.length };
   }
 
-  const XtX = Array.from({ length: p }, () => Array(p).fill(0));
-  const Xty = Array(p).fill(0);
-
-  for (let i = 0; i < logs.length; i++) {
-    const xi = X2[i];
-    const yi = logs[i];
-    for (let a = 0; a < p; a++) {
-      Xty[a] += xi[a] * yi;
-      for (let b = 0; b < p; b++) XtX[a][b] += xi[a] * xi[b];
+  // Résout la ridge sur un sous-ensemble de colonnes (les autres coefficients restent à 0),
+  // puis ré-étale le résultat sur le vecteur beta complet (dimension p).
+  const solveCols = (cols: number[]): number[] => {
+    const k = cols.length;
+    const XtX = Array.from({ length: k }, () => Array(k).fill(0));
+    const Xty = Array(k).fill(0);
+    for (let i = 0; i < logs.length; i++) {
+      const xi = X2[i];
+      const yi = logs[i];
+      for (let a = 0; a < k; a++) {
+        Xty[a] += xi[cols[a]] * yi;
+        for (let b = 0; b < k; b++) XtX[a][b] += xi[cols[a]] * xi[cols[b]];
+      }
     }
+    for (let j = 0; j < k; j++) XtX[j][j] += lambda;
+    const sol = solveLinearSystem(XtX, Xty);
+    const beta = Array(p).fill(0);
+    cols.forEach((c, idx) => { beta[c] = sol[idx]; });
+    return beta;
+  };
+
+  const allCols = Array.from({ length: p }, (_, i) => i);
+  let beta = solveCols(allCols);
+
+  // Contrainte de monotonie sur l'âge (décès/invalidité) : si la pente est négative, on
+  // refait le fit sans la colonne âge (age figé à 0) → jamais « moins cher en vieillissant ».
+  if (opts.enforceAgePositive && p > AGE_FEATURE && beta[AGE_FEATURE] < 0) {
+    beta = solveCols(allCols.filter((c) => c !== AGE_FEATURE));
   }
-  for (let j = 0; j < p; j++) XtX[j][j] += lambda;
-  const beta = solveLinearSystem(XtX, Xty);
+
   return { beta, fallbackLogMean: median(logs), nObs: logs.length };
 }
 
@@ -134,9 +163,15 @@ export function buildProviderModelsServer(allBenchmarks: any[]): Map<string, Pro
     for (const b of offers) {
       const feat = makeFeatures(b);
 
+      // DÉCÈS — on n'alimente le taux qu'avec des primes décès AUTONOMES et proportionnelles
+      // au capital. Un décès EMBARQUÉ dans un produit d'épargne (isDeathIncludedInSavings)
+      // est souvent un rider à prime FORFAITAIRE (ex. PAX TerzaFondsStar : ~197.- quel que
+      // soit le capital) → deathPremium/deathCapital n'a alors aucun sens (taux qui BAISSE
+      // quand le capital monte) et fait « gagner » l'assureur à tort. On l'exclut du fit décès
+      // (le benchmark reste utilisé pour libération/invalidité).
       const deathCap = safeNum(b.deathCapital, 0);
       const deathPrem = safeNum(b.deathPremium, 0);
-      if (deathCap > 0 && deathPrem > 0) {
+      if (deathCap > 0 && deathPrem > 0 && b.isDeathIncludedInSavings !== true) {
         X_death.push(feat);
         y_death.push(deathPrem / deathCap);
       }
@@ -194,7 +229,8 @@ export function buildProviderModelsServer(allBenchmarks: any[]): Map<string, Pro
 
     const yieldMedian = yields.length ? median(yields) : 1.75;
 
-    const deathUnit = fitRidgeLogModel(X_death, y_death, 1.0);
+    // Décès : contrainte de monotonie sur l'âge (jamais moins cher en vieillissant).
+    const deathUnit = fitRidgeLogModel(X_death, y_death, 1.0, { enforceAgePositive: true });
     const disabilityUnit = fitRidgeLogModel(X_dis, y_dis, 1.0);
     const waiverRate = fitRidgeLogModel(X_waiver, y_waiver, 2.0);
 
