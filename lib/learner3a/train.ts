@@ -231,7 +231,11 @@ export function buildProviderModelsServer(allBenchmarks: any[]): Map<string, Pro
 
     // Décès : contrainte de monotonie sur l'âge (jamais moins cher en vieillissant).
     const deathUnit = fitRidgeLogModel(X_death, y_death, 1.0, { enforceAgePositive: true });
-    const disabilityUnit = fitRidgeLogModel(X_dis, y_dis, 1.0);
+    // Invalidité : même contrainte de monotonie d'âge que le décès. Le risque d'incapacité
+    // CROÎT fortement avec l'âge → une pente négative (extrapolation sous l'intervalle des
+    // benchmarks, qui s'arrêtent ~45 ans) effondrerait le taux à 55-60 ans. Le coefficient de
+    // DIFFÉRÉ (beta[4]) n'est PAS contraint : un différé doit bien faire baisser la prime.
+    const disabilityUnit = fitRidgeLogModel(X_dis, y_dis, 1.0, { enforceAgePositive: true });
     const waiverRate = fitRidgeLogModel(X_waiver, y_waiver, 2.0);
 
     const YEARS = Math.max(10, recoveryByYear.length || 0);
