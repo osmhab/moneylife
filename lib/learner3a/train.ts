@@ -305,7 +305,14 @@ export function buildProviderModelsServer(allBenchmarks: any[]): Map<string, Pro
       deathUnit,
       disabilityUnit,
       waiverRate,
-      smokerFloors: { death: 1.25, disability: 1.15, waiver: 1.10 },
+      // Planchers fumeur = surcharge MINIMALE imposée quand les données pourraient sous-estimer.
+      // - décès : 1.25 (le tabac pèse fortement sur la mortalité ; garde-fou si peu de fumeurs).
+      // - invalidité : 1.0 (PAS de plancher). Les grilles réelles ne tarifent souvent PAS le
+      //   tabac en rente invalidité (PAX/Helvetia : primes fumeur = non-fumeur ; seul AXA ~16%).
+      //   On se fie donc à la surcharge APPRISE (découplage tabac) pour coller aux tarifs réels ;
+      //   un plancher artificiel sur-coterait les fumeurs par rapport à l'assureur.
+      // - libération : 1.10 (léger garde-fou).
+      smokerFloors: { death: 1.25, disability: 1.0, waiver: 1.10 },
       nBenchmarks: offers.length
     });
   }
