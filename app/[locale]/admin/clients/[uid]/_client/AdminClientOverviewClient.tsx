@@ -8,6 +8,7 @@ import { auth } from "@/lib/firebase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 
 import { 
@@ -93,6 +94,12 @@ export default function AdminClientOverviewClient() {
   const [notesDirty, setNotesDirty] = useState(false);
   const [notesSaving, setNotesSaving] = useState(false);
 
+  // Prospect (compte sans email) → conversion en compte connectable.
+  const [clientEmail, setClientEmail] = useState<string | null>(null);
+  const [newEmail, setNewEmail] = useState("");
+  const [convertLoading, setConvertLoading] = useState(false);
+  const [convertResult, setConvertResult] = useState<{ email: string; tempPassword: string } | null>(null);
+
   // État Dialog
   const [transferOpen, setTransferOpen] = useState(false);
 
@@ -161,11 +168,46 @@ export default function AdminClientOverviewClient() {
 
       const j = await res.json();
       setInternalNotes(j?.internalNotes || "");
+      setClientEmail(j?.email ?? null);
       setNotesDirty(false);
     } catch {
       setInternalNotes("");
     } finally {
       setMetaLoading(false);
+    }
+  };
+
+  // Prospect → compte : ajoute l'email au MÊME compte Auth (uid inchangé, dossier conservé).
+  const convertToAccount = async () => {
+    const email = newEmail.trim().toLowerCase();
+    if (!email) {
+      toast.error("Saisis un email pour activer le compte.");
+      return;
+    }
+    try {
+      setConvertLoading(true);
+      const user = auth.currentUser;
+      if (!user) throw new Error("Non authentifié");
+      const token = await user.getIdToken();
+
+      const res = await fetch("/api/admin/clients/set-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ uid, email }),
+      });
+      const j = await res.json().catch(() => ({} as any));
+      if (!res.ok) throw new Error(j?.error || "Erreur activation");
+
+      setConvertResult({ email: j.email, tempPassword: j.tempPassword });
+      setClientEmail(j.email);
+      toast("Compte activé ✅", { description: "Email ajouté — dossier intégralement conservé." });
+    } catch (e: any) {
+      toast.error(e?.message || "Impossible d'activer le compte.");
+    } finally {
+      setConvertLoading(false);
     }
   };
 
@@ -265,6 +307,61 @@ export default function AdminClientOverviewClient() {
           Actualiser
         </Button>
       </div>
+
+      {/* PROSPECT → conversion en compte connectable (email ajouté, dossier conservé) */}
+      {!metaLoading && clientEmail === null && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+            <UserRound className="h-4 w-4" />
+            Prospect — aucun compte pour l'instant
+          </div>
+          {convertResult ? (
+            <div className="mt-2 space-y-1 text-xs text-amber-900">
+              <div>
+                Compte activé pour <span className="font-medium">{convertResult.email}</span>.
+              </div>
+              <div className="flex items-center gap-2">
+                <span>Mot de passe temporaire :</span>
+                <code className="rounded bg-white px-1.5 py-0.5 font-mono">{convertResult.tempPassword}</code>
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(convertResult.tempPassword);
+                    toast("Copié ✅");
+                  }}
+                >
+                  Copier
+                </button>
+              </div>
+              <div className="opacity-80">À transmettre une seule fois — le client le changera à la connexion.</div>
+            </div>
+          ) : (
+            <>
+              <div className="mt-1 text-xs text-amber-800">
+                Le dossier est déjà accessible et modifiable. Ajoute un email quand tu veux pour activer
+                le compte — <span className="font-medium">toutes les modifications déjà faites sont conservées</span>{" "}
+                (même identifiant client).
+              </div>
+              <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                <Input
+                  type="email"
+                  placeholder="email@client.ch"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="bg-white sm:max-w-xs"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") convertToAccount();
+                  }}
+                />
+                <Button onClick={convertToAccount} disabled={convertLoading || !newEmail.trim()}>
+                  {convertLoading ? "Activation…" : "Activer le compte"}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">

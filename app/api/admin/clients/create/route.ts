@@ -33,7 +33,9 @@ function randomPassword() {
 }
 
 type Body = {
-  email: string;
+  // Optionnel : sans email → PROSPECT (compte Auth sans connexion, uid stable ;
+  // l'email s'ajoute plus tard via /set-email sans rien migrer).
+  email?: string;
 
   // optionnel: pré-remplir DonneePersonnelles/current
   firstName?: string;
@@ -50,26 +52,42 @@ export async function POST(req: Request) {
 
     const body = (await req.json()) as Body;
     const email = (body?.email || "").trim().toLowerCase();
-    if (!email) return NextResponse.json({ error: "Missing email" }, { status: 400 });
+    const firstName = (body?.firstName || "").trim();
+    const lastName = (body?.lastName || "").trim();
+    const isProspect = !email;
+
+    // Prospect (sans email) : on exige nom + prénom pour l'identifier dans la liste.
+    if (isProspect && (!firstName || !lastName)) {
+      return NextResponse.json(
+        { error: "Nom et prénom requis pour créer un prospect (sans email)." },
+        { status: 400 }
+      );
+    }
 
     const tempPassword = (body?.tempPassword || randomPassword()).trim();
 
-    // 1) Create Auth user
-    const user = await authAdmin.createUser({
-      email,
-      password: tempPassword,
-      emailVerified: false,
-      disabled: false,
-    });
+    // 1) Create Auth user — AVEC email (compte actif) ou SANS (prospect : uid stable,
+    //    sans moyen de connexion ; l'email s'ajoutera plus tard sans rien migrer).
+    const createProps: Record<string, unknown> = { disabled: false };
+    if (isProspect) {
+      createProps.displayName = `${firstName} ${lastName}`.trim();
+    } else {
+      createProps.email = email;
+      createProps.password = tempPassword;
+      createProps.emailVerified = false;
+    }
+    const user = await authAdmin.createUser(createProps);
 
     // 2) Create root client doc (CRM)
     const now = Date.now();
     await db.collection("clients").doc(user.uid).set(
       {
         uid: user.uid,
-        email,
-        status: "active",
-        source: "admin_create",
+        email: email || null,
+        status: isProspect ? "prospect" : "active",
+        source: isProspect ? "admin_prospect" : "admin_create",
+        firstName: firstName || null,
+        lastName: lastName || null,
         createdAt: now,
         updatedAt: now,
       },
@@ -103,19 +121,22 @@ export async function POST(req: Request) {
       },
       target: {
         clientUid: user.uid,
-        clientEmail: email,
+        clientEmail: email || null,
       },
       meta: {
         hasDpSeed,
-        source: "admin_create",
+        isProspect,
+        source: isProspect ? "admin_prospect" : "admin_create",
       },
     });
 
     return NextResponse.json({
       ok: true,
       uid: user.uid,
-      email,
-      tempPassword, // ⚠️ à afficher une seule fois côté UI
+      isProspect,
+      email: email || null,
+      // Prospect : pas de mot de passe (pas de connexion tant qu'il n'y a pas d'email).
+      tempPassword: isProspect ? null : tempPassword, // ⚠️ à afficher une seule fois côté UI
     });
   } catch (e: any) {
     const msg = e?.message || "Unknown error";

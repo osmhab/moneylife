@@ -3,6 +3,7 @@ import { db } from "app/lib/firebase/admin";
 
 export type AuditAction =
   | "client.create"
+  | "client.set_email"
   | "client.status_update"
   | "client.reset_link_generated"
   | "client.reset_email_sent"

@@ -127,8 +127,9 @@ export default function ClientsCrmPageClient() {
 
   const [createdResult, setCreatedResult] = useState<null | {
     uid: string;
-    email: string;
-    tempPassword: string;
+    email: string | null;
+    tempPassword: string | null;
+    isProspect: boolean;
   }>(null);
 
   const [resetLink, setResetLink] = useState<string>("");
@@ -192,9 +193,12 @@ export default function ClientsCrmPageClient() {
 
   const createClient = async () => {
     const email = createEmail.trim().toLowerCase();
-    if (!email) {
-      toast("Email requis", {
-        description: "Saisis un email pour créer le client.",
+    const firstName = createFirstName.trim();
+    const lastName = createLastName.trim();
+    // Sans email → PROSPECT : nom + prénom requis à la place.
+    if (!email && (!firstName || !lastName)) {
+      toast("Infos manquantes", {
+        description: "Saisis un email, ou au moins nom + prénom pour créer un prospect.",
       });
       return;
     }
@@ -213,9 +217,9 @@ export default function ClientsCrmPageClient() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          email,
-          firstName: createFirstName.trim() || undefined,
-          lastName: createLastName.trim() || undefined,
+          email: email || undefined,
+          firstName: firstName || undefined,
+          lastName: lastName || undefined,
           birthdate: createBirthdate.trim() || undefined,
         }),
       });
@@ -225,11 +229,16 @@ export default function ClientsCrmPageClient() {
 
       setCreatedResult({
         uid: j.uid,
-        email: j.email,
-        tempPassword: j.tempPassword,
+        email: j.email ?? null,
+        tempPassword: j.tempPassword ?? null,
+        isProspect: !!j.isProspect,
       });
 
-      toast("Client créé", { description: "Compte créé avec succès." });
+      toast(j.isProspect ? "Prospect créé ✅" : "Client créé", {
+        description: j.isProspect
+          ? "Dossier prêt (sans email). Ajoute un email plus tard pour activer le compte."
+          : "Compte créé avec succès.",
+      });
 
       // refresh list (le nouveau client doit apparaître)
       fetchItems();
@@ -743,6 +752,27 @@ export default function ClientsCrmPageClient() {
           </DialogHeader>
 
           {createdResult ? (
+            createdResult.isProspect ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border p-3">
+                  <div className="text-sm font-medium">Prospect créé ✅</div>
+                  <div className="text-xs text-muted-foreground mt-1">UID</div>
+                  <div className="font-mono text-sm break-all">{createdResult.uid}</div>
+                  <div className="text-xs text-muted-foreground mt-3">
+                    Dossier prêt, sans email. Prépare l&apos;entretien ; tu pourras ajouter un email
+                    à tout moment depuis la fiche pour activer le compte — toutes les modifications
+                    sont conservées.
+                  </div>
+                  <div className="mt-3">
+                    <Link href={`/admin/clients/${createdResult.uid}`} className="inline-flex">
+                      <Button>
+                        Ouvrir la fiche <ArrowRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div className="space-y-3">
               <div className="rounded-xl border p-3">
                 <div className="text-sm font-medium">Créé ✅</div>
@@ -765,7 +795,7 @@ export default function ClientsCrmPageClient() {
                 <div className="flex gap-2 mt-3">
                   <Button
                     variant="secondary"
-                    onClick={() => copyToClipboard(createdResult.tempPassword)}
+                    onClick={() => copyToClipboard(createdResult.tempPassword ?? "")}
                   >
                     <Copy className="h-4 w-4 mr-2" />
                     Copier le mot de passe
@@ -846,16 +876,21 @@ export default function ClientsCrmPageClient() {
                 </div>
               </div>
             </div>
+            )
           ) : (
             <div className="space-y-3">
               <div className="space-y-1">
-                <Label>Email *</Label>
+                <Label>Email (optionnel)</Label>
                 <Input
                   value={createEmail}
                   onChange={(e) => setCreateEmail(e.target.value)}
                   placeholder="client@email.ch"
                   inputMode="email"
                 />
+                <div className="text-xs text-muted-foreground">
+                  Laisser vide = <b>prospect</b> (dossier sans email, à activer plus tard). Dans ce
+                  cas, <b>nom + prénom</b> sont requis.
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
