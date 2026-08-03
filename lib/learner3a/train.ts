@@ -56,8 +56,18 @@ function solveLinearSystem(A: number[][], b: number[]) {
   return M.map(row => row[n]);
 }
 
-// Index de la feature "âge" dans les vecteurs [1, age, smoker, genderF, (deferral)].
+// Index des features dans les vecteurs [1, age, smoker, genderF, (deferral)].
 const AGE_FEATURE = 1;
+const SMOKER_FEATURE = 2;
+// Minimum de non-fumeurs pour estimer une pente d'âge propre (sinon repli sur le fit combiné).
+const MIN_NONSMOKER_FIT = 5;
+// La courbe non-fumeur (âge/genre) est régularisée TRÈS légèrement : avec λ=1, le dummy
+// « femme » (souvent 2 obs) est écrasé → le point femme-âgée-moins-cher force une pente d'âge
+// négative. Un λ faible préserve la vraie pente. La stabilité tient au clamp [0, max] ci-dessous.
+const NONSMOKER_CURVE_LAMBDA = 0.05;
+// Borne haute de la pente d'âge (log/an) : garde-fou anti-emballement en petit échantillon
+// (~×11 sur 30 ans, ordre de grandeur de la mortalité réelle). En dessous de 0 → figée à 0.
+const AGE_SLOPE_MAX = 0.08;
 
 type FitOpts = {
   // Contrainte de MONOTONIE actuarielle : le coefficient d'âge ne peut pas être < 0.
@@ -66,6 +76,15 @@ type FitOpts = {
   // contraint donne beta[age] < 0, on refait le fit en RETIRANT la colonne âge (age figé à 0)
   // → c'est exactement l'optimum ridge sous la contrainte beta[age] ≥ 0 (borne active à 0).
   enforceAgePositive?: boolean;
+
+  // DÉCOUPLAGE DU TABAC (fit en deux temps). Le tabac est une forte SURCHARGE à tout âge ;
+  // mélangé aux quelques fumeurs jeunes à taux élevés, il « contamine » la pente d'âge (le
+  // ridge lui attribue à tort une pente négative). On estime donc :
+  //   1) intercept + pente d'âge + genre (+ différé) sur les NON-FUMEURS seuls → pente propre,
+  //   2) le coefficient tabac = surcharge log moyenne des fumeurs (résidu vs la courbe non-fumeur),
+  //      bornée à ≥ 0 (le tabac ne rend jamais moins cher).
+  // → on retrouve une vraie pente d'âge CROISSANTE au lieu de la figer à plat.
+  decoupleSmoker?: boolean;
 };
 
 function fitRidgeLogModel(X: number[][], y: number[], lambda = 1.0, opts: FitOpts = {}): RidgeModel {
@@ -89,13 +108,14 @@ function fitRidgeLogModel(X: number[][], y: number[], lambda = 1.0, opts: FitOpt
     return { beta: [m, ...Array(Math.max(0, p - 1)).fill(0)], fallbackLogMean: m, nObs: logs.length };
   }
 
-  // Résout la ridge sur un sous-ensemble de colonnes (les autres coefficients restent à 0),
-  // puis ré-étale le résultat sur le vecteur beta complet (dimension p).
-  const solveCols = (cols: number[]): number[] => {
+  // Résout la ridge sur un sous-ensemble de colonnes ET de lignes (les colonnes absentes
+  // restent à 0), puis ré-étale le résultat sur le vecteur beta complet (dimension p).
+  const solveCols = (cols: number[], rows?: number[], lam: number = lambda): number[] => {
     const k = cols.length;
+    const idx = rows ?? X2.map((_, i) => i);
     const XtX = Array.from({ length: k }, () => Array(k).fill(0));
     const Xty = Array(k).fill(0);
-    for (let i = 0; i < logs.length; i++) {
+    for (const i of idx) {
       const xi = X2[i];
       const yi = logs[i];
       for (let a = 0; a < k; a++) {
@@ -103,18 +123,46 @@ function fitRidgeLogModel(X: number[][], y: number[], lambda = 1.0, opts: FitOpt
         for (let b = 0; b < k; b++) XtX[a][b] += xi[cols[a]] * xi[cols[b]];
       }
     }
-    for (let j = 0; j < k; j++) XtX[j][j] += lambda;
+    for (let j = 0; j < k; j++) XtX[j][j] += lam;
     const sol = solveLinearSystem(XtX, Xty);
     const beta = Array(p).fill(0);
-    cols.forEach((c, idx) => { beta[c] = sol[idx]; });
+    cols.forEach((c, i2) => { beta[c] = sol[i2]; });
     return beta;
   };
+  const predict = (beta: number[], xi: number[]) => beta.reduce((s, bj, j) => s + bj * (xi[j] ?? 0), 0);
 
   const allCols = Array.from({ length: p }, (_, i) => i);
-  let beta = solveCols(allCols);
 
-  // Contrainte de monotonie sur l'âge (décès/invalidité) : si la pente est négative, on
-  // refait le fit sans la colonne âge (age figé à 0) → jamais « moins cher en vieillissant ».
+  // --- Découplage du tabac (fit en deux temps) ---
+  if (opts.decoupleSmoker && p > SMOKER_FEATURE) {
+    const nsRows: number[] = [], smRows: number[] = [];
+    for (let i = 0; i < X2.length; i++) (X2[i][SMOKER_FEATURE] > 0.5 ? smRows : nsRows).push(i);
+    if (nsRows.length >= MIN_NONSMOKER_FIT) {
+      const colsNoSmoker = allCols.filter((c) => c !== SMOKER_FEATURE);
+      // 1) courbe non-fumeur (âge + genre + différé), régularisée légèrement pour préserver
+      //    la pente d'âge, puis pente bornée dans [0, AGE_SLOPE_MAX].
+      let beta = solveCols(colsNoSmoker, nsRows, NONSMOKER_CURVE_LAMBDA);
+      if (opts.enforceAgePositive && beta[AGE_FEATURE] < 0) {
+        // pente négative (artefact) → on la fige à 0 (refit sans la colonne âge).
+        beta = solveCols(colsNoSmoker.filter((c) => c !== AGE_FEATURE), nsRows, NONSMOKER_CURVE_LAMBDA);
+      } else if (beta[AGE_FEATURE] > AGE_SLOPE_MAX) {
+        // pente absurde (petit échantillon quasi-colinéaire) → plafonnée.
+        beta[AGE_FEATURE] = AGE_SLOPE_MAX;
+      }
+      // 2) surcharge tabac = résidu log moyen des fumeurs vs la courbe non-fumeur, bornée ≥ 0.
+      if (smRows.length >= 1) {
+        let acc = 0;
+        for (const i of smRows) acc += logs[i] - predict(beta, X2[i]);
+        beta[SMOKER_FEATURE] = Math.max(0, acc / smRows.length);
+      }
+      return { beta, fallbackLogMean: median(logs), nObs: logs.length };
+    }
+    // trop peu de non-fumeurs → repli sur le fit combiné ci-dessous.
+  }
+
+  // --- Fit combiné (toutes lignes, toutes colonnes) ---
+  let beta = solveCols(allCols);
+  // Contrainte de monotonie sur l'âge : si la pente est négative, refit sans la colonne âge.
   if (opts.enforceAgePositive && p > AGE_FEATURE && beta[AGE_FEATURE] < 0) {
     beta = solveCols(allCols.filter((c) => c !== AGE_FEATURE));
   }
@@ -229,13 +277,15 @@ export function buildProviderModelsServer(allBenchmarks: any[]): Map<string, Pro
 
     const yieldMedian = yields.length ? median(yields) : 1.75;
 
-    // Décès : contrainte de monotonie sur l'âge (jamais moins cher en vieillissant).
-    const deathUnit = fitRidgeLogModel(X_death, y_death, 1.0, { enforceAgePositive: true });
-    // Invalidité : même contrainte de monotonie d'âge que le décès. Le risque d'incapacité
-    // CROÎT fortement avec l'âge → une pente négative (extrapolation sous l'intervalle des
-    // benchmarks, qui s'arrêtent ~45 ans) effondrerait le taux à 55-60 ans. Le coefficient de
-    // DIFFÉRÉ (beta[4]) n'est PAS contraint : un différé doit bien faire baisser la prime.
-    const disabilityUnit = fitRidgeLogModel(X_dis, y_dis, 1.0, { enforceAgePositive: true });
+    // Décès : découplage du tabac (pente d'âge estimée sur les non-fumeurs) + garde de
+    // monotonie sur l'âge (jamais moins cher en vieillissant).
+    const deathUnit = fitRidgeLogModel(X_death, y_death, 1.0, { enforceAgePositive: true, decoupleSmoker: true });
+    // Invalidité : découplage du tabac + garde de monotonie d'âge (comme le décès). Le risque
+    // d'incapacité CROÎT fortement avec l'âge → une pente négative (extrapolation sous
+    // l'intervalle des benchmarks, qui s'arrêtent ~45 ans) effondrerait le taux à 55-60 ans.
+    // Le coefficient de DIFFÉRÉ (beta[4]) n'est PAS contraint : un différé doit bien faire
+    // baisser la prime (il est estimé dans la courbe non-fumeur du découplage).
+    const disabilityUnit = fitRidgeLogModel(X_dis, y_dis, 1.0, { enforceAgePositive: true, decoupleSmoker: true });
     const waiverRate = fitRidgeLogModel(X_waiver, y_waiver, 2.0);
 
     const YEARS = Math.max(10, recoveryByYear.length || 0);
