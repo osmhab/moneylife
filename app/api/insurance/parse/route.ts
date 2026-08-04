@@ -12,12 +12,17 @@ export async function POST(req: NextRequest) {
 
   try {
     const formData = await req.formData();
-    const file = formData.get("file") as File;
+    // MULTI-PAGE : une police 3a/3b peut faire plusieurs pages. On lit TOUS les fichiers
+    // envoyés sous la clé "file" (getAll) — rétro-compatible avec un envoi d'un seul fichier.
+    const files = formData.getAll("file").filter((f): f is File => f instanceof File);
 
-    if (!file) return NextResponse.json({ error: "Aucun fichier" }, { status: 400 });
+    if (files.length === 0) return NextResponse.json({ error: "Aucun fichier" }, { status: 400 });
 
-    const bytes = await file.arrayBuffer();
-    const base64Data = Buffer.from(bytes).toString("base64");
+    const imageParts = await Promise.all(
+      files.map(async (f) => ({
+        inlineData: { mimeType: f.type || "image/jpeg", data: Buffer.from(await f.arrayBuffer()).toString("base64") },
+      }))
+    );
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "Clé API Gemini manquante" }, { status: 500 });
@@ -79,8 +84,8 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: prompt },
-            { inlineData: { mimeType: file.type, data: base64Data } }
+            { text: prompt + (files.length > 1 ? `\n\n📄 MULTI-PAGES : police fournie en ${files.length} pages (images ci-dessous). Analyse-les TOUTES et consolide.` : "") },
+            ...imageParts,
           ]
         }],
         generationConfig: { 

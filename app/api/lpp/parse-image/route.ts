@@ -72,11 +72,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    if (!file) return NextResponse.json({ error: "Aucun fichier fourni" }, { status: 400 });
+    // MULTI-PAGE : le certificat LPP peut faire plusieurs pages. On lit TOUS les fichiers
+    // envoyés sous la clé "file" (getAll) — rétro-compatible avec un envoi d'un seul fichier.
+    const files = formData.getAll("file").filter((f): f is File => f instanceof File);
+    if (files.length === 0) return NextResponse.json({ error: "Aucun fichier fourni" }, { status: 400 });
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const inlineData = { mimeType: file.type || "image/jpeg", data: buffer.toString("base64") };
+    const imageParts = await Promise.all(
+      files.map(async (f) => ({
+        inlineData: { mimeType: f.type || "image/jpeg", data: Buffer.from(await f.arrayBuffer()).toString("base64") },
+      }))
+    );
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "Clé API Gemini manquante" }, { status: 500 });
@@ -94,13 +99,15 @@ export async function POST(req: NextRequest) {
 3. RENTES INVALIDITÉ (MIRRORING) : sauf règle contraire de l'institution, si aucune distinction Maladie/Accident n'est visible, duplique la même valeur dans les deux.
 
 RÈGLES PAR INSTITUTION :
-${knowledgeBase}`;
+${knowledgeBase}
+
+📄 MULTI-PAGES : ${files.length > 1 ? `Le certificat est fourni en ${files.length} PAGES (images ci-dessous). Analyse-les TOUTES et CONSOLIDE les informations : une donnée peut n'apparaître que sur une page (rachats, EPL, cotisations, paliers de projection…).` : "Certificat en une page."}`;
 
     const response = await fetch(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }, { inlineData }] }],
+        contents: [{ parts: [{ text: prompt }, ...imageParts] }],
         generationConfig: {
           response_mime_type: "application/json",
           response_schema: getGeminiJsonSchema(),
