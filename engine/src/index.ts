@@ -18,6 +18,7 @@ import {
 
 import { diffProfile, AUDIT_RETENTION_YEARS } from "../../lib/shared/core/audit";
 import type { AuditEventType, AuditFieldChange } from "../../lib/shared/core/audit";
+import { computeAgeOn, hasEnfantOrphelinEligibleAt } from "../../lib/shared/rules/guards";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 
 // Initialisation globale de l'admin SDK
@@ -510,5 +511,74 @@ export const purgeExpiredAudit = onSchedule(
       }
     }
     console.log(`[audit/purge] ${purged} événement(s) au-delà de 10 ans purgé(s).`);
+  }
+);
+
+/**
+ * Trigger PLANIFIÉ : notifyMariage5ans (quotidien, 08:00 Europe/Zurich)
+ *
+ * Notifie le client le jour où son mariage FRANCHIT 5 ans — mais UNIQUEMENT quand ce seuil
+ * change réellement sa couverture décès (option « ciblée ») : conjoint ≥ 45 ans, AUCUN enfant
+ * à charge, et affilié LPP (ou conjointe = femme, pour la rente de veuve AVS). Sinon le jalon
+ * ne débloque aucune rente → pas de notification.
+ *
+ * - Fenêtre de 3 jours (rattrape un run manqué) : anniv5 ∈ [today - 3j, today].
+ *   → Pas de « backfill » : les couples mariés depuis longtemps ont un anniv5 hors fenêtre.
+ * - Dédup via le flag `_mariage5ansNotifie` posé sur le doc RACINE clients/{uid} (PAS sur
+ *   DonneePersonnelles → n'entraîne pas de recalcul via onClientDataUpdate).
+ */
+export const notifyMariage5ans = onSchedule(
+  { schedule: "0 8 * * *", timeZone: "Europe/Zurich", region: "europe-west1" },
+  async () => {
+    const WINDOW_DAYS = 3;
+    const today = new Date();
+    let sent = 0;
+
+    const snap = await db.collectionGroup("DonneePersonnelles").get();
+    for (const doc of snap.docs) {
+      if (doc.id !== "current") continue;
+      const uid = doc.ref.parent.parent?.id;
+      if (!uid) continue;
+      const d = doc.data() as any;
+
+      // Couple + date de mariage renseignée
+      if (![1, 3].includes(Number(d.Enter_etatCivil))) continue;
+      const dm = d.Enter_dateMariage;
+      if (!dm) continue;
+      const [dd, mm, yy] = String(dm).split(".").map((v: string) => parseInt(v, 10));
+      if (!yy || !mm || !dd) continue;
+
+      // Franchissement des 5 ans dans la fenêtre [today - WINDOW, today] ?
+      const anniv5 = new Date(yy + 5, mm - 1, dd);
+      const diffDays = Math.floor((today.getTime() - anniv5.getTime()) / 86400000);
+      if (diffDays < 0 || diffDays > WINDOW_DAYS) continue;
+
+      // Le seuil des 5 ans change-t-il vraiment la couverture de survivant ?
+      const spouseAge = computeAgeOn(d.Enter_spouseDateNaissance, today);
+      const aEnfantACharge = hasEnfantOrphelinEligibleAt(d as ClientData, today);
+      const spouseFemale = Number(d.Enter_spouseSexe) === 1;
+      const affilieLPP = d.Enter_Affilie_LPP === true;
+      const unlocks = spouseAge >= 45 && !aEnfantACharge && (affilieLPP || spouseFemale);
+      if (!unlocks) continue;
+
+      // Dédup : flag sur le doc RACINE (aucun trigger de recalcul).
+      const rootRef = db.collection("clients").doc(uid);
+      const root = await rootRef.get();
+      if ((root.data() as any)?._mariage5ansNotifie === true) continue;
+
+      await rootRef.collection("notifications").add({
+        title: "Couverture décès améliorée",
+        content:
+          "Vos 5 ans de mariage sont atteints : en cas de décès, votre conjoint bénéficie désormais d'une rente de survivant à vie (AVS/LPP), même sans enfant à charge.",
+        type: "success",
+        category: "PREVOYANCE",
+        read: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        actionUrl: "/dashboard/prevoyance",
+      });
+      await rootRef.set({ _mariage5ansNotifie: true }, { merge: true });
+      sent++;
+    }
+    console.log(`[notifyMariage5ans] ${sent} notification(s) « 5 ans de mariage » envoyée(s).`);
   }
 );
