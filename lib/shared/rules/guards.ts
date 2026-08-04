@@ -40,6 +40,14 @@ export function hasEnfantMoins18(client: ClientData): boolean {
   return hasEnfantMoins18At(client, new Date());
 }
 
+/** Mariage "long" (≥ 5 ans) pour l'éligibilité aux rentes de survivant.
+ *  ⚠️ Un Enter_mariageDuree ABSENT (non capté) est traité comme ≥ 5 ans — cas courant d'un
+ *  couple marié. Sans ça, un champ manquant annulait SILENCIEUSEMENT les rentes de survivant
+ *  (AVS/LPP/LAA) d'un client pourtant marié. Seul un `1` explicite = « < 5 ans » (court). */
+export function isMariageLong(client: ClientData): boolean {
+  return (client.Enter_mariageDuree ?? 0) === 0;
+}
+
 /* =========================================================
  * 1. AVS — Rentes de survivants (tes règles)
  * ---------------------------------------------------------
@@ -50,7 +58,7 @@ export function hasEnfantMoins18(client: ClientData): boolean {
 /** AVS — Rente de veuve due à la date ref ? */
 export function Legal_renteAVSWidowDueAt(client: ClientData, ref: Date): boolean {
   if (!hasPartner(client)) return false;
-  const mariageLong = client.Enter_mariageDuree === 0; // 0 = "au moins 5 ans"
+  const mariageLong = isMariageLong(client); // 0 = "au moins 5 ans"
   const enfantMineur = hasEnfantMoins18At(client, ref);
   const ageVeuve = computeAgeOn(client.Enter_spouseDateNaissance, ref);
   return (ageVeuve >= 45 && mariageLong) || enfantMineur;
@@ -91,7 +99,7 @@ export function Legal_renteLPPDueAt(client: ClientData, ref: Date): boolean {
   if (!hasPartner(client)) return false;
 
   const ageConjoint = computeAgeOn(client.Enter_spouseDateNaissance, ref);
-  const mariageLong = client.Enter_mariageDuree === 0;
+  const mariageLong = isMariageLong(client);
   const enfantMineur = hasEnfantMoins18At(client, ref);
 
   return (ageConjoint >= 45 && mariageLong) || enfantMineur;
@@ -134,7 +142,7 @@ export function Legal_renteLAADueAt(client: ClientData, ref: Date): boolean {
   if (!hasPartner(client)) return false;
 
   const ageConjoint = computeAgeOn(client.Enter_spouseDateNaissance, ref);
-  const mariageLong = client.Enter_mariageDuree === 0;
+  const mariageLong = isMariageLong(client);
   const enfantMineur = hasEnfantMoins18At(client, ref);
 
   return (ageConjoint >= 45 && mariageLong) || enfantMineur;

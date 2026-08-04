@@ -119,8 +119,15 @@ export function computeDecesMaladie(
   const AVS_Widow_Due = Legal_renteAVSWidowDueAt(client, dateDeces);
   const AVS_Widower_Due = Legal_renteAVSWidowerDueAt(client, dateDeces);
 
-  const widowMonthly =
-    (AVS_Widow_Due || AVS_Widower_Due) ? (avsProj.renteSurvivantMensuelle || 0) : 0;
+  // La rente de SURVIVANT dépend du sexe du survivant (= le CONJOINT). Le droit AVS réserve au
+  // VEUF (homme) la seule voie « ≥1 enfant mineur » — pas de voie âge+durée comme la veuve.
+  // Enter_spouseSexe : 0 = homme → veuf ; 1 = femme → veuve. Sexe inconnu → voie la plus
+  // favorable (OR) pour ne pas sous-estimer par manque de donnée.
+  const avsSurvivorDue =
+    client.Enter_spouseSexe === 1 ? AVS_Widow_Due
+    : client.Enter_spouseSexe === 0 ? AVS_Widower_Due
+    : (AVS_Widow_Due || AVS_Widower_Due);
+  const widowMonthly = avsSurvivorDue ? (avsProj.renteSurvivantMensuelle || 0) : 0;
 
   const orphanMonthlyPerChild =
     nbEnfantsEligibles > 0 ? (avsProj.orphelinMensuelParEnfant || 0) : 0;
