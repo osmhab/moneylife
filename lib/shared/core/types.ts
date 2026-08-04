@@ -34,7 +34,8 @@ export interface ClientData {
   Enter_etatCivil: Enter_EtatCivil;
   Enter_spouseSexe?: Enter_Sexe;
   Enter_spouseDateNaissance?: string; // "dd.MM.yyyy"
-  Enter_mariageDuree?: 0 | 1; // 0 = ≥5 ans, 1 = <5 ans
+  Enter_dateMariage?: string; // "dd.MM.yyyy" — source primaire : le seuil ≥5 ans en est dérivé (auto)
+  Enter_mariageDuree?: 0 | 1; // legacy binaire (0 = ≥5 ans, 1 = <5 ans) — repli si pas de date
   Enter_menageCommun5Ans?: boolean; // concubinage
   Enter_partenaireDesigneLPP?: boolean; // concubinage
 

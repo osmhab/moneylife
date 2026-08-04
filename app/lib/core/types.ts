@@ -41,7 +41,8 @@ export interface ClientData {
   /** Salaire annuel du conjoint — sert à PROJETER sa rente AVS (échelle 44)
    *  pour le plafonnement couple. On ne demande jamais de rente estimée. */
   Enter_spouseSalaireAnnuel?: number | null;
-  Enter_mariageDuree?: 0 | 1; // 0 = ≥5 ans, 1 = <5 ans
+  Enter_dateMariage?: string; // "dd.MM.yyyy" — source primaire : le seuil ≥5 ans en est dérivé (auto)
+  Enter_mariageDuree?: 0 | 1; // legacy binaire (0 = ≥5 ans, 1 = <5 ans) — repli si pas de date
   Enter_menageCommun5Ans?: boolean; // concubinage
   Enter_partenaireDesigneLPP?: boolean; // concubinage
 

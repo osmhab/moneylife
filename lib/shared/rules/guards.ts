@@ -64,8 +64,13 @@ export function hasEnfantOrphelinEligibleAt(client: ClientData, ref: Date): bool
  *  ⚠️ Un Enter_mariageDuree ABSENT (non capté) est traité comme ≥ 5 ans — cas courant d'un
  *  couple marié. Sans ça, un champ manquant annulait SILENCIEUSEMENT les rentes de survivant
  *  (AVS/LPP/LAA) d'un client pourtant marié. Seul un `1` explicite = « < 5 ans » (court). */
-export function isMariageLong(client: ClientData): boolean {
-  return (client.Enter_mariageDuree ?? 0) === 0;
+export function isMariageLong(client: ClientData, ref: Date = new Date()): boolean {
+  // Priorité à la DATE de mariage (auto-actualisante) : ≥ 5 ans révolus à la date de référence.
+  if (client.Enter_dateMariage) return computeAgeOn(client.Enter_dateMariage, ref) >= 5;
+  // Repli legacy : ancien flag binaire (0 = ≥ 5 ans, 1 = < 5 ans).
+  if (client.Enter_mariageDuree != null) return client.Enter_mariageDuree === 0;
+  // Filet : rien de capté → traité comme ≥ 5 ans (cas courant d'un couple marié).
+  return true;
 }
 
 /* =========================================================
@@ -80,7 +85,7 @@ export function isMariageLong(client: ClientData): boolean {
  *  La rente de veuve ne s'éteint PAS aux 18 ans de l'enfant (≠ veuf). */
 export function Legal_renteAVSWidowDueAt(client: ClientData, ref: Date): boolean {
   if (!hasPartner(client)) return false;
-  const mariageLong = isMariageLong(client); // 0 = "au moins 5 ans"
+  const mariageLong = isMariageLong(client, ref); // ≥ 5 ans (date, sinon legacy, sinon filet)
   const aEnfant = hasEnfantAt(client, ref);
   const ageVeuve = computeAgeOn(client.Enter_spouseDateNaissance, ref);
   return (ageVeuve >= 45 && mariageLong) || aEnfant;
@@ -121,7 +126,7 @@ export function Legal_renteLPPDueAt(client: ClientData, ref: Date): boolean {
   if (!hasPartner(client)) return false;
 
   const ageConjoint = computeAgeOn(client.Enter_spouseDateNaissance, ref);
-  const mariageLong = isMariageLong(client);
+  const mariageLong = isMariageLong(client, ref);
   const enfantACharge = hasEnfantOrphelinEligibleAt(client, ref);
 
   return (ageConjoint >= 45 && mariageLong) || enfantACharge;

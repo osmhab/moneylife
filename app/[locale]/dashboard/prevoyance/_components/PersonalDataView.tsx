@@ -353,8 +353,12 @@ export default function PersonalDataView({ isOpen, onClose, adminUid }: { isOpen
   if (!isOpen) return null;
   
   const isMarried = [1, 3].includes(Number(data?.Enter_etatCivil));
-  // ≥5 ans de mariage (0 = ≥5 ans, 1 = <5 ans). Absent = traité comme ≥5 ans (cf. isMariageLong).
-  const marriage5y = Number(data?.Enter_mariageDuree ?? 0) === 0;
+  // Durée de mariage : dérivée de la DATE si présente (auto-actualisante), sinon legacy binaire,
+  // sinon ≥5 ans par défaut (cohérent avec isMariageLong côté moteur).
+  const marriageYears = data?.Enter_dateMariage ? ageFromMaskLocal(data.Enter_dateMariage) : null;
+  const marriage5y = marriageYears != null
+    ? marriageYears >= 5
+    : (data?.Enter_mariageDuree != null ? Number(data.Enter_mariageDuree) === 0 : true);
   const isSalarie = Number(data?.Enter_statutProfessionnel) === 0;
 
   return (
@@ -438,17 +442,19 @@ export default function PersonalDataView({ isOpen, onClose, adminUid }: { isOpen
             <EditableRow mandatory fieldKey="Enter_spousePrenom" label={t("lbl_spouse_firstname")} value={data?.Enter_spousePrenom} icon={<User />} editingField={editingField} setEditingField={setEditingField} onSave={handleUpdateDirect} />
             <EditableRow mandatory fieldKey="Enter_spouseSexe" label={t("lbl_spouse_gender")} value={data?.Enter_spouseSexe} displayValue={optionsSexe.find(o => o.id === Number(data?.Enter_spouseSexe))?.label} type="select" options={optionsSexe} icon={<User />} editingField={editingField} setEditingField={setEditingField} onSave={handleUpdateDirect} />
             <EditableRow mandatory fieldKey="Enter_spouseDateNaissance" label={t("lbl_spouse_dob")} value={data?.Enter_spouseDateNaissance} type="date" icon={<Calendar />} editingField={editingField} setEditingField={setEditingField} onSave={handleUpdateDirect} />
-            {/* Durée de mariage = seuil binaire ≥5 ans (0) vs <5 ans (1). Ne compte que pour la
-                rente de survivant AVS/LPP d'un conjoint ≥45 ans sans enfant à charge. Absent = ≥5 ans. */}
-            <DetailRow
-              icon={<Heart />}
-              label={t("lbl_marriage_5y")}
-              value={marriage5y ? t("opt_yes") : t("opt_no")}
-              onClick={() => handleUpdateDirect("Enter_mariageDuree", marriage5y ? 1 : 0)}
-              isBoolean
-              boolValue={marriage5y}
-              last
-            />
+            {/* Date de mariage : source primaire. Le seuil « ≥5 ans » (rente de survivant AVS/LPP
+                d'un conjoint ≥45 ans sans enfant à charge) en est dérivé automatiquement. */}
+            <EditableRow fieldKey="Enter_dateMariage" label={t("lbl_marriage_date")} value={data?.Enter_dateMariage} type="date" icon={<Heart />} editingField={editingField} setEditingField={setEditingField} onSave={handleUpdateDirect} last={marriageYears === null} />
+            {marriageYears !== null && (
+              <DetailRow
+                icon={<Heart />}
+                label={t("lbl_marriage_5y")}
+                value={marriage5y ? t("opt_yes") : t("opt_no")}
+                isBoolean
+                boolValue={marriage5y}
+                last
+              />
+            )}
           </Section>
         )}
 
