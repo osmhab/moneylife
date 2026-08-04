@@ -3,9 +3,9 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  ArrowLeft, Pencil, User, Heart, Briefcase, Calendar, 
-  ShieldCheck, Activity, MapPin, Plus, Trash2, Phone 
+import {
+  ArrowLeft, Pencil, User, Heart, Briefcase, Calendar,
+  ShieldCheck, Activity, MapPin, Plus, Trash2, Phone, GraduationCap
 } from "lucide-react";
 import { db, auth } from "@/lib/firebase/index"; // Alias mis à jour si besoin
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
@@ -17,6 +17,18 @@ import { normalizeDateMask } from "@/lib/core/dates"; // Alias mis à jour
 
 // 👈 NOUVEAU : Imports pour la traduction
 import { useTranslations, useLocale } from "next-intl";
+
+/** Âge "aujourd'hui" depuis un masque "dd.MM.yyyy" (null si invalide). */
+function ageFromMaskLocal(mask?: string): number | null {
+  if (!mask) return null;
+  const [d, m, y] = String(mask).split(".").map((v) => parseInt(v, 10));
+  if (!y || !m || !d) return null;
+  const now = new Date();
+  let age = now.getFullYear() - y;
+  const mDiff = (now.getMonth() + 1) - m;
+  if (mDiff < 0 || (mDiff === 0 && now.getDate() < d)) age--;
+  return age;
+}
 
 // Liste abrégée pour l'exemple (tu pourras rajouter les 190 pays)
 const optionsPaysBase = [
@@ -317,7 +329,10 @@ export default function PersonalDataView({ isOpen, onClose, adminUid }: { isOpen
       // Logique spécifique Enfants (mise à jour du tableau)
       if (key.startsWith("enfant_")) {
         const parts = key.split("_");
-        const subKey = parts[1] === "prenom" ? "Enter_prenom" : "Enter_dateNaissance";
+        const subKey =
+          parts[1] === "prenom" ? "Enter_prenom"
+          : parts[1] === "formation" ? "Enter_enFormation"
+          : "Enter_dateNaissance";
         const index = parseInt(parts[2]);
 
         const children = [...(data?.Enter_enfants || [])];
@@ -432,7 +447,13 @@ export default function PersonalDataView({ isOpen, onClose, adminUid }: { isOpen
              </button>
           </div>
           <div className="px-3 pb-4 space-y-4">
-            {(data?.Enter_enfants || []).map((kid: any, idx: number) => (
+            {(data?.Enter_enfants || []).map((kid: any, idx: number) => {
+              // Le flag « encore en formation » ne concerne le droit aux rentes (orphelin / conjoint
+              // LPP) qu'entre 18 et 25 ans : avant 18 = automatiquement à charge, après 25 = plus de
+              // droit. On n'affiche donc le switch QUE dans cette tranche.
+              const kidAge = ageFromMaskLocal(kid.Enter_dateNaissance);
+              const showFormation = kidAge !== null && kidAge >= 18 && kidAge < 25;
+              return (
               <div key={idx} className="bg-slate-50/50 rounded-[24px] border border-slate-100/50 overflow-hidden">
                 <div className="px-5 pt-4 flex justify-between items-center">
                   <span className="text-[10px] font-black uppercase text-slate-400">{t("lbl_kid", { num: idx + 1 })}</span>
@@ -443,10 +464,22 @@ export default function PersonalDataView({ isOpen, onClose, adminUid }: { isOpen
                 </div>
                 <div className="divide-y divide-slate-100">
                   <EditableRow fieldKey={`enfant_prenom_${idx}`} label={t("lbl_firstname")} value={kid.Enter_prenom} icon={<User />} editingField={editingField} setEditingField={setEditingField} onSave={handleUpdateDirect} noBorder />
-                  <EditableRow fieldKey={`enfant_date_${idx}`} label={t("lbl_dob")} value={kid.Enter_dateNaissance} type="date" icon={<Calendar />} editingField={editingField} setEditingField={setEditingField} onSave={handleUpdateDirect} last />
+                  <EditableRow fieldKey={`enfant_date_${idx}`} label={t("lbl_dob")} value={kid.Enter_dateNaissance} type="date" icon={<Calendar />} editingField={editingField} setEditingField={setEditingField} onSave={handleUpdateDirect} last={!showFormation} />
+                  {showFormation && (
+                    <DetailRow
+                      icon={<GraduationCap />}
+                      label={t("lbl_kid_in_training")}
+                      value={kid.Enter_enFormation ? t("opt_yes") : t("opt_no")}
+                      onClick={() => handleUpdateDirect(`enfant_formation_${idx}`, !kid.Enter_enFormation)}
+                      isBoolean
+                      boolValue={!!kid.Enter_enFormation}
+                      last
+                    />
+                  )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </Section>
 

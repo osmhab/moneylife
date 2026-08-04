@@ -377,6 +377,7 @@
     "lbl_family": "Familie",
     "btn_add": "Hinzufügen",
     "lbl_kid": "Kind #{num}",
+    "lbl_kid_in_training": "Noch in Ausbildung?",
     "sec_avs": "AHV-Beiträge",
     "lbl_avs_start": "Alter Beitragsbeginn",
     "lbl_avs_start_year": "Berechnetes Startjahr",

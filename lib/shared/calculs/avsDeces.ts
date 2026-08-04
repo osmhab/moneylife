@@ -195,8 +195,8 @@ export function findRenteOrphelinMensuelleParEnfant(
 
 /* =========================================================
  * Orphelins éligibles (calculés depuis Enter_enfants)
- * - Règle actuelle : enfant < 18 ans au moment du décès.
- *   (Si extension "en formation" plus tard : ajuster à <25)
+ * - Règle : enfant < 18 ans au décès, OU < 25 ans encore EN FORMATION
+ *   (aligné sur la copie canonique app/lib/calculs/avsDeces.ts et sur la LAVS).
  * =======================================================*/
 function computeNbOrphelinsEligiblesAVS(client: ClientData, deathYear: number): number {
   const kids = client.Enter_enfants ?? [];
@@ -205,7 +205,8 @@ function computeNbOrphelinsEligiblesAVS(client: ClientData, deathYear: number): 
     const y = yearFromMask(k.Enter_dateNaissance);
     if (!y) continue;
     const ageAtDeath = deathYear - y;
-    if (ageAtDeath < 18) count++;
+    // < 18, ou < 25 si encore en formation (le flag ne compte qu'entre 18 et 25 ans).
+    if (ageAtDeath < 18 || (ageAtDeath < 25 && (k as any).Enter_enFormation === true)) count++;
   }
   return count;
 }

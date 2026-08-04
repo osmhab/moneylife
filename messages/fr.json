@@ -377,6 +377,7 @@
     "lbl_family": "Famille",
     "btn_add": "Ajouter",
     "lbl_kid": "Enfant #{num}",
+    "lbl_kid_in_training": "Encore en formation ?",
     "sec_avs": "Cotisations AVS",
     "lbl_avs_start": "Âge début cotisations",
     "lbl_avs_start_year": "Année de début calculée",

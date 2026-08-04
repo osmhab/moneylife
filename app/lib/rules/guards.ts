@@ -48,6 +48,26 @@ export function hasEnfantMoins18(client: ClientData): boolean {
   return hasEnfantMoins18At(client, new Date());
 }
 
+/** Au moins un enfant (de TOUT âge) existant à la date de référence ?
+ *  Ouvre le droit à la rente de VEUVE (LAVS art. 23 : « au décès, elle a un ou plusieurs
+ *  enfants » — sans condition d'âge de l'enfant, contrairement au veuf). */
+export function hasEnfantAt(client: ClientData, ref: Date): boolean {
+  if (!client.Enter_enfants?.length) return false;
+  return client.Enter_enfants.some((e) => computeAgeOn(e.Enter_dateNaissance, ref) >= 0);
+}
+
+/** Au moins un enfant ouvrant droit à une rente d'ORPHELIN à la date de référence ?
+ *  Règle unique AVS/LPP : enfant < 18, OU < 25 s'il est ENCORE EN FORMATION.
+ *  Utilisé pour l'« enfant à charge » de la rente de conjoint LPP (art. 19) et pour compter
+ *  les orphelins. NB : le flag Enter_enFormation n'est pertinent qu'entre 18 et 25 ans. */
+export function hasEnfantOrphelinEligibleAt(client: ClientData, ref: Date): boolean {
+  if (!client.Enter_enfants?.length) return false;
+  return client.Enter_enfants.some((e) => {
+    const age = computeAgeOn(e.Enter_dateNaissance, ref);
+    return age < 18 || (age < 25 && e.Enter_enFormation === true);
+  });
+}
+
 /** Mariage "long" (≥ 5 ans) pour l'éligibilité aux rentes de survivant.
  *  ⚠️ Un Enter_mariageDuree ABSENT (non capté) est traité comme ≥ 5 ans — cas courant d'un
  *  couple marié. Sans ça, un champ manquant annulait SILENCIEUSEMENT les rentes de survivant
@@ -63,13 +83,15 @@ export function isMariageLong(client: ClientData): boolean {
  * Veuf  : (≥1 enfant < 18)
  * =======================================================*/
 
-/** AVS — Rente de veuve due à la date ref ? */
+/** AVS — Rente de veuve due à la date ref ?
+ *  LAVS art. 23/24 : a un enfant (DE TOUT ÂGE) au décès, OU (≥45 ans ET mariage ≥5 ans).
+ *  La rente de veuve ne s'éteint PAS aux 18 ans de l'enfant (≠ veuf). */
 export function Legal_renteAVSWidowDueAt(client: ClientData, ref: Date): boolean {
   if (!hasPartner(client)) return false;
   const mariageLong = isMariageLong(client); // 0 = "au moins 5 ans"
-  const enfantMineur = hasEnfantMoins18At(client, ref);
+  const aEnfant = hasEnfantAt(client, ref);
   const ageVeuve = computeAgeOn(client.Enter_spouseDateNaissance, ref);
-  return (ageVeuve >= 45 && mariageLong) || enfantMineur;
+  return (ageVeuve >= 45 && mariageLong) || aEnfant;
 }
 
 /** AVS — Rente de veuf due à la date ref ? */
@@ -101,16 +123,19 @@ export function Legal_renteAVSWidowerDue(client: ClientData): boolean {
  *  - (âge conjoint < 45) OU (mariage < 5 ans)
  * =======================================================*/
 
-/** LPP — Rente conjointe due à la date ref ? */
+/** LPP — Rente conjointe due à la date ref ?
+ *  LPP art. 19 : a un enfant À CHARGE (ouvrant droit à l'orphelin : <18 ou <25 en formation),
+ *  OU (≥45 ans ET mariage ≥5 ans). Même règle pour les deux sexes (pas de distinction veuf/veuve
+ *  en LPP). Sinon : allocation unique (cf. Legal_renteLPPNonDueAt). */
 export function Legal_renteLPPDueAt(client: ClientData, ref: Date): boolean {
   if (!client.Enter_Affilie_LPP) return false;
   if (!hasPartner(client)) return false;
 
   const ageConjoint = computeAgeOn(client.Enter_spouseDateNaissance, ref);
   const mariageLong = isMariageLong(client);
-  const enfantMineur = hasEnfantMoins18At(client, ref);
+  const enfantACharge = hasEnfantOrphelinEligibleAt(client, ref);
 
-  return (ageConjoint >= 45 && mariageLong) || enfantMineur;
+  return (ageConjoint >= 45 && mariageLong) || enfantACharge;
 }
 
 /** LPP — Rente conjointe NON due à la date ref ? (→ capital possible) */
@@ -118,7 +143,7 @@ export function Legal_renteLPPNonDueAt(client: ClientData, ref: Date): boolean {
   if (!client.Enter_Affilie_LPP) return false;
   if (!hasPartner(client)) return false;
 
-  if (hasEnfantMoins18At(client, ref)) return false; // enfant mineur → due
+  if (hasEnfantOrphelinEligibleAt(client, ref)) return false; // enfant à charge → rente due
   const ageConjoint = computeAgeOn(client.Enter_spouseDateNaissance, ref);
   const mariageCourt = client.Enter_mariageDuree === 1;
   return ageConjoint < 45 || mariageCourt;
