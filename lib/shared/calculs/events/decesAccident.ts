@@ -38,10 +38,11 @@ import {
 import {
   Legal_renteAVSWidowDueAt,
   Legal_renteAVSWidowerDueAt,
-  Legal_renteLAADueAt,
-  Legal_renteLAANonDueAt,
+  Legal_renteLAAWidowDueAt,
+  Legal_renteLAAWidowerDueAt,
   Legal_renteLPPDueAt,
   Legal_renteLPPNonDueAt,
+  hasPartner,
 } from "../../rules/guards";
 import { monthlyToAnnual, annualToMonthly } from "../../core/format";
 import { computeAgeOn } from "../../core/dates";
@@ -169,8 +170,15 @@ export function computeDecesAccident(
 
   /* ---------- LAA survivants (annuel, cap famille 70%) ---------- */
   // Éligibilité du conjoint LAA à la date du décès (figée)
-  const LAA_Due = Legal_renteLAADueAt(client, dateDeces);
-  const LAA_NonDue = Legal_renteLAANonDueAt(client, dateDeces);
+  // LAA art. 29 : rente conjointe selon le SEXE du survivant (= le conjoint). Veuve : enfant à
+  // charge OU ≥ 45 ans. Veuf : enfant à charge seulement. Sexe inconnu → voie la plus favorable.
+  const LAA_Widow_Due = Legal_renteLAAWidowDueAt(client, dateDeces);
+  const LAA_Widower_Due = Legal_renteLAAWidowerDueAt(client, dateDeces);
+  const LAA_Due =
+    client.Enter_spouseSexe === 1 ? LAA_Widow_Due
+    : client.Enter_spouseSexe === 0 ? LAA_Widower_Due
+    : (LAA_Widow_Due || LAA_Widower_Due);
+  const LAA_NonDue = hasPartner(client) && !LAA_Due;
 
   // Rentes LAA (conjoint à vie si due) + enfants à la date de paiement
   const laaSurv = LAA_Due

@@ -38,10 +38,11 @@ import {
 import {
   Legal_renteAVSWidowDueAt,
   Legal_renteAVSWidowerDueAt,
-  Legal_renteLAADueAt,
-  Legal_renteLAANonDueAt,
+  Legal_renteLAAWidowDueAt,
+  Legal_renteLAAWidowerDueAt,
   Legal_renteLPPDueAt,
   Legal_renteLPPNonDueAt,
+  hasPartner,
 } from "@/lib/rules/guards";
 import { monthlyToAnnual, annualToMonthly } from "@/lib/core/format";
 import { computeAgeOn, isEnfantRenteEligible } from "@/lib/core/dates";
@@ -169,8 +170,15 @@ export function computeDecesAccident(
 
   /* ---------- LAA survivants (annuel, cap famille 70%) ---------- */
   // Éligibilité du conjoint LAA à la date du décès (figée)
-  const LAA_Due = Legal_renteLAADueAt(client, dateDeces);
-  const LAA_NonDue = Legal_renteLAANonDueAt(client, dateDeces);
+  // LAA art. 29 : rente conjointe selon le SEXE du survivant (= le conjoint). Veuve : enfant à
+  // charge OU ≥ 45 ans. Veuf : enfant à charge seulement. Sexe inconnu → voie la plus favorable.
+  const LAA_Widow_Due = Legal_renteLAAWidowDueAt(client, dateDeces);
+  const LAA_Widower_Due = Legal_renteLAAWidowerDueAt(client, dateDeces);
+  const LAA_Due =
+    client.Enter_spouseSexe === 1 ? LAA_Widow_Due
+    : client.Enter_spouseSexe === 0 ? LAA_Widower_Due
+    : (LAA_Widow_Due || LAA_Widower_Due);
+  const LAA_NonDue = hasPartner(client) && !LAA_Due;
 
   // La rente d'ORPHELIN LAA est due dès qu'il y a un enfant éligible, QUEL QUE
   // SOIT l'état civil du défunt. Le CONJOINT, lui, reste conditionné à LAA_Due.

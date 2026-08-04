@@ -158,37 +158,39 @@ export function Legal_renteLPPNonDue(client: ClientData): boolean {
 }
 
 /* =========================================================
- * 3. LAA — Conjoint/partenaire (conditions égales H/F)
+ * 3. LAA (accident) — Conjoint survivant · LAA art. 29
  * ---------------------------------------------------------
- * Rente due si :
- *  - Marié/partenariat
- *  - (âge conjoint ≥ 45 ET mariage ≥ 5 ans) OU (≥1 enfant < 18)
- *
- * Rente non due si :
- *  - Marié/partenariat
- *  - Aucun enfant < 18
- *  - (âge conjoint < 45) OU (mariage < 5 ans)
+ * ⚠️ La LAA est PLUS GÉNÉREUSE et DIFFÉRENTE de l'AVS/LPP :
+ *  - AUCUNE condition de durée de mariage.
+ *  - VEUVE : enfant ouvrant droit à l'orphelin (<18 ou <25 en formation) OU âge ≥ 45 ans.
+ *            (La voie « invalide aux 2/3 » existe aussi mais n'est pas captée → omise.)
+ *  - VEUF  : uniquement s'il a un enfant ouvrant droit à l'orphelin (pas de voie âge).
+ *  - Sinon : indemnité en capital unique (cf. calcCapitalUniqueLAA).
+ * La sélection veuve/veuf se fait sur Enter_spouseSexe dans decesAccident.
  * =======================================================*/
 
-/** LAA — Rente conjointe due à la date ref ? */
-export function Legal_renteLAADueAt(client: ClientData, ref: Date): boolean {
+/** LAA — Rente de VEUVE due à la date ref ? (enfant à charge OU conjointe ≥ 45 ans) */
+export function Legal_renteLAAWidowDueAt(client: ClientData, ref: Date): boolean {
   if (!hasPartner(client)) return false;
-
   const ageConjoint = computeAgeOn(client.Enter_spouseDateNaissance, ref);
-  const mariageLong = isMariageLong(client);
-  const enfantMineur = hasEnfantMoins18At(client, ref);
-
-  return (ageConjoint >= 45 && mariageLong) || enfantMineur;
+  return hasEnfantOrphelinEligibleAt(client, ref) || ageConjoint >= 45;
 }
 
-/** LAA — Rente conjointe NON due à la date ref ? (→ capital unique) */
-export function Legal_renteLAANonDueAt(client: ClientData, ref: Date): boolean {
+/** LAA — Rente de VEUF due à la date ref ? (uniquement enfant à charge, pas de voie âge) */
+export function Legal_renteLAAWidowerDueAt(client: ClientData, ref: Date): boolean {
   if (!hasPartner(client)) return false;
+  return hasEnfantOrphelinEligibleAt(client, ref);
+}
 
-  if (hasEnfantMoins18At(client, ref)) return false;
-  const ageConjoint = computeAgeOn(client.Enter_spouseDateNaissance, ref);
-  const mariageCourt = client.Enter_mariageDuree === 1;
-  return ageConjoint < 45 || mariageCourt;
+/** LAA — Rente conjointe due (sex-neutral, compat). Retient la voie la plus favorable (veuve).
+ *  La logique par sexe utilisée en production est Legal_renteLAAWidow/WidowerDueAt. */
+export function Legal_renteLAADueAt(client: ClientData, ref: Date): boolean {
+  return Legal_renteLAAWidowDueAt(client, ref);
+}
+
+/** LAA — Rente conjointe NON due (→ indemnité en capital), sex-neutral (compat). */
+export function Legal_renteLAANonDueAt(client: ClientData, ref: Date): boolean {
+  return hasPartner(client) && !Legal_renteLAAWidowDueAt(client, ref);
 }
 
 /** (Compat) LAA — versions "aujourd'hui" (garde tes exports existants) */
