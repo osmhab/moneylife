@@ -582,3 +582,85 @@ export const notifyMariage5ans = onSchedule(
     console.log(`[notifyMariage5ans] ${sent} notification(s) « 5 ans de mariage » envoyée(s).`);
   }
 );
+
+/**
+ * Trigger : onReferralSignup
+ * À la CRÉATION d'un clients/{uid} portant `invitedBy` (code de parrainage), on crée
+ * l'enregistrement `referrals` (REGISTERED, expiresAt = +20 j), on pose `referredBy` (uid du
+ * parrain résolu), et on notifie parrain + admin. Idempotent (1 reco max par filleul).
+ */
+export const onReferralSignup = onDocumentCreated(
+  { document: "clients/{uid}", region: "europe-west1" },
+  async (event) => {
+    const uid = event.params.uid;
+    const data = event.data?.data() as any;
+    const code = String(data?.invitedBy || "").trim();
+    if (!code) return;
+
+    // Déjà une reco pour ce filleul ? (idempotence)
+    const existing = await db.collection("referrals").where("refereeUid", "==", uid).limit(1).get();
+    if (!existing.empty) return;
+
+    // Résoudre le code → parrain
+    const refSnap = await db.collection("clients").where("referralCode", "==", code).limit(1).get();
+    if (refSnap.empty) return;
+    const referrerUid = refSnap.docs[0].id;
+    if (referrerUid === uid) return; // pas d'auto-parrainage
+
+    const now = Date.now();
+    const refereeName =
+      [data?.firstName, data?.lastName].filter(Boolean).join(" ").trim() ||
+      data?.displayName || data?.email || "Filleul";
+
+    await db.collection("referrals").add({
+      referrerUid, referrerCode: code, refereeUid: uid, refereeName,
+      status: "REGISTERED",
+      createdAt: now, updatedAt: now,
+      expiresAt: now + 20 * 24 * 3600 * 1000,
+    });
+    await db.collection("clients").doc(uid).set({ referredBy: referrerUid, updatedAt: now }, { merge: true });
+
+    // Notif PARRAIN (fan-out FCM via onNotificationCreated)
+    await db.collection("clients").doc(referrerUid).collection("notifications").add({
+      title: "Votre invité s'est inscrit 🎉",
+      content: `${refereeName} a rejoint CreditX grâce à votre recommandation. Récompense dès qu'il signe un nouveau 3e pilier.`,
+      type: "success", category: "PREVOYANCE", read: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    // Notif ADMIN
+    const parrain = refSnap.docs[0].data() as any;
+    const referrerName =
+      [parrain?.firstName, parrain?.lastName].filter(Boolean).join(" ").trim() || parrain?.displayName || null;
+    await db.collection("admin_notifications").add({
+      event: "NEW_REFERRAL_SIGNUP",
+      title: "Nouveau filleul inscrit",
+      content: `${refereeName} s'est inscrit PAR RECOMMANDATION${referrerName ? ` (parrain : ${referrerName})` : ""}.`,
+      category: "SOUSCRIPTION", type: "success", actionUrl: "/admin/clients",
+      clientUid: uid, clientName: refereeName, read: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    console.log(`[referral] signup ${uid} ← parrain ${referrerUid}`);
+  }
+);
+
+/**
+ * Cron : expireReferrals (quotidien, 07:00) — une reco REGISTERED dont expiresAt (= inscription
+ * +20 j) est dépassé SANS 3a signé passe à EXPIRED (le parrain peut réinviter). Ne touche jamais
+ * REWARD_DUE / PAID. Filtre expiresAt en mémoire → pas d'index composite requis.
+ */
+export const expireReferrals = onSchedule(
+  { schedule: "0 7 * * *", timeZone: "Europe/Zurich", region: "europe-west1" },
+  async () => {
+    const now = Date.now();
+    const snap = await db.collection("referrals").where("status", "==", "REGISTERED").get();
+    let n = 0;
+    for (const d of snap.docs) {
+      const r = d.data() as any;
+      if (Number(r.expiresAt) && Number(r.expiresAt) < now) {
+        await d.ref.set({ status: "EXPIRED", updatedAt: now }, { merge: true });
+        n++;
+      }
+    }
+    console.log(`[referral] ${n} reco(s) expirée(s).`);
+  }
+);

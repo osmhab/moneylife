@@ -10,7 +10,8 @@ import { requireAuth } from "@/lib/server/requireAuth";
 import { db, bucket } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { flattenSignatureOnPdf } from "@/lib/core/signature";
-import { notifyAdmin, lookupClientName } from "@/lib/server/notify";
+import { notifyAdmin, notifyClient, lookupClientName } from "@/lib/server/notify";
+import { markReferralRewardDue } from "@/lib/server/referral";
 import { isOfferExpired } from "@/lib/core/offerExpiry";
 import { randomUUID } from "crypto";
 
@@ -105,6 +106,31 @@ export async function POST(req: NextRequest) {
       institutionName: plan?.institutionName ?? null,
       planId,
     });
+
+    // PARRAINAGE : si le signataire a été recommandé, signer un nouveau 3e pilier débloque la
+    // récompense du parrain (montant FIGÉ maintenant). Idempotent (1re signature qualifiante).
+    // Non bloquant : un échec ne casse jamais la signature.
+    try {
+      const clientData = (await db.collection("clients").doc(uid).get()).data();
+      if (clientData?.referredBy) {
+        const reward = await markReferralRewardDue(uid, planId);
+        if (reward) {
+          await notifyClient({
+            uid: reward.referrerUid,
+            title: "Récompense en route 🎉",
+            content: `Votre filleul a signé un nouveau 3e pilier. Votre récompense de ${reward.amountCHF} CHF est en cours de versement.`,
+            category: "PAIEMENT",
+          });
+          await notifyAdmin("REFERRAL_REWARD_DUE", {
+            clientUid: uid,
+            clientName: await lookupClientName(uid),
+            amountCHF: reward.amountCHF,
+          });
+        }
+      }
+    } catch (e) {
+      console.error("[referral] hook récompense échoué :", e);
+    }
 
     return NextResponse.json({ ok: true, signed: newSignedDocs.length });
   } catch (e: any) {

@@ -78,3 +78,49 @@ export async function getReferralAmountCHF(atMs: number = Date.now()): Promise<n
 export function referralLink(code: string): string {
   return `https://creditx.ch/invite/${code}`;
 }
+
+/* =========================================================
+ * Enregistrement `referrals` (collection racine) — forme canonique :
+ *   { referrerUid, referrerCode, refereeUid, refereeName,
+ *     status: REGISTERED|REWARD_DUE|PAID|EXPIRED|CANCELLED,
+ *     amountCHF?, createdAt, updatedAt, expiresAt, rewardDueAt?, signedPlanId?, paidAt? }
+ * Créé à l'inscription du filleul (trigger moteur onReferralSignup). Mis à jour ici (signature)
+ * et par le cron d'expiration (moteur). expiresAt = createdAt + 20 j.
+ * =======================================================*/
+
+/**
+ * Passe la reco d'un filleul en RÉCOMPENSE DUE (il vient de signer un nouveau 3a). Montant FIGÉ
+ * à la signature (barème en vigueur). Idempotent : ne fait rien si pas de reco REGISTERED.
+ * Renvoie { referrerUid, refereeName, amountCHF, referralId } pour que l'appelant notifie, ou null.
+ */
+export async function markReferralRewardDue(
+  refereeUid: string,
+  signedPlanId?: string
+): Promise<{ referrerUid: string; refereeName: string | null; amountCHF: number; referralId: string } | null> {
+  const snap = await db
+    .collection("referrals")
+    .where("refereeUid", "==", refereeUid)
+    .where("status", "==", "REGISTERED")
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  const data = doc.data();
+  const amountCHF = await getReferralAmountCHF();
+  await doc.ref.set(
+    {
+      status: "REWARD_DUE",
+      amountCHF,
+      signedPlanId: signedPlanId ?? null,
+      rewardDueAt: Date.now(),
+      updatedAt: Date.now(),
+    },
+    { merge: true }
+  );
+  return {
+    referrerUid: data.referrerUid,
+    refereeName: (data.refereeName as string) ?? null,
+    amountCHF,
+    referralId: doc.id,
+  };
+}

@@ -109,7 +109,9 @@ export type AdminEvent =
   | "OFFER_SIGNED_BY_CLIENT"
   | "OFFER_REJECTED_BY_CLIENT"
   | "EXPERT_REVIEW_PAID"
-  | "TRANSFER_LETTER_SIGNED";
+  | "TRANSFER_LETTER_SIGNED"
+  | "NEW_REFERRAL_SIGNUP"
+  | "REFERRAL_REWARD_DUE";
 
 interface AdminEventTemplate {
   title: string;
@@ -160,6 +162,22 @@ const ADMIN_EVENTS: Record<AdminEvent, AdminEventTemplate> = {
     type: "success",
     actionUrl: "/admin/clients",
   },
+  NEW_REFERRAL_SIGNUP: {
+    title: "Nouveau filleul inscrit",
+    content: (c) =>
+      `${c.clientName ?? "Un nouveau client"} s'est inscrit PAR RECOMMANDATION${c.referrerName ? ` (parrain : ${c.referrerName})` : ""}.`,
+    category: "SOUSCRIPTION",
+    type: "success",
+    actionUrl: "/admin/clients",
+  },
+  REFERRAL_REWARD_DUE: {
+    title: "Récompense parrainage à verser",
+    content: (c) =>
+      `${c.clientName ?? "Un filleul"} a signé un 3a par recommandation → ${c.amountCHF ?? 80} CHF à verser au parrain${c.referrerName ? ` ${c.referrerName}` : ""}.`,
+    category: "PAIEMENT",
+    type: "success",
+    actionUrl: "/admin/clients",
+  },
 };
 
 export interface AdminNotifyContext {
@@ -168,6 +186,9 @@ export interface AdminNotifyContext {
   clientName?: string | null;
   institutionName?: string | null;
   planId?: string | null;
+  /** Parrainage : nom du parrain + montant de la récompense. */
+  referrerName?: string | null;
+  amountCHF?: number | null;
 }
 
 /**
