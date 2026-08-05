@@ -63,12 +63,15 @@ function hasNum(v: any): boolean {
 // Calque EXACT du reduce du web (CategoryPage.totals). On garde volontairement
 // les gardes `|| 0` autour des `Number(...)` (anti-NaN, cf. CLAUDE.md §2.2/§3).
 function computeTotals(plans: any[], clientAge: number): Totals {
-  // Comme le web : on n'agrège que les plans actifs (ni refusés, ni en attente).
+  // Comme l'app (isProposal = status "PROPOSITION") : on n'agrège que les plans EXISTANTS —
+  // ni refusés, ni en attente, ni PROPOSITIONS (brouillons d'offre CreditX, qui n'ont pas de
+  // champs de certificat → sinon détectés « inconnu » et pointés à tort par « À vérifier »).
   const active = plans.filter(
     (p) =>
       p.status !== "REJECTED_CLIENT" &&
       p.status !== "PENDING_CLIENT" &&
-      p.status !== "PENDING_INSURANCE"
+      p.status !== "PENDING_INSURANCE" &&
+      p.status !== "PROPOSITION"
   );
 
   // Suivi « connu / inconnu » pour EPL (tous les plans contribuent) et rachat (LPP seulement).
