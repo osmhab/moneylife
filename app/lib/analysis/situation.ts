@@ -165,7 +165,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   const planLabel = (p: any): string => {
     const t = String(p.type || "").toUpperCase();
     const inst = (p.institutionName || "").trim();
-    if (t.startsWith("LPP")) return inst || "LPP (2e pilier)";
+    if (t.startsWith("LPP")) return inst ? `2e pilier · ${inst}` : "LPP (2e pilier)";
     if (t.includes("EPARGNE")) return inst || "Épargne libre";
     if (t.includes("3B")) return inst ? `3b · ${inst}` : "3b";
     return inst ? `3a · ${inst}` : "3a";
