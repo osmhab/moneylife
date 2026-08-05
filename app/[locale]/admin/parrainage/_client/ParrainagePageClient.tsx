@@ -130,7 +130,7 @@ export default function ParrainagePageClient() {
                 <div className="min-w-0">
                   <div className="font-semibold">{d.parrain.name} <span className="text-slate-400 font-normal">← filleul {d.refereeName}</span></div>
                   <div className="text-sm text-slate-500 break-all">
-                    {d.parrain.method === "TWINT" ? `TWINT ${d.parrain.phone || "—"}` : `IBAN ${d.parrain.iban || "— (à demander)"}`}
+                    IBAN {d.parrain.iban || "— (à demander au parrain)"}
                     {d.parrain.email ? ` · ${d.parrain.email}` : ""}
                   </div>
                 </div>

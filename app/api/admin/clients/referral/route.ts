@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requireInternal } from "@/lib/server/requireInternal";
 import { db } from "@/lib/firebase/admin";
+import { ensureReferralCode } from "@/lib/server/referral";
 
 async function nameOf(uid: string): Promise<string> {
   const c = (await db.collection("clients").doc(uid).get()).data() || {};
@@ -23,6 +24,8 @@ export async function GET(req: NextRequest) {
     const uid = new URL(req.url).searchParams.get("uid");
     if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
 
+    // GARANTIT un code unique (réutilise l'existant, en crée un sinon) → source unique app/conseil.
+    const referralCode = await ensureReferralCode(uid);
     const c = (await db.collection("clients").doc(uid).get()).data() || {};
 
     // Recommandé par (parrain) ?
@@ -45,7 +48,7 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
     return NextResponse.json({
-      referralCode: (c.referralCode as string) || null,
+      referralCode,
       bank: {
         iban: (c.referralIban as string) || "",
         method: (c.referralPaymentMethod as string) || "",

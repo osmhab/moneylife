@@ -500,11 +500,9 @@ export default function AdminClientOverviewClient() {
               <CardContent className="space-y-3 text-sm">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <div className="text-xs text-muted-foreground">Coordonnées de versement</div>
+                    <div className="text-xs text-muted-foreground">IBAN (versement)</div>
                     <div className="font-medium break-all">
-                      {referral.bank?.method === "TWINT"
-                        ? (referral.bank?.phone ? `TWINT ${referral.bank.phone}` : "—")
-                        : (referral.bank?.iban || "— (non renseigné)")}
+                      {referral.bank?.iban || "— (non renseigné)"}
                     </div>
                   </div>
                   <div>

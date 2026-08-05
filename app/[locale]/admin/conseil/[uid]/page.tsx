@@ -3,13 +3,13 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "sonner";
 import { 
   Building2, UserCheck, ShieldCheck, Users, Target, 
   ChevronRight, ChevronLeft, Save, FileText, CheckCircle2, 
-  AlertTriangle, Loader2, Landmark, ShieldAlert, Heart, 
+  AlertTriangle, Loader2, ShieldAlert, Heart,
   TrendingUp, Wallet, Coins, Sparkles, Smartphone, X, Plus, Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -114,6 +114,20 @@ export default function AdminConseilPage() {
   // --- ÉTATS ORBITAUX DE L'ÉTAPE 5 (Toujours avant les returns conditionnels !) ---
   const [rotationAngle, setRotationAngle] = useState<number>(0);
   const [activeNodeId, setActiveNodeId] = useState<number | null>(null);
+  // Parrainage : code GARANTI serveur (réutilisé, jamais réécrit) + qui a recommandé ce client.
+  const [refInfo, setRefInfo] = useState<{ referralCode?: string; referredBy?: { name: string } | null } | null>(null);
+
+  // Récupère le code de parrainage (garanti unique côté serveur) + le parrain éventuel.
+  useEffect(() => {
+    if (!uid) return;
+    (async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/admin/clients/referral?uid=${uid}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) setRefInfo(await res.json());
+      } catch { /* non bloquant */ }
+    })();
+  }, [uid]);
 
   // 1. Récupération initiale des données
   useEffect(() => {
@@ -216,10 +230,23 @@ export default function AdminConseilPage() {
     setIsSaving(true);
     const toastId = toast.loading("Scellement du dossier en cours...");
     try {
-      // Génération du code de parrainage unique (Ex: REF-DUPONT-9A4B)
-      const baseName = clientForm.Enter_nom ? clientForm.Enter_nom.substring(0, 6).toUpperCase().replace(/[^A-Z]/g, '') : "CLIENT";
-      const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
-      const newRefCode = `REF-${baseName}-${randomPart}`;
+      // Code de parrainage : GARANTI UNIQUE côté serveur (réutilise l'existant, ne l'écrase
+      // JAMAIS — sinon on casserait les liens invitedBy déjà posés). Repli local rare si offline.
+      let newRefCode = refInfo?.referralCode || "";
+      let ensuredByServer = !!newRefCode;
+      if (!newRefCode) {
+        try {
+          const token = await auth.currentUser?.getIdToken();
+          const r = await fetch(`/api/admin/clients/referral?uid=${uid}`, { headers: { Authorization: `Bearer ${token}` } });
+          const j = await r.json();
+          newRefCode = j?.referralCode || "";
+          ensuredByServer = !!newRefCode;
+        } catch { /* repli ci-dessous */ }
+      }
+      if (!newRefCode) {
+        const baseName = clientForm.Enter_nom ? clientForm.Enter_nom.substring(0, 6).toUpperCase().replace(/[^A-Z]/g, '') : "CLIENT";
+        newRefCode = `REF-${baseName}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      }
       setReferralCode(newRefCode);
 
       // 1. Sauvegarde du Snapshot Immuable (Historique du RDV)
@@ -233,11 +260,10 @@ export default function AdminConseilPage() {
         referralCode: newRefCode
       });
 
-      // 2. Mise à jour de la fiche client principale (Base de données globale)
+      // 2. Mise à jour de la fiche client principale. On n'écrit `referralCode` QUE si le serveur
+      // ne l'a pas déjà garanti (repli offline). Coordonnées de versement : IBAN uniquement.
       await setDoc(doc(db, "clients", uid as string), {
-        referralCode: newRefCode,
-        referralPaymentMethod: clientForm.Enter_referralPaymentMethod || "",
-        referralPhone: clientForm.Enter_referralPhone || "",
+        ...(ensuredByServer ? {} : { referralCode: newRefCode }),
         referralIban: clientForm.Enter_referralIban || ""
       }, { merge: true });
 
@@ -392,6 +418,11 @@ export default function AdminConseilPage() {
             <h2 className="text-xl font-black tracking-tighter text-slate-900">
               Conseil : {clientForm.Enter_prenom} {clientForm.Enter_nom}
             </h2>
+            {refInfo?.referredBy && (
+              <span className="inline-block mt-1 rounded-full bg-amber-100 text-amber-900 text-[11px] font-bold px-2.5 py-0.5">
+                🎁 Client venu par recommandation de {refInfo.referredBy.name}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -1072,58 +1103,9 @@ export default function AdminConseilPage() {
                         </p>
                       </div>
 
-                      <div className="pt-6 border-t border-blue-100/80 space-y-4">
-                        <h5 className="text-xs font-black text-blue-600 uppercase tracking-widest">Où verser vos primes ?</h5>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <label className={`relative p-4 rounded-2xl border-2 cursor-pointer transition-all ${clientForm.Enter_referralPaymentMethod === 'TWINT' ? 'border-blue-600 bg-white shadow-sm' : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50'}`}>
-                            <input type="radio" name="payment" value="TWINT" checked={clientForm.Enter_referralPaymentMethod === 'TWINT'} onChange={e => { 
-                              const phoneToSave = clientForm.Enter_referralPhone || clientForm.Enter_telephone;
-                              setClientForm({...clientForm, Enter_referralPaymentMethod: e.target.value, Enter_referralPhone: phoneToSave}); 
-                              handleFieldBlur("Enter_referralPaymentMethod", e.target.value); 
-                              if (!clientForm.Enter_referralPhone && phoneToSave) {
-                                handleFieldBlur("Enter_referralPhone", phoneToSave);
-                              }
-                            }} className="sr-only" />
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${clientForm.Enter_referralPaymentMethod === 'TWINT' ? 'bg-blue-50 text-blue-600' : 'bg-slate-200 text-slate-500'}`}>
-                                <Smartphone size={18} />
-                              </div>
-                              <div>
-                                <p className="font-black text-sm text-slate-900">TWINT</p>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Immédiat</p>
-                              </div>
-                            </div>
-                          </label>
-
-                          <label className={`relative p-4 rounded-2xl border-2 cursor-pointer transition-all ${clientForm.Enter_referralPaymentMethod === 'IBAN' ? 'border-blue-600 bg-white shadow-sm' : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50'}`}>
-                            <input type="radio" name="payment" value="IBAN" checked={clientForm.Enter_referralPaymentMethod === 'IBAN'} onChange={e => { setClientForm({...clientForm, Enter_referralPaymentMethod: e.target.value}); handleFieldBlur("Enter_referralPaymentMethod", e.target.value); }} className="sr-only" />
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${clientForm.Enter_referralPaymentMethod === 'IBAN' ? 'bg-blue-50 text-blue-600' : 'bg-slate-200 text-slate-500'}`}>
-                                <Landmark size={18} />
-                              </div>
-                              <div>
-                                <p className="font-black text-sm text-slate-900">Virement</p>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Bancaire</p>
-                              </div>
-                            </div>
-                          </label>
-                        </div>
-
-                        <AnimatePresence mode="popLayout">
-                          {clientForm.Enter_referralPaymentMethod === 'TWINT' && (
-                            <motion.div key="twint-field" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-1.5 pt-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Numéro de téléphone TWINT</label>
-                              <input type="tel" value={clientForm.Enter_referralPhone} onChange={e => setClientForm({...clientForm, Enter_referralPhone: e.target.value})} onBlur={e => handleFieldBlur("Enter_referralPhone", e.target.value)} placeholder="Ex: 079 123 45 67" className="w-full px-5 py-3 rounded-xl border border-blue-200 bg-white font-black text-sm outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10 text-slate-800 transition-all" />
-                            </motion.div>
-                          )}
-                          {clientForm.Enter_referralPaymentMethod === 'IBAN' && (
-                            <motion.div key="iban-field" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-1.5 pt-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Coordonnées bancaires (IBAN)</label>
-                              <input type="text" value={clientForm.Enter_referralIban} onChange={e => setClientForm({...clientForm, Enter_referralIban: e.target.value})} onBlur={e => handleFieldBlur("Enter_referralIban", e.target.value)} placeholder="Ex: CH93 0000 0000 0000 0000 0" className="w-full px-5 py-3 rounded-xl border border-blue-200 bg-white font-black text-sm outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10 text-slate-800 uppercase transition-all" />
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                      <div className="pt-6 border-t border-blue-100/80 space-y-3">
+                        <h5 className="text-xs font-black text-blue-600 uppercase tracking-widest">Coordonnées bancaires (IBAN) pour vos récompenses</h5>
+                        <input type="text" value={clientForm.Enter_referralIban} onChange={e => setClientForm({...clientForm, Enter_referralIban: e.target.value})} onBlur={e => handleFieldBlur("Enter_referralIban", e.target.value)} placeholder="Ex: CH93 0000 0000 0000 0000 0" className="w-full px-5 py-3 rounded-xl border border-blue-200 bg-white font-black text-sm outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10 text-slate-800 uppercase transition-all" />
                       </div>
                     </div>
                   </div>
