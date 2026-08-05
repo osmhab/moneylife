@@ -22,6 +22,11 @@ import { computeLPPProjectionRetraite } from "@/lib/calculs/lpp";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+// Statut d'un champ « à vérifier » : hidden = non applicable à la catégorie ; known = valeur
+// connue (même 0) → on l'affiche ; unknown = jamais captée (champ absent) → l'app affiche
+// « À vérifier » (tap → ouvre le plan concerné à la hauteur du champ).
+type FieldStatus = "hidden" | "known" | "unknown";
+
 type Totals = {
   current: number;
   capital65: number;
@@ -30,6 +35,10 @@ type Totals = {
   rachat: number;
   invalidite: number;
   deces: number;
+  eplStatus: FieldStatus;
+  rachatStatus: FieldStatus;
+  eplPlanId: string | null;    // plan à ouvrir pour renseigner l'EPL (si unknown)
+  rachatPlanId: string | null; // plan à ouvrir pour renseigner le rachat (si unknown)
 };
 
 const EMPTY: Totals = {
@@ -40,7 +49,16 @@ const EMPTY: Totals = {
   rachat: 0,
   invalidite: 0,
   deces: 0,
+  eplStatus: "hidden",
+  rachatStatus: "hidden",
+  eplPlanId: null,
+  rachatPlanId: null,
 };
+
+/** Vrai si la valeur a été CAPTÉE (nombre fini, y compris 0). Absent/null/"" = non connu. */
+function hasNum(v: any): boolean {
+  return v !== undefined && v !== null && v !== "" && Number.isFinite(Number(v));
+}
 
 // Calque EXACT du reduce du web (CategoryPage.totals). On garde volontairement
 // les gardes `|| 0` autour des `Number(...)` (anti-NaN, cf. CLAUDE.md §2.2/§3).
@@ -53,7 +71,11 @@ function computeTotals(plans: any[], clientAge: number): Totals {
       p.status !== "PENDING_INSURANCE"
   );
 
-  return active.reduce((acc: Totals, p: any) => {
+  // Suivi « connu / inconnu » pour EPL (tous les plans contribuent) et rachat (LPP seulement).
+  let eplContrib = false, eplAllKnown = true, eplUnknownId: string | null = null;
+  let rachatLPP = false, rachatAllKnown = true, rachatUnknownId: string | null = null;
+
+  const acc = active.reduce((acc: Totals, p: any) => {
     const d = p.data || {};
     const isLPP = p.type === "LPP_BASE";
     const isBank = p.type === "PILIER_3A_BANK" || p.type === "3A_BANQUE";
@@ -74,6 +96,11 @@ function computeTotals(plans: any[], clientAge: number): Totals {
       acc.invalidite += Number(d.Enter_renteInvaliditeMaladie) || 0;
       // Capital décès = "plus rente" + capital INDÉPENDANT (versé toujours, en plus).
       acc.deces += (Number(d.Enter_CapitalPlusRenteMal) || 0) + (Number(d.Enter_CapitalDecesIndependantMal) || 0);
+      // Connu ? (EPL + rachat LPP, via les champs du certificat)
+      eplContrib = true;
+      if (!hasNum(d.Enter_lppEPLPossible)) { eplAllKnown = false; if (!eplUnknownId) eplUnknownId = p.id; }
+      rachatLPP = true;
+      if (!hasNum(d.Enter_lppRachatPossible)) { rachatAllKnown = false; if (!rachatUnknownId) rachatUnknownId = p.id; }
     } else {
       acc.current += Number(d.valeurRachatActuelle) || Number(d.soldeActuel) || 0;
       // Priorité à la projection AFFICHÉE (projection assureur, ou capital retraite
@@ -95,10 +122,21 @@ function computeTotals(plans: any[], clientAge: number): Totals {
       } else {
         acc.deces += computeDeathBenefitAssurance(d);
       }
+      // EPL 3e = valeur de rachat (assurance) / solde (banque/cash). Rachat non applicable (abandonné).
+      eplContrib = true;
+      const eplKey = isBank || isCash ? "soldeActuel" : "valeurRachatActuelle";
+      if (!hasNum(d[eplKey])) { eplAllKnown = false; if (!eplUnknownId) eplUnknownId = p.id; }
     }
 
     return acc;
   }, { ...EMPTY });
+
+  // hidden = aucun plan contributeur ; sinon known (tout capté) / unknown (au moins un absent).
+  acc.eplStatus = eplContrib ? (eplAllKnown ? "known" : "unknown") : "hidden";
+  acc.eplPlanId = eplAllKnown ? null : eplUnknownId;
+  acc.rachatStatus = rachatLPP ? (rachatAllKnown ? "known" : "unknown") : "hidden";
+  acc.rachatPlanId = rachatAllKnown ? null : rachatUnknownId;
+  return acc;
 }
 
 // Âge client depuis Enter_dateNaissance "jj.mm.aaaa" (défaut 35, comme le web).
