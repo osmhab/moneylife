@@ -1,0 +1,63 @@
+// app/api/referral/summary/route.ts
+// Tout ce dont l'écran « Recommandation » iOS a besoin : code + lien, montant en vigueur,
+// coordonnées de versement (pré-remplies), et la liste des filleuls (inscrits via le lien).
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/server/requireAuth";
+import { db } from "@/lib/firebase/admin";
+import { ensureReferralCode, getReferralAmountCHF, referralLink } from "@/lib/server/referral";
+
+export async function GET(req: NextRequest) {
+  let uid: string;
+  try {
+    ({ uid } = await requireAuth(req));
+  } catch {
+    return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+  }
+
+  try {
+    const code = await ensureReferralCode(uid);
+
+    const [clientSnap, dpSnap, amountCHF] = await Promise.all([
+      db.collection("clients").doc(uid).get(),
+      db.doc(`clients/${uid}/DonneePersonnelles/current`).get(),
+      getReferralAmountCHF(),
+    ]);
+    const c = clientSnap.data() || {};
+    const dp = dpSnap.data() || {};
+
+    // Filleuls : comptes inscrits avec CE code (invitedBy). Statut affiné en Phase 3 (récompense).
+    const refereesSnap = await db.collection("clients").where("invitedBy", "==", code).get();
+    const referees = refereesSnap.docs.map((d) => {
+      const r = d.data() || {};
+      const name =
+        [r.firstName, r.lastName].filter(Boolean).join(" ").trim() ||
+        (r.displayName as string) ||
+        (r.email as string) ||
+        "Filleul";
+      return {
+        name,
+        status: "REGISTERED",
+        createdAt: Number(r.createdAt) || null,
+      };
+    });
+
+    return NextResponse.json({
+      code,
+      link: referralLink(code),
+      amountCHF,
+      payout: {
+        prenom: (dp.Enter_prenom as string) || (c.firstName as string) || "",
+        nom: (dp.Enter_nom as string) || (c.lastName as string) || "",
+        iban: (c.referralIban as string) || "",
+        method: (c.referralPaymentMethod as string) || "IBAN",
+        phone: (c.referralPhone as string) || "",
+      },
+      referees,
+    });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Erreur serveur" }, { status: 500 });
+  }
+}
