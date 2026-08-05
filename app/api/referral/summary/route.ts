@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { db } from "@/lib/firebase/admin";
-import { ensureReferralCode, getReferralAmountCHF, referralLink } from "@/lib/server/referral";
+import { ensureReferralCode, referralLink, DEFAULT_REWARD_CHF } from "@/lib/server/referral";
 
 export async function GET(req: NextRequest) {
   let uid: string;
@@ -20,13 +20,22 @@ export async function GET(req: NextRequest) {
   try {
     const code = await ensureReferralCode(uid);
 
-    const [clientSnap, dpSnap, amountCHF] = await Promise.all([
+    const [clientSnap, dpSnap, settingsSnap] = await Promise.all([
       db.collection("clients").doc(uid).get(),
       db.doc(`clients/${uid}/DonneePersonnelles/current`).get(),
-      getReferralAmountCHF(),
+      db.doc("referralSettings/current").get(),
     ]);
     const c = clientSnap.data() || {};
     const dp = dpSnap.data() || {};
+
+    // Barème + promo (pour le compte à rebours « Termine dans X jours » façon Revolut).
+    const s = settingsSnap.data() || {};
+    const base = Number(s.amountCHF) || DEFAULT_REWARD_CHF;
+    const promoAmt = Number(s.promoAmountCHF) || 0;
+    const promoUntil = Number(s.promoUntil) || 0;
+    const promoActive = promoAmt > 0 && promoUntil > Date.now();
+    const amountCHF = promoActive ? promoAmt : base;
+    const promoDaysLeft = promoActive ? Math.max(1, Math.ceil((promoUntil - Date.now()) / 86400000)) : null;
 
     // Filleuls : comptes inscrits avec CE code (invitedBy). Statut affiné en Phase 3 (récompense).
     const refereesSnap = await db.collection("clients").where("invitedBy", "==", code).get();
@@ -48,6 +57,7 @@ export async function GET(req: NextRequest) {
       code,
       link: referralLink(code),
       amountCHF,
+      promoDaysLeft,
       payout: {
         prenom: (dp.Enter_prenom as string) || (c.firstName as string) || "",
         nom: (dp.Enter_nom as string) || (c.lastName as string) || "",
