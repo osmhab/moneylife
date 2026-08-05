@@ -62,6 +62,7 @@ type ClientRow = {
   status?: string; // active | archived | deleted
   createdAt?: number;
   updatedAt?: number;
+  referred?: boolean; // venu par recommandation
   hasDonneesPersonnelles: boolean;
 };
 
@@ -630,6 +631,11 @@ export default function ClientsCrmPageClient() {
                             {displayName}
                           </div>
                           {statusBadge(c.status)}
+                          {c.referred && (
+                            <span className="shrink-0 rounded-full bg-amber-100 text-amber-900 text-[10px] font-semibold px-2 py-0.5">
+                              🎁 Recommandé
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground truncate">
                           {c.email || "—"}{" "}

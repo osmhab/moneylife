@@ -56,6 +56,17 @@ type SignedDoc = {
   pdfPath: string;
 };
 
+const REF_STATUS_LABELS: Record<string, string> = {
+  REGISTERED: "Inscrit",
+  REWARD_DUE: "À verser",
+  PAID: "Versé",
+  EXPIRED: "Expiré",
+  CANCELLED: "Annulé",
+};
+function refStatusLabel(s: string): string {
+  return REF_STATUS_LABELS[s] || s;
+}
+
 function formatTs(ts: number | null) {
   if (!ts || !Number.isFinite(ts)) return "—";
   try {
@@ -87,6 +98,9 @@ export default function AdminClientOverviewClient() {
   const [data, setData] = useState<OverviewPayload | null>(null);
   const [signedDocs, setSignedDocs] = useState<SignedDoc[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // Parrainage (recommandé par / filleuls / coordonnées bancaires)
+  const [referral, setReferral] = useState<any>(null);
 
   // États Notes
   const [metaLoading, setMetaLoading] = useState(true);
@@ -211,6 +225,18 @@ export default function AdminClientOverviewClient() {
     }
   };
 
+  const fetchReferral = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const url = new URL("/api/admin/clients/referral", window.location.origin);
+      url.searchParams.set("uid", uid);
+      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setReferral(await res.json());
+    } catch { /* non bloquant */ }
+  };
+
   const saveNotes = async () => {
     try {
       setNotesSaving(true);
@@ -268,6 +294,7 @@ export default function AdminClientOverviewClient() {
     fetchOverview();
     fetchMeta();
     fetchSignedDocs();
+    fetchReferral();
   }, [uid]);
 
   const dp = data?.donneesPersonnelles;
@@ -286,8 +313,13 @@ export default function AdminClientOverviewClient() {
               <UserRound className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <div className="text-lg font-semibold truncate">
+              <div className="text-lg font-semibold truncate flex items-center gap-2">
                 {loading ? "Chargement…" : displayName}
+                {referral?.referredBy && (
+                  <Badge className="rounded-full bg-amber-100 text-amber-900 hover:bg-amber-100">
+                    🎁 Recommandé par {referral.referredBy.name}
+                  </Badge>
+                )}
               </div>
               <div className="text-xs text-muted-foreground font-mono truncate">{uid}</div>
             </div>
@@ -458,6 +490,49 @@ export default function AdminClientOverviewClient() {
               )}
             </CardContent>
           </Card>
+
+          {/* CARTE : PARRAINAGE */}
+          {referral && (referral.referralCode || referral.bank?.iban || referral.bank?.phone || (referral.referees?.length ?? 0) > 0) && (
+            <Card className="rounded-2xl border-amber-100">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">🎁 Parrainage</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Coordonnées de versement</div>
+                    <div className="font-medium break-all">
+                      {referral.bank?.method === "TWINT"
+                        ? (referral.bank?.phone ? `TWINT ${referral.bank.phone}` : "—")
+                        : (referral.bank?.iban || "— (non renseigné)")}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Code de parrainage</div>
+                    <div className="font-mono font-medium">{referral.referralCode || "—"}</div>
+                  </div>
+                </div>
+                <Separator />
+                <div>
+                  <div className="text-xs text-muted-foreground mb-2">Filleuls ({referral.referees?.length ?? 0})</div>
+                  {(referral.referees?.length ?? 0) === 0 ? (
+                    <div className="text-muted-foreground">Aucun filleul pour le moment.</div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {referral.referees.map((r: any) => (
+                        <div key={r.id} className="flex items-center justify-between">
+                          <span className="font-medium">{r.name}</span>
+                          <Badge variant="secondary" className="rounded-full text-[10px]">
+                            {refStatusLabel(r.status)}{r.amountCHF ? ` · ${r.amountCHF} CHF` : ""}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* SIDEBAR : ACTIONS */}

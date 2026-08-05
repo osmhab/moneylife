@@ -38,6 +38,7 @@ type ClientRow = {
   status?: string;
   createdAt?: number;
   updatedAt?: number;
+  referred?: boolean;
 
   hasDonneesPersonnelles: boolean;
 };
@@ -83,6 +84,9 @@ export async function GET(req: Request) {
           status: root?.status,
           createdAt: root?.createdAt,
           updatedAt: root?.updatedAt,
+
+          // Parrainage : ce client est-il venu PAR RECOMMANDATION ? (badge liste)
+          referred: !!root?.referredBy,
 
           hasDonneesPersonnelles: !!dpSnap.exists,
         };
