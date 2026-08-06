@@ -14,6 +14,7 @@ export default function ParrainagePageClient() {
   const [currentAmount, setCurrentAmount] = useState(80);
   const [due, setDue] = useState<Due[]>([]);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [announcing, setAnnouncing] = useState(false);
 
   async function token() {
     const u = auth.currentUser;
@@ -56,6 +57,28 @@ export default function ParrainagePageClient() {
       toast.error("Erreur d'enregistrement");
     } finally {
       setSavingSettings(false);
+    }
+  }
+
+  async function announce() {
+    if (!window.confirm(
+      `Envoyer la promo (${currentAmount} CHF) à TOUS les clients ?\n` +
+      `Cela crée une notification in-app + un e-mail pour chaque client. Action irréversible.`
+    )) return;
+    setAnnouncing(true);
+    try {
+      const res = await fetch("/api/admin/parrainage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({ action: "announce" }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error || "Erreur");
+      toast.success(`Promo annoncée ✅ ${j.notified} notifications · ${j.emailed} e-mails${j.skipped ? ` · ${j.skipped} sans e-mail` : ""}`);
+    } catch (e: any) {
+      toast.error(e?.message || "Erreur d'envoi");
+    } finally {
+      setAnnouncing(false);
     }
   }
 
@@ -113,6 +136,22 @@ export default function ParrainagePageClient() {
         <button onClick={saveSettings} disabled={savingSettings}
           className="rounded-lg bg-black text-white px-4 py-2 text-sm font-semibold disabled:opacity-50">
           {savingSettings ? "Enregistrement…" : "Enregistrer le barème"}
+        </button>
+      </div>
+
+      {/* Annonce de la promo */}
+      <div className="rounded-2xl border bg-white p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">Annoncer la promo</h2>
+          <span className="text-sm text-slate-500">Prime en vigueur : <b className="text-slate-900">{currentAmount} CHF</b></span>
+        </div>
+        <p className="text-sm text-slate-500">
+          Envoie à <b>tous les clients</b> une notification in-app + un e-mail (avec visuel) annonçant
+          la prime de recommandation actuelle{promoActive ? " (promo active)" : ""}. À déclencher une seule fois par campagne.
+        </p>
+        <button onClick={announce} disabled={announcing}
+          className="rounded-lg bg-black text-white px-4 py-2 text-sm font-semibold disabled:opacity-50">
+          {announcing ? "Envoi en cours…" : "Annoncer la promo à tous les clients"}
         </button>
       </div>
 

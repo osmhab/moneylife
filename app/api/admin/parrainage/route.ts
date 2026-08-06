@@ -7,8 +7,9 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requireInternal } from "@/lib/server/requireInternal";
 import { db } from "@/lib/firebase/admin";
-import { getReferralAmountCHF, DEFAULT_REWARD_CHF } from "@/lib/server/referral";
+import { getReferralAmountCHF, DEFAULT_REWARD_CHF, ensureReferralCode } from "@/lib/server/referral";
 import { notifyClient } from "@/lib/server/notify";
+import { sendCreditXReferralPromoEmail } from "lib/mail/creditx-mailer";
 
 async function clientBrief(uid: string) {
   const c = (await db.collection("clients").doc(uid).get()).data() || {};
@@ -96,6 +97,69 @@ export async function POST(req: NextRequest) {
         await ref.set({ status: "CANCELLED", updatedAt: Date.now() }, { merge: true });
       }
       return NextResponse.json({ ok: true });
+    }
+
+    // ── Annoncer la promo à TOUS les clients (notification in-app + e-mail) ──
+    // Déclenché manuellement depuis /admin/parrainage. Best-effort par client :
+    // un échec (e-mail invalide, etc.) n'interrompt pas la diffusion.
+    if (b.action === "announce") {
+      const settings = (await db.doc("referralSettings/current").get()).data() || {};
+      const amountCHF = await getReferralAmountCHF();
+      const promoUntil = Number(settings.promoUntil) || 0;
+
+      const clientsSnap = await db.collection("clients").get();
+      let notified = 0;
+      let emailed = 0;
+      let skipped = 0;
+
+      // Sériel (évite de saturer SendGrid / Firestore) — l'appel admin peut durer.
+      for (const doc of clientsSnap.docs) {
+        const uid = doc.id;
+        const c = doc.data() || {};
+        const email = (c.email as string) || "";
+
+        // Notification in-app (non bloquante).
+        await notifyClient({
+          uid,
+          title: `Parrainez un ami · ${Math.round(amountCHF)} CHF 🎁`,
+          content:
+            `Votre prime de recommandation passe à ${Math.round(amountCHF)} CHF par ami parrainé.` +
+            (promoUntil > Date.now()
+              ? ` Offre valable jusqu'au ${new Date(promoUntil).toLocaleDateString("fr-CH")}.`
+              : "") +
+            ` Partagez votre lien depuis « Recommandation ».`,
+          category: "PAIEMENT",
+          actionUrl: "/dashboard/prevoyance",
+        });
+        notified++;
+
+        if (!email) { skipped++; continue; }
+
+        // Prénom + code perso pour un e-mail personnalisé.
+        let firstName = "";
+        try {
+          const dp = (await db.doc(`clients/${uid}/DonneePersonnelles/current`).get()).data() || {};
+          firstName = (dp.Enter_prenom as string) || (c.firstName as string) || "";
+        } catch { /* best-effort */ }
+
+        let code = (c.referralCode as string) || "";
+        if (!code) { try { code = await ensureReferralCode(uid); } catch { /* ignore */ } }
+
+        try {
+          await sendCreditXReferralPromoEmail({
+            to: email,
+            firstName,
+            amountCHF,
+            promoUntil,
+            code: code || undefined,
+          });
+          emailed++;
+        } catch (e) {
+          console.error(`[parrainage/announce] e-mail échoué pour ${uid}:`, e);
+        }
+      }
+
+      return NextResponse.json({ ok: true, total: clientsSnap.size, notified, emailed, skipped });
     }
 
     return NextResponse.json({ error: "action inconnue" }, { status: 400 });

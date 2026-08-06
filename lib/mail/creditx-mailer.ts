@@ -1200,3 +1200,70 @@ export async function sendCreditXConseilClosedEmail(params: {
 
   await sgMail.send({ to: params.to, from, subject, html, text: subject });
 }
+// ✅ 12) ANNONCE PROMO PARRAINAGE (envoi manuel à tous les clients depuis /admin/parrainage)
+//
+// Annonce une prime de recommandation majorée (promo). Reprend la coquille CreditX + intègre
+// l'image de partage `public/images/sharing.jpg` (embarquée par URL, convention du repo).
+export async function sendCreditXReferralPromoEmail(params: {
+  to: string;
+  firstName?: string;
+  amountCHF: number;        // prime EN VIGUEUR (promo si active)
+  promoUntil?: number;      // epoch ms de fin de promo (0 = pas de deadline affichée)
+  code?: string;            // code de parrainage du client (lien direct) — facultatif
+  locale?: string;
+}) {
+  ensureSendgrid();
+  const from = { email: "noreply@creditx.ch", name: "CreditX" };
+  const locale = params.locale || "fr";
+  const baseUrl = appUrl();
+  const heroImg = `${baseUrl}/images/sharing.jpg`;
+
+  const prenom = params.firstName && params.firstName !== "Client" ? escapeHtml(params.firstName) : "";
+  const greeting = prenom ? `Bonjour ${prenom},` : "Bonjour,";
+  const montant = `${Math.round(params.amountCHF)} CHF`;
+  const deadlineStr =
+    params.promoUntil && params.promoUntil > Date.now()
+      ? new Date(params.promoUntil).toLocaleDateString("fr-CH", { day: "numeric", month: "long", year: "numeric" })
+      : "";
+
+  // CTA : ouvre l'espace (le client y retrouve son code + son lien de partage).
+  const ctaUrl = params.code
+    ? `https://creditx.ch/invite/${encodeURIComponent(params.code)}`
+    : `${baseUrl}/${locale}/dashboard/prevoyance`;
+
+  const subject = `🎁 Parrainez un ami et gagnez ${montant}`;
+
+  const bodyHtml = `
+    <div style="margin:0 0 28px 0; border-radius:20px; overflow:hidden; box-shadow:0 8px 20px rgba(0,0,0,0.08);">
+      <img src="${heroImg}" alt="Parrainage CreditX" width="100%" style="display:block; width:100%; max-width:100%; height:auto; object-fit:cover;"/>
+    </div>
+
+    <p style="margin:0 0 16px 0;">${greeting}</p>
+
+    <p style="margin:0 0 16px 0;">
+      Bonne nouvelle : votre prime de recommandation passe à
+      <strong style="color:#0f172a;">${montant} par ami</strong> parrainé.
+      ${deadlineStr ? `Offre valable jusqu'au <strong>${deadlineStr}</strong>.` : ""}
+    </p>
+
+    <div style="background:#f8fafc; border:1px solid #eef2f7; border-radius:16px; padding:20px 22px; margin:8px 0 24px 0;">
+      <p style="margin:0 0 12px 0; font-size:13px; font-weight:900; text-transform:uppercase; letter-spacing:0.05em; color:#0f172a;">Comment ça marche</p>
+      <p style="margin:0 0 8px 0; font-size:15px; color:#475569;"><strong>1.</strong> Partagez votre lien personnel de parrainage.</p>
+      <p style="margin:0 0 8px 0; font-size:15px; color:#475569;"><strong>2.</strong> Votre ami crée son compte et souscrit un 3e pilier.</p>
+      <p style="margin:0; font-size:15px; color:#475569;"><strong>3.</strong> Vous recevez <strong>${montant}</strong>. Sans limite de filleuls.</p>
+    </div>
+
+    <p style="margin:0; font-size:14px; color:#64748b;">
+      Retrouvez votre lien de parrainage dans votre espace CreditX, rubrique « Recommandation ».
+    </p>
+  `;
+
+  const html = renderCreditXShell({
+    title: `Gagnez ${montant} par ami`,
+    bodyHtml,
+    ctaLabel: "Recommander un ami",
+    ctaUrl,
+  });
+
+  await sgMail.send({ to: params.to, from, subject, html, text: subject });
+}
