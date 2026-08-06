@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { db } from "@/lib/firebase/admin";
 
-type Body = { iban?: string; method?: "IBAN" | "TWINT"; phone?: string };
+type Body = { prenom?: string; nom?: string; iban?: string; npa?: string; localite?: string };
 
 export async function POST(req: NextRequest) {
   let uid: string;
@@ -19,9 +19,11 @@ export async function POST(req: NextRequest) {
   try {
     const b = (await req.json()) as Body;
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    if (typeof b.prenom === "string") patch.referralPrenom = b.prenom.trim();
+    if (typeof b.nom === "string") patch.referralNom = b.nom.trim();
     if (typeof b.iban === "string") patch.referralIban = b.iban.trim().toUpperCase().replace(/\s+/g, "");
-    if (b.method === "IBAN" || b.method === "TWINT") patch.referralPaymentMethod = b.method;
-    if (typeof b.phone === "string") patch.referralPhone = b.phone.trim();
+    if (typeof b.npa === "string") patch.referralNpa = b.npa.trim();
+    if (typeof b.localite === "string") patch.referralLocalite = b.localite.trim();
     await db.collection("clients").doc(uid).set(patch, { merge: true });
     return NextResponse.json({ ok: true });
   } catch (e: any) {

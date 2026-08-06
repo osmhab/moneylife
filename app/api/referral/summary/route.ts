@@ -59,11 +59,12 @@ export async function GET(req: NextRequest) {
       amountCHF,
       promoDaysLeft,
       payout: {
-        prenom: (dp.Enter_prenom as string) || (c.firstName as string) || "",
-        nom: (dp.Enter_nom as string) || (c.lastName as string) || "",
+        // Pré-remplissage : valeur déjà saisie pour le versement, sinon le profil.
+        prenom: (c.referralPrenom as string) || (dp.Enter_prenom as string) || (c.firstName as string) || "",
+        nom: (c.referralNom as string) || (dp.Enter_nom as string) || (c.lastName as string) || "",
         iban: (c.referralIban as string) || "",
-        method: (c.referralPaymentMethod as string) || "IBAN",
-        phone: (c.referralPhone as string) || "",
+        npa: (c.referralNpa as string) || (dp.Enter_npa != null ? String(dp.Enter_npa) : ""),
+        localite: (c.referralLocalite as string) || (dp.Enter_localite as string) || "",
       },
       referees,
     });
