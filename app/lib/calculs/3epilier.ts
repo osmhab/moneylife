@@ -122,7 +122,7 @@ export const EPARGNE_LIBRE_SAVINGS_RATE = 0;
  *    (mêmes taux que le 3a investi).
  */
 export function computeProjectionsEpargneLibre(
-  data: Data3aBanque & { epargneKind?: string; epargneHorizon?: string },
+  data: Data3aBanque & { epargneKind?: string; epargneHorizon?: string; epargneHorizonAnnee?: number },
   clientAge: number
 ): number {
   // COURT TERME (argent utilisé dans l'année) → aucune projection retraite possible.
@@ -135,7 +135,12 @@ export function computeProjectionsEpargneLibre(
   // change le support a posteriori sans mettre à jour isInvesti.
   const invested = epargneKind !== undefined ? epargneKind !== "compte" : !!isInvesti;
   const r = invested ? getRate(true, profil) : EPARGNE_LIBRE_SAVINGS_RATE;
-  const n = Math.max(0, 65 - clientAge);
+  // Horizon de capitalisation (années) : « Autre » = jusqu'à l'année d'échéance choisie ;
+  // sinon (retraite / ancien « long ») = jusqu'à 65 ans.
+  const n =
+    data.epargneHorizon === "autre" && data.epargneHorizonAnnee
+      ? Math.max(0, Math.round(data.epargneHorizonAnnee) - new Date().getFullYear())
+      : Math.max(0, 65 - clientAge);
   if (n === 0) return Math.round(soldeActuel);
 
   const isAnnuel = occurrence === "annee";

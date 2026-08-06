@@ -239,7 +239,8 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
     const d = p.data || {};
     const t = String(p.type || "").toUpperCase();
     // Épargne libre COURT TERME → pas projetable pour la retraite (mais reste cash décès/logement).
-    if (t.includes("EPARGNE") && d.epargneHorizon === "court") continue;
+    // Épargne à horizon COURT ou AUTRE (objectif daté ≠ retraite) → pas une source retraite.
+    if (t.includes("EPARGNE") && (d.epargneHorizon === "court" || d.epargneHorizon === "autre")) continue;
     const capital = parseAmount(d.capitalRetraiteProjete || d.capitalRetraiteGlobal || d.soldeActuel || d.montant || 0);
     if (capital <= 0) continue;
     const alloc = allocOf(p);
