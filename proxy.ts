@@ -2,7 +2,9 @@ import createMiddleware from 'next-intl/middleware';
 import { NextRequest } from 'next/server';
 
 const intlMiddleware = createMiddleware({
-  locales: ['fr', 'de'],
+  // en/it : traductions partielles (page de confidentialité App Store) — le reste
+  // retombe sur le FR via i18n.ts. Doit rester aligné avec `locales` de i18n.ts.
+  locales: ['fr', 'de', 'en', 'it'],
   defaultLocale: 'fr',
   localePrefix: 'always'
 });
