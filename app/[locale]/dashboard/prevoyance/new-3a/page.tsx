@@ -11,9 +11,19 @@ import {
   Leaf, Flame 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AppOnlyScreen } from "@/app-components/AppOnly";
 
 // 👈 NOUVEAU : Import de la traduction
 import { useTranslations } from "next-intl";
+
+// Optimiser sa prévoyance = fonctionnalité RÉSERVÉE À L'APP côté client.
+// L'outil conseiller (admin) réutilise le même composant → on ne gate QUE le client.
+export default function New3aWizard() {
+  const pathname = usePathname();
+  const isAdmin = pathname.includes("/admin/client");
+  if (!isAdmin) return <AppOnlyScreen feature="optimise" />;
+  return <New3aWizardInner />;
+}
 
 // --- TYPES ---
 type WizardData = {
@@ -27,7 +37,7 @@ type WizardData = {
 const PLAFOND_ANNUEL = 7258;
 const MAX_MENSUEL = Math.floor(PLAFOND_ANNUEL / 12);
 
-export default function New3aWizard() {
+function New3aWizardInner() {
   // 👈 NOUVEAU : Initialisation de useTranslations
   const t = useTranslations("New3aWizard");
 

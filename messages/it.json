@@ -67,5 +67,13 @@
     "section7_p2": "Per esercitare i vostri diritti in modo semplice e rapido, contattate il nostro responsabile della protezione dei dati tramite:",
     "section8_title": "8. Modifiche",
     "section8_p": "La presente informativa sulla privacy può essere aggiornata in qualsiasi momento per riflettere gli sviluppi legali o tecnici. La versione pubblicata sul sito fa sempre fede."
+  },
+  "AppOnly": {
+    "title": "Disponibile nell'app CreditX",
+    "scan": "La scansione e l'aggiunta di documenti avvengono nell'app CreditX.",
+    "optimise": "L'ottimizzazione della tua previdenza avviene nell'app CreditX.",
+    "vault": "La tua cassaforte di documenti è disponibile nell'app CreditX.",
+    "hint": "Scarica l'app per continuare.",
+    "back": "Indietro"
   }
 }

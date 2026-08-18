@@ -16,6 +16,7 @@ import { useTranslations } from "next-intl";
 
 import DocumentCropper from "../_components/DocumentCropper";
 import UploadSourceDrawer from "../_components/UploadSourceDrawer";
+import { AppOnlyModal } from "@/app-components/AppOnly";
 
 
 // Import de la logique de calcul
@@ -36,6 +37,8 @@ export function AddInsurancePlanView({ onClose, adminUid, replacePlanId }: { onC
   const [showLiveScanner, setShowLiveScanner] = useState(false);
   const [fileToCrop, setFileToCrop] = useState<File | null>(null);
   const [isSourceOpen, setIsSourceOpen] = useState(false);
+  // Scan/upload d'un document = RÉSERVÉ À L'APP côté client (admin conservé).
+  const [showScanAppOnly, setShowScanAppOnly] = useState(false);
 
   // 👈 NOUVEAU : Fonction dédiée à la caméra native
   const handleNativeCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -588,13 +591,15 @@ export function AddInsurancePlanView({ onClose, adminUid, replacePlanId }: { onC
         onClose={() => setIsSourceOpen(false)} 
         onSourceSelect={(source) => {
           setIsSourceOpen(false);
+          if (!adminUid) { setShowScanAppOnly(true); return; } // client → app only
           if (source === "camera") {
             scannerInputRef.current?.click(); // Vraie caméra HD
           } else {
             fileInputRef.current?.click(); // Explorateur de fichiers pour les PDF / Galerie
           }
-        }} 
+        }}
       />
+      <AppOnlyModal open={showScanAppOnly} onOpenChange={setShowScanAppOnly} feature="scan" />
     </div>
   );
 }

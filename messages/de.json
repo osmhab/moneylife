@@ -1685,5 +1685,13 @@
     "footer": "Sichere CreditX-Freigabe. Geben Sie Ihren Code niemals an Dritte weiter.",
     "method_email": "E-Mail",
     "method_sms": "SMS"
+  },
+  "AppOnly": {
+    "title": "In der CreditX-App verfügbar",
+    "scan": "Das Scannen und Hinzufügen von Dokumenten erfolgt in der CreditX-App.",
+    "optimise": "Die Optimierung Ihrer Vorsorge erfolgt in der CreditX-App.",
+    "vault": "Ihr Dokumententresor ist in der CreditX-App verfügbar.",
+    "hint": "Laden Sie die App herunter, um fortzufahren.",
+    "back": "Zurück"
   }
 }

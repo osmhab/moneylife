@@ -23,6 +23,9 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "CreditX",
   description: "La prévoyance intelligente",
+  // Bandeau natif Safari iOS « Télécharger dans l'App Store » (Smart App Banner),
+  // affiché sur toutes les pages. app-id = fiche App Store CreditX.
+  itunes: { appId: "6793468363" },
 };
 
 export const viewport = { themeColor: "#0b1d33" };

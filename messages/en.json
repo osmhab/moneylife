@@ -67,5 +67,13 @@
     "section7_p2": "To exercise your rights simply and quickly, contact our data protection officer via:",
     "section8_title": "8. Amendments",
     "section8_p": "This privacy policy may be updated at any time to reflect legal or technical developments. The version published on the site always prevails."
+  },
+  "AppOnly": {
+    "title": "Available in the CreditX app",
+    "scan": "Scanning and adding documents is done in the CreditX app.",
+    "optimise": "Optimising your pension is done in the CreditX app.",
+    "vault": "Your document vault is available in the CreditX app.",
+    "hint": "Download the app to continue.",
+    "back": "Back"
   }
 }

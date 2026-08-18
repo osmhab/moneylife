@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { useRouter, useParams, useSearchParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Loader2, Sparkles, Flame, Leaf, RotateCcw, Info, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,15 @@ import { useTranslations } from "next-intl";
 
 import SubscriptionWizardDrawer from "../../_components/SubscriptionWizardDrawer";
 import { floorRenteIGMensuelle, computeNew3aOffer } from "@/lib/analysis/new3a";
+import { AppOnlyScreen } from "@/app-components/AppOnly";
+
+// Résultat de l'optimisation = RÉSERVÉ À L'APP côté client (admin conseiller conservé).
+export default function Resultat3aPage() {
+  const pathname = usePathname();
+  const isAdmin = pathname.includes("/admin/client");
+  if (!isAdmin) return <AppOnlyScreen feature="optimise" />;
+  return <Resultat3aInner />;
+}
 
 // (La tarification actuarielle vit désormais UNIQUEMENT dans le moteur `new3a.ts`,
 //  appelé par cette page comme par l'iOS — plus de copie dupliquée ici.)
@@ -33,7 +42,7 @@ const MaterialIcon = ({ name, color = "inherit", size = 24, fill = true }: { nam
   </span>
 );
 
-export default function Resultat3aPage() {
+function Resultat3aInner() {
   // 👈 NOUVEAU : Initialisation de useTranslations
   const t = useTranslations("Resultat3aPage");
 

@@ -23,6 +23,7 @@ import { Plan } from "@/lib/core/plans";
 import PlanSelectorModal from "app/components/plans/PlanSelectorModal";
 import LppInstructionStep from "./_components/LppInstructionStep";
 import UploadSourceDrawer from "./_components/UploadSourceDrawer";
+import { AppOnlyModal } from "@/app-components/AppOnly";
 import ScanningStep from "./_components/ScanningStep";
 import PlanDetailsView from "./_components/PlanDetailsView";
 import DocumentCropper from "./_components/DocumentCropper";
@@ -73,6 +74,8 @@ export function PrevoyanceDashboardView({ adminUid }: { adminUid?: string }) {
   const [loading, setLoading] = useState(true);
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [isSourceOpen, setIsSourceOpen] = useState(false);
+  // Scan/upload d'un document = RÉSERVÉ À L'APP côté client (admin conseiller conservé).
+  const [showScanAppOnly, setShowScanAppOnly] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isPersonalDataOpen, setIsPersonalDataOpen] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
@@ -206,7 +209,10 @@ export function PrevoyanceDashboardView({ adminUid }: { adminUid?: string }) {
 
   const handlePlanTypeSelection = (planId: string) => {
     setIsSelectorOpen(false);
-    if (planId === "LPP_BASE") { setCurrentStep("INSTRUCTIONS"); return; } 
+    if (planId === "LPP_BASE") {
+      if (!adminUid) { setShowScanAppOnly(true); return; } // client → app only
+      setCurrentStep("INSTRUCTIONS"); return;
+    }
     // 👈 MAJ : Utilisation de basePath pour que le routeur sache si c'est l'Admin ou le Client qui clique
     if (planId === "PILIER_3A_POLICE") { router.push(`${basePath}/add-insurance`); return; }
     if (planId === "3A_BANQUE" || planId === "PILIER_3A_BANK") { router.push(`${basePath}/add-bank`); return; }
@@ -774,6 +780,7 @@ export function PrevoyanceDashboardView({ adminUid }: { adminUid?: string }) {
             if (!p.id) return;
             setReplacePlanId(p.id);
             // Police 3a/3b : le scan vit sur une autre page, on lui passe la cible.
+            if (!adminUid) { setShowScanAppOnly(true); return; } // client → app only
             if (!String(p.type).startsWith("LPP")) {
               router.push(`/dashboard/prevoyance/add-insurance?replacePlanId=${p.id}`);
               return;
@@ -794,13 +801,15 @@ export function PrevoyanceDashboardView({ adminUid }: { adminUid?: string }) {
         onClose={() => setIsSourceOpen(false)} 
         onSourceSelect={(source) => {
           setIsSourceOpen(false);
+          if (!adminUid) { setShowScanAppOnly(true); return; } // filet client → app only
           if (source === "camera") {
             scannerInputRef.current?.click(); // Ouvre la caméra native !
           } else {
             fileInputRef.current?.click(); // Ouvre la galerie/fichiers
           }
-        }} 
+        }}
       />
+      <AppOnlyModal open={showScanAppOnly} onOpenChange={setShowScanAppOnly} feature="scan" />
       <ProfileDrawer
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}

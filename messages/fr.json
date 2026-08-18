@@ -1685,5 +1685,13 @@
     "footer": "Partage sécurisé CreditX. Ne transmettez jamais votre code à un tiers.",
     "method_email": "e-mail",
     "method_sms": "SMS"
+  },
+  "AppOnly": {
+    "title": "Disponible sur l'app CreditX",
+    "scan": "Le scan et l'ajout de documents se font depuis l'application CreditX.",
+    "optimise": "L'optimisation de votre prévoyance se fait depuis l'application CreditX.",
+    "vault": "Votre coffre-fort de documents est disponible dans l'application CreditX.",
+    "hint": "Téléchargez l'app pour continuer.",
+    "back": "Retour"
   }
 }

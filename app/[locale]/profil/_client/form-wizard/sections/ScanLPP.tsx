@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import type { MinimalForm } from "../sections.registry";
 import { motion, AnimatePresence } from "framer-motion";
+import { AppOnlyModal } from "@/app-components/AppOnly";
 import { Download, Scan, AlertTriangle, FileCheck, X, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -142,6 +143,8 @@ export default function ScanLPPSection({
   
   // File d'attente pour le multi-pages
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  // Scan/upload d'un document = RÉSERVÉ À L'APP → au lieu d'ouvrir le sélecteur.
+  const [showAppOnly, setShowAppOnly] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isMobile = typeof window !== "undefined" && (window.matchMedia?.("(pointer: coarse)")?.matches ?? false);
@@ -241,6 +244,7 @@ export default function ScanLPPSection({
 
   return (
     <div className="space-y-6 relative">
+      <AppOnlyModal open={showAppOnly} onOpenChange={setShowAppOnly} feature="scan" />
       {showConfetti && <ConfettiExplosion />}
 
       <input
@@ -287,7 +291,7 @@ export default function ScanLPPSection({
                 </div>
               ))}
               <button 
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => setShowAppOnly(true)}
                 className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg bg-white/50 hover:bg-white transition-colors aspect-[3/4]"
               >
                 <Plus size={20} className="text-muted-foreground" />
@@ -360,7 +364,7 @@ export default function ScanLPPSection({
           <Button
             type="button"
             variant={pendingFiles.length > 0 ? "default" : "outline"}
-            onClick={pendingFiles.length > 0 ? startAnalysis : () => fileInputRef.current?.click()}
+            onClick={pendingFiles.length > 0 ? startAnalysis : () => setShowAppOnly(true)}
             className={`w-full rounded-xl h-12 font-bold shadow-sm transition-all active:scale-[0.98] ${pendingFiles.length > 0 ? "bg-[#001D38] hover:bg-[#001D38]/90" : ""}`}
           >
             <Scan className="h-4 w-4 mr-2" />
