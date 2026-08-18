@@ -9,7 +9,7 @@ import { requireInternal } from "@/lib/server/requireInternal";
 import { db } from "@/lib/firebase/admin";
 import { getReferralAmountCHF, DEFAULT_REWARD_CHF, ensureReferralCode } from "@/lib/server/referral";
 import { notifyClient } from "@/lib/server/notify";
-import { sendCreditXReferralPromoEmail } from "lib/mail/creditx-mailer";
+import { sendCreditXReferralPromoEmail, sendCreditXAppAvailableEmail } from "lib/mail/creditx-mailer";
 
 async function clientBrief(uid: string) {
   const c = (await db.collection("clients").doc(uid).get()).data() || {};
@@ -160,6 +160,47 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json({ ok: true, total: clientsSnap.size, notified, emailed, skipped });
+    }
+
+    // ── Annoncer la DISPONIBILITÉ DE L'APP (e-mail localisé à tous les clients) ──
+    // Mode test : { action: "announce-app", testEmail: "x@y.z" } → envoi unique.
+    // Diffusion : { action: "announce-app" } → tous les clients.
+    if (b.action === "announce-app") {
+      // Envoi de test à une seule adresse (aperçu avant diffusion).
+      if (b.testEmail) {
+        await sendCreditXAppAvailableEmail({ to: String(b.testEmail), firstName: "", locale: String(b.locale || "fr") });
+        return NextResponse.json({ ok: true, test: true, to: b.testEmail });
+      }
+
+      const clientsSnap = await db.collection("clients").get();
+      let emailed = 0;
+      let skipped = 0;
+
+      for (const doc of clientsSnap.docs) {
+        const uid = doc.id;
+        const c = doc.data() || {};
+        const email = (c.email as string) || "";
+        if (!email) { skipped++; continue; }
+
+        // Prénom + langue depuis les données perso (repli fr).
+        let firstName = "";
+        let locale = "fr";
+        try {
+          const dp = (await db.doc(`clients/${uid}/DonneePersonnelles/current`).get()).data() || {};
+          firstName = (dp.Enter_prenom as string) || (c.firstName as string) || "";
+          const lg = String(dp.Enter_langue || c.langue || "fr").toLowerCase().slice(0, 2);
+          if (["fr", "de", "it", "en"].includes(lg)) locale = lg;
+        } catch { /* best-effort */ }
+
+        try {
+          await sendCreditXAppAvailableEmail({ to: email, firstName, locale });
+          emailed++;
+        } catch (e) {
+          console.error(`[announce-app] e-mail échoué pour ${uid}:`, e);
+        }
+      }
+
+      return NextResponse.json({ ok: true, total: clientsSnap.size, emailed, skipped });
     }
 
     return NextResponse.json({ error: "action inconnue" }, { status: 400 });

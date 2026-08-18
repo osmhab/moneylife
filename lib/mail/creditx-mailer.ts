@@ -1267,3 +1267,88 @@ export async function sendCreditXReferralPromoEmail(params: {
 
   await sgMail.send({ to: params.to, from, subject, html, text: subject });
 }
+
+// ✅ 13) ANNONCE : L'APPLICATION EST DISPONIBLE (envoi manuel à tous les clients)
+//
+// Localisé fr/de/it/en (repli fr). Badge App Store officiel PNG (email-safe) servi
+// depuis public/appstore/{lang}.png, cliquable vers la fiche App Store.
+const APP_STORE_URL_MAIL = "https://apps.apple.com/ch/app/creditx/id6793468363";
+
+const APP_ANNOUNCE_COPY: Record<string, {
+  subject: string; greeting: (n: string) => string; intro: string;
+  b1: string; b2: string; b3: string; outro: string; sign: string;
+}> = {
+  fr: {
+    subject: "L'application CreditX est disponible 🎉",
+    greeting: (n) => (n ? `Bonjour ${n},` : "Bonjour,"),
+    intro: "Votre prévoyance tient désormais dans votre poche. L'application <strong>CreditX</strong> est disponible sur l'App Store.",
+    b1: "<strong>Analysez vos lacunes</strong> (retraite, décès, invalidité) en un coup d'œil",
+    b2: "<strong>Scannez vos documents</strong> — tout est classé automatiquement",
+    b3: "<strong>Retrouvez vos contrats</strong> dans votre coffre-fort sécurisé",
+    outro: "À très vite sur l'app,", sign: "L'équipe CreditX",
+  },
+  de: {
+    subject: "Die CreditX-App ist da 🎉",
+    greeting: (n) => (n ? `Guten Tag ${n},` : "Guten Tag,"),
+    intro: "Ihre Vorsorge passt jetzt in Ihre Hosentasche. Die <strong>CreditX</strong>-App ist im App Store verfügbar.",
+    b1: "<strong>Erkennen Sie Ihre Lücken</strong> (Rente, Tod, Invalidität) auf einen Blick",
+    b2: "<strong>Scannen Sie Ihre Dokumente</strong> – alles wird automatisch abgelegt",
+    b3: "<strong>Finden Sie Ihre Verträge</strong> in Ihrem sicheren Tresor",
+    outro: "Bis bald in der App,", sign: "Ihr CreditX-Team",
+  },
+  it: {
+    subject: "L'app CreditX è disponibile 🎉",
+    greeting: (n) => (n ? `Buongiorno ${n},` : "Buongiorno,"),
+    intro: "La tua previdenza ora sta in tasca. L'app <strong>CreditX</strong> è disponibile sull'App Store.",
+    b1: "<strong>Scopri le tue lacune</strong> (pensione, decesso, invalidità) in un colpo d'occhio",
+    b2: "<strong>Scansiona i tuoi documenti</strong> — tutto viene archiviato automaticamente",
+    b3: "<strong>Ritrova i tuoi contratti</strong> nella tua cassaforte sicura",
+    outro: "A presto sull'app,", sign: "Il team CreditX",
+  },
+  en: {
+    subject: "The CreditX app is here 🎉",
+    greeting: (n) => (n ? `Hi ${n},` : "Hello,"),
+    intro: "Your pension now fits in your pocket. The <strong>CreditX</strong> app is available on the App Store.",
+    b1: "<strong>Spot your gaps</strong> (retirement, death, disability) at a glance",
+    b2: "<strong>Scan your documents</strong> — everything is filed automatically",
+    b3: "<strong>Find your contracts</strong> in your secure vault",
+    outro: "See you on the app,", sign: "The CreditX team",
+  },
+};
+
+export async function sendCreditXAppAvailableEmail(params: {
+  to: string;
+  firstName?: string;
+  locale?: string;
+}) {
+  ensureSendgrid();
+  const from = { email: "noreply@creditx.ch", name: "CreditX" };
+  const lang = (["fr", "de", "it", "en"].includes(params.locale || "") ? params.locale : "fr") as string;
+  const c = APP_ANNOUNCE_COPY[lang];
+  const baseUrl = appUrl();
+  const badge = `${baseUrl}/appstore/${lang}.png`;
+  const prenom = params.firstName && params.firstName !== "Client" ? escapeHtml(params.firstName) : "";
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px 0;">${c.greeting(prenom)}</p>
+    <p style="margin:0 0 20px 0;">${c.intro}</p>
+    <div style="margin:0 0 24px 0;">
+      <p style="margin:0 0 10px 0;">• ${c.b1}</p>
+      <p style="margin:0 0 10px 0;">• ${c.b2}</p>
+      <p style="margin:0;">• ${c.b3}</p>
+    </div>
+    <a href="${APP_STORE_URL_MAIL}" style="display:inline-block; text-decoration:none;">
+      <img src="${badge}" alt="App Store" height="52" style="height:52px; width:auto; display:block; border:0;" />
+    </a>
+    <p style="margin:28px 0 0 0;">${c.outro}<br/><strong>${c.sign}</strong></p>
+  `;
+
+  const html = renderCreditXShell({
+    title: c.subject.replace(" 🎉", ""),
+    bodyHtml,
+    ctaLabel: c.subject.replace(" 🎉", ""),
+    ctaUrl: APP_STORE_URL_MAIL,
+  });
+
+  await sgMail.send({ to: params.to, from, subject: c.subject, html, text: c.subject });
+}

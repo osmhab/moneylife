@@ -15,6 +15,7 @@ export default function ParrainagePageClient() {
   const [due, setDue] = useState<Due[]>([]);
   const [savingSettings, setSavingSettings] = useState(false);
   const [announcing, setAnnouncing] = useState(false);
+  const [announcingApp, setAnnouncingApp] = useState(false);
 
   async function token() {
     const u = auth.currentUser;
@@ -79,6 +80,45 @@ export default function ParrainagePageClient() {
       toast.error(e?.message || "Erreur d'envoi");
     } finally {
       setAnnouncing(false);
+    }
+  }
+
+  async function announceAppTest() {
+    const email = window.prompt("Envoi de TEST — à quelle adresse ?");
+    if (!email) return;
+    try {
+      const res = await fetch("/api/admin/parrainage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({ action: "announce-app", testEmail: email, locale: "fr" }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error || "Erreur");
+      toast.success(`E-mail de test envoyé à ${email} ✅`);
+    } catch (e: any) {
+      toast.error(e?.message || "Erreur d'envoi");
+    }
+  }
+
+  async function announceApp() {
+    if (!window.confirm(
+      "Envoyer l'annonce « L'app est disponible » à TOUS les clients ?\n" +
+      "Un e-mail localisé (fr/de/it/en) part à chaque client. Action irréversible."
+    )) return;
+    setAnnouncingApp(true);
+    try {
+      const res = await fetch("/api/admin/parrainage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({ action: "announce-app" }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error || "Erreur");
+      toast.success(`App annoncée ✅ ${j.emailed} e-mails${j.skipped ? ` · ${j.skipped} sans e-mail` : ""}`);
+    } catch (e: any) {
+      toast.error(e?.message || "Erreur d'envoi");
+    } finally {
+      setAnnouncingApp(false);
     }
   }
 
@@ -153,6 +193,25 @@ export default function ParrainagePageClient() {
           className="rounded-lg bg-black text-white px-4 py-2 text-sm font-semibold disabled:opacity-50">
           {announcing ? "Envoi en cours…" : "Annoncer la promo à tous les clients"}
         </button>
+      </div>
+
+      {/* Annonce : l'app est disponible */}
+      <div className="rounded-2xl border bg-white p-5 space-y-3">
+        <h2 className="font-semibold">Annoncer la disponibilité de l'app</h2>
+        <p className="text-sm text-slate-500">
+          Envoie à <b>tous les clients</b> un e-mail « L'app CreditX est disponible » (localisé
+          fr/de/it/en selon le profil, avec badge App Store). Fais d'abord un <b>envoi de test</b>.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <button onClick={announceAppTest}
+            className="rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            Envoi de test (à une adresse)
+          </button>
+          <button onClick={announceApp} disabled={announcingApp}
+            className="rounded-lg bg-black text-white px-4 py-2 text-sm font-semibold disabled:opacity-50">
+            {announcingApp ? "Envoi en cours…" : "Annoncer l'app à tous les clients"}
+          </button>
+        </div>
       </div>
 
       {/* Récompenses à payer */}
