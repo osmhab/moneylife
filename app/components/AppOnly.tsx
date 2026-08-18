@@ -8,6 +8,7 @@ import AppStoreBadge from "./AppStoreBadge";
 export type AppOnlyFeature = "scan" | "optimise" | "vault";
 
 // Contenu partagé : icône + titre + phrase selon la feature + badge App Store.
+// NB : titre en <h2> (pas de DialogTitle ici, sinon crash hors contexte Dialog).
 function Body({ feature }: { feature: AppOnlyFeature }) {
   const t = useTranslations("AppOnly");
   return (
@@ -15,7 +16,7 @@ function Body({ feature }: { feature: AppOnlyFeature }) {
       <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-black text-white">
         <Smartphone className="h-8 w-8" />
       </div>
-      <DialogTitle className="text-xl font-bold text-foreground">{t("title")}</DialogTitle>
+      <h2 className="text-xl font-bold text-foreground">{t("title")}</h2>
       <p className="mt-3 max-w-sm text-sm text-muted-foreground">{t(feature)}</p>
       <p className="mt-1 max-w-sm text-sm font-medium text-foreground/70">{t("hint")}</p>
       <div className="mt-6">
@@ -35,9 +36,12 @@ export function AppOnlyModal({
   onOpenChange: (v: boolean) => void;
   feature: AppOnlyFeature;
 }) {
+  const t = useTranslations("AppOnly");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md rounded-3xl">
+        {/* Titre accessible (requis par Radix), masqué visuellement. */}
+        <DialogTitle className="sr-only">{t("title")}</DialogTitle>
         <Body feature={feature} />
       </DialogContent>
     </Dialog>
