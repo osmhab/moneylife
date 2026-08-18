@@ -1276,7 +1276,7 @@ const APP_STORE_URL_MAIL = "https://apps.apple.com/ch/app/creditx/id6793468363";
 
 const APP_ANNOUNCE_COPY: Record<string, {
   subject: string; greeting: (n: string) => string; intro: string;
-  b1: string; b2: string; b3: string; outro: string; sign: string;
+  b1: string; b2: string; b3: string; b4: string; outro: string; sign: string;
 }> = {
   fr: {
     subject: "L'application CreditX est disponible 🎉",
@@ -1284,7 +1284,8 @@ const APP_ANNOUNCE_COPY: Record<string, {
     intro: "Votre prévoyance tient désormais dans votre poche. L'application <strong>CreditX</strong> est disponible sur l'App Store.",
     b1: "<strong>Analysez vos lacunes</strong> (retraite, décès, invalidité) en un coup d'œil",
     b2: "<strong>Scannez vos documents</strong> — tout est classé automatiquement",
-    b3: "<strong>Retrouvez vos contrats</strong> dans votre coffre-fort sécurisé",
+    b3: "<strong>Créez votre 3e pilier</strong> sur mesure et signez en ligne",
+    b4: "<strong>Retrouvez vos contrats</strong> dans votre coffre-fort sécurisé",
     outro: "À très vite sur l'app,", sign: "L'équipe CreditX",
   },
   de: {
@@ -1293,7 +1294,8 @@ const APP_ANNOUNCE_COPY: Record<string, {
     intro: "Ihre Vorsorge passt jetzt in Ihre Hosentasche. Die <strong>CreditX</strong>-App ist im App Store verfügbar.",
     b1: "<strong>Erkennen Sie Ihre Lücken</strong> (Rente, Tod, Invalidität) auf einen Blick",
     b2: "<strong>Scannen Sie Ihre Dokumente</strong> – alles wird automatisch abgelegt",
-    b3: "<strong>Finden Sie Ihre Verträge</strong> in Ihrem sicheren Tresor",
+    b3: "<strong>Erstellen Sie Ihre 3. Säule</strong> massgeschneidert und unterschreiben Sie online",
+    b4: "<strong>Finden Sie Ihre Verträge</strong> in Ihrem sicheren Tresor",
     outro: "Bis bald in der App,", sign: "Ihr CreditX-Team",
   },
   it: {
@@ -1302,7 +1304,8 @@ const APP_ANNOUNCE_COPY: Record<string, {
     intro: "La tua previdenza ora sta in tasca. L'app <strong>CreditX</strong> è disponibile sull'App Store.",
     b1: "<strong>Scopri le tue lacune</strong> (pensione, decesso, invalidità) in un colpo d'occhio",
     b2: "<strong>Scansiona i tuoi documenti</strong> — tutto viene archiviato automaticamente",
-    b3: "<strong>Ritrova i tuoi contratti</strong> nella tua cassaforte sicura",
+    b3: "<strong>Crea il tuo 3° pilastro</strong> su misura e firma online",
+    b4: "<strong>Ritrova i tuoi contratti</strong> nella tua cassaforte sicura",
     outro: "A presto sull'app,", sign: "Il team CreditX",
   },
   en: {
@@ -1311,7 +1314,8 @@ const APP_ANNOUNCE_COPY: Record<string, {
     intro: "Your pension now fits in your pocket. The <strong>CreditX</strong> app is available on the App Store.",
     b1: "<strong>Spot your gaps</strong> (retirement, death, disability) at a glance",
     b2: "<strong>Scan your documents</strong> — everything is filed automatically",
-    b3: "<strong>Find your contracts</strong> in your secure vault",
+    b3: "<strong>Create your 3rd pillar</strong> tailored to you and sign online",
+    b4: "<strong>Find your contracts</strong> in your secure vault",
     outro: "See you on the app,", sign: "The CreditX team",
   },
 };
@@ -1335,7 +1339,8 @@ export async function sendCreditXAppAvailableEmail(params: {
     <div style="margin:0 0 24px 0;">
       <p style="margin:0 0 10px 0;">• ${c.b1}</p>
       <p style="margin:0 0 10px 0;">• ${c.b2}</p>
-      <p style="margin:0;">• ${c.b3}</p>
+      <p style="margin:0 0 10px 0;">• ${c.b3}</p>
+      <p style="margin:0;">• ${c.b4}</p>
     </div>
     <a href="${APP_STORE_URL_MAIL}" style="display:inline-block; text-decoration:none;">
       <img src="${badge}" alt="App Store" height="52" style="height:52px; width:auto; display:block; border:0;" />
