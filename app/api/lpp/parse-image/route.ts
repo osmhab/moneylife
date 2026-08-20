@@ -12,6 +12,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { INSTITUTION_RULES, dropBlockingZeroAccident } from "@/lib/lpp-rules";
+import { MULTILINGUAL_PREAMBLE, MULTILINGUAL_LPP_GLOSSARY } from "@/lib/core/multilingual";
 
 const TEXT_FIELDS = [
   "Enter_anneeCertificat", "Enter_prenom", "Enter_nom", "Enter_noAVS",
@@ -93,6 +94,8 @@ export async function POST(req: NextRequest) {
 
     const prompt = `Tu es un actuaire expert LPP suisse. Analyse rigoureusement ce certificat de prévoyance en appliquant les règles spécifiques par institution ci-dessous.
 
+${MULTILINGUAL_PREAMBLE}
+
 🚨 PRIORITÉS :
 1. IDENTIFICATION : Détermine l'institution exacte parmi : ${Object.keys(INSTITUTION_RULES).join(", ")}. Si non listée, applique les règles de "AUTRE".
 2. Ne laisse jamais les salaires/taux d'activité vides si l'info est présente (synonymes : "Traitement assuré", "Taux d'occupation").
@@ -100,6 +103,8 @@ export async function POST(req: NextRequest) {
 
 RÈGLES PAR INSTITUTION :
 ${knowledgeBase}
+
+${MULTILINGUAL_LPP_GLOSSARY}
 
 📄 MULTI-PAGES : ${files.length > 1 ? `Le certificat est fourni en ${files.length} PAGES (images ci-dessous). Analyse-les TOUTES et CONSOLIDE les informations : une donnée peut n'apparaître que sur une page (rachats, EPL, cotisations, paliers de projection…).` : "Certificat en une page."}`;
 

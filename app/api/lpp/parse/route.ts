@@ -6,6 +6,7 @@ import { db, bucket, authAdmin } from "app/lib/firebase/admin";
 import admin from "firebase-admin";
 import { INSTITUTION_RULES, dropBlockingZeroAccident } from "app/lib/lpp-rules";
 import { DOCUMENT_CLASSIFICATION_PROMPT } from "app/lib/core/documentTypes";
+import { MULTILINGUAL_PREAMBLE, MULTILINGUAL_LPP_GLOSSARY } from "app/lib/core/multilingual";
 
 // Clés de classification renvoyées par l'IA mais qui ne sont PAS des champs de
 // formulaire (on les stocke à part, pas dans clientMappedData / plan.data).
@@ -151,6 +152,8 @@ export async function POST(req: NextRequest) {
 
     const prompt = `Tu es un actuaire expert LPP suisse. Analyse rigoureusement ce document en appliquant les règles spécifiques par institution ci-dessous.
 
+${MULTILINGUAL_PREAMBLE}
+
 🚨 PRIORITÉS ET LOGIQUE CONSTRUITE :
 1. IDENTIFICATION : Détermine l'institution exacte parmi : ${Object.keys(INSTITUTION_RULES).join(", ")}. Si non listée, applique impérativement les règles de "AUTRE".
 2. EXTRACTIBILITÉ DES DONNÉES : Ne laisse jamais les salaires ou le taux d'activité vides si l'information est présente (même sous des synonymes comme "Traitement assuré" ou "Taux d'occupation").
@@ -159,6 +162,8 @@ export async function POST(req: NextRequest) {
 
 RÈGLES D'EXTRACTION SPÉCIFIQUES PAR INSTITUTION :
 ${knowledgeBase}
+
+${MULTILINGUAL_LPP_GLOSSARY}
 
 ${DOCUMENT_CLASSIFICATION_PROMPT}`;
 

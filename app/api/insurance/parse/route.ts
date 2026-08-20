@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { DOCUMENT_CLASSIFICATION_PROMPT } from "@/lib/core/documentTypes";
+import { MULTILINGUAL_PREAMBLE, MULTILINGUAL_INSURANCE_GLOSSARY } from "@/lib/core/multilingual";
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,6 +31,10 @@ export async function POST(req: NextRequest) {
 
     const prompt = `Tu es un actuaire expert en assurances vie suisses (3a/3b). Analyse cette police.
     RETOURNE STRICTEMENT UN JSON VALIDE.
+
+    ${MULTILINGUAL_PREAMBLE}
+
+    ${MULTILINGUAL_INSURANCE_GLOSSARY}
 
     RÈGLES D'EXTRACTION CRITIQUES :
     1. dateDebut : Cherche "Début de l'assurance" ou "valable dès le". Format attendu: YYYY-MM-DD.

@@ -3,6 +3,7 @@
 // Modelé sur /api/insurance/parse (même infra Gemini Vision), prompt adapté au 3a bancaire.
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/server/requireAuth";
+import { MULTILINGUAL_PREAMBLE, MULTILINGUAL_BANK_GLOSSARY } from "@/lib/core/multilingual";
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,6 +26,10 @@ export async function POST(req: NextRequest) {
 
     const prompt = `Tu es un expert en prévoyance 3e pilier BANCAIRE suisse (compte 3a).
     Analyse ce relevé / cette attestation de compte 3a. RETOURNE STRICTEMENT UN JSON VALIDE.
+
+    ${MULTILINGUAL_PREAMBLE}
+
+    ${MULTILINGUAL_BANK_GLOSSARY}
 
     Champs à extraire :
     - institution (string) : nom de la banque ou fondation 3a (ex: "PostFinance", "VIAC", "frankly",
