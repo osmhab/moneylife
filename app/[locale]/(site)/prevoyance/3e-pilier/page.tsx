@@ -5,6 +5,8 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import AetherHero from "@/components/AetherHero";
 import PersonasWidget from "@/components/PersonasWidget";
 import SmartContracts from "@/components/SmartContracts";
+import DownloadAppButton from "@/app-components/DownloadAppButton";
+import AppStoreBadge from "@/app-components/AppStoreBadge";
 import { getTranslations } from "next-intl/server";
 
 export const viewport = { themeColor: "#ffffff" };
@@ -148,6 +150,12 @@ export default async function Pilier3Page({ params }: { params: Promise<{ locale
           <div className="flex flex-col items-center md:items-start text-center md:text-left">
             <img src="https://firebasestorage.googleapis.com/v0/b/moneylife-c3b0b.firebasestorage.app/o/Logo%20Black.png?alt=media&token=490c0a26-6d62-4a9b-a7b9-1f1d439aedbd" alt="CreditX Logo" className="h-8 w-auto mb-3" />
             <p className="text-sm text-slate-500 font-medium">{t("footer_tagline")}</p>
+
+            {/* Télécharger l'app : desktop → modale QR ; mobile → lien direct App Store */}
+            <div className="mt-5">
+              <div className="hidden lg:block"><DownloadAppButton variant="badge" badgeHeight={40} /></div>
+              <div className="lg:hidden"><AppStoreBadge height={40} /></div>
+            </div>
           </div>
           
           <div className="flex flex-wrap items-center justify-center gap-6 md:gap-8 text-sm font-medium text-slate-500">

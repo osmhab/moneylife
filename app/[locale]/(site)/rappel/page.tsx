@@ -35,6 +35,8 @@ import {
 import { toast } from "sonner";
 import Link from "next/link";
 import Image from "next/image";
+import DownloadAppButton from "@/app-components/DownloadAppButton";
+import AppStoreBadge from "@/app-components/AppStoreBadge";
 
 // --- HELPERS ---
 const getNextWeekDays = () => {
@@ -428,6 +430,12 @@ function RappelContent() {
           <div className="space-y-4 text-center md:text-left">
           <img src="https://firebasestorage.googleapis.com/v0/b/moneylife-c3b0b.firebasestorage.app/o/Logo%20Black.png?alt=media&token=490c0a26-6d62-4a9b-a7b9-1f1d439aedbd" alt="CreditX Logo" className="h-8 w-auto mb-3" />
             <p className="text-sm font-medium text-slate-400 max-w-xs">Indépendance, transparence et expertise en prévoyance individuelle en Suisse.</p>
+
+            {/* Télécharger l'app : desktop → modale QR ; mobile → lien direct App Store */}
+            <div className="mt-5 flex justify-center md:justify-start">
+              <div className="hidden lg:block"><DownloadAppButton variant="badge" badgeHeight={40} /></div>
+              <div className="lg:hidden"><AppStoreBadge height={40} /></div>
+            </div>
           </div>
           
           <div className="flex flex-col items-center md:items-end gap-2">

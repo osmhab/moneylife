@@ -5,6 +5,8 @@ import CookieManageButton from "app/components/CookieManageButton";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import PrevoyanceCarousel from "app/components/PrevoyanceCarousel";
 import InteractivePrimesWidget from "app/components/InteractivePrimesWidget";
+import DownloadAppButton from "app/components/DownloadAppButton";
+import AppStoreBadge from "app/components/AppStoreBadge";
 
 // 👈 IMPORT NEXT-INTL
 import { useTranslations } from "next-intl";
@@ -383,6 +385,13 @@ export default async function LandingPage({ params }: { params: Promise<{ locale
           <div className="flex flex-col items-center md:items-start text-center md:text-left">
             <img src="https://firebasestorage.googleapis.com/v0/b/moneylife-c3b0b.firebasestorage.app/o/Logo%20Black.png?alt=media&token=490c0a26-6d62-4a9b-a7b9-1f1d439aedbd" alt="CreditX Logo" className="h-8 w-auto mb-3" />
             <p className="text-sm text-slate-500 font-medium">{t("Footer.subtitle")}</p>
+
+            {/* Télécharger l'app : desktop → modale QR (façon Revolut) ;
+                mobile → lien direct App Store (un QR sur son propre téléphone est inutile). */}
+            <div className="mt-5">
+              <div className="hidden lg:block"><DownloadAppButton variant="badge" badgeHeight={40} /></div>
+              <div className="lg:hidden"><AppStoreBadge height={40} /></div>
+            </div>
           </div>
           
           <div className="flex flex-wrap items-center justify-center gap-6 md:gap-8 text-sm font-medium text-slate-500">

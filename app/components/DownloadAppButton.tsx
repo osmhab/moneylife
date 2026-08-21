@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 import { Download } from "lucide-react";
 import {
   Dialog,
@@ -11,31 +11,58 @@ import {
 } from "@/components/ui/dialog";
 import AppStoreBadge from "./AppStoreBadge";
 
+// Badges officiels Apple déposés dans public/appstore/{locale}.svg.
+const BADGE_LANGS = new Set(["fr", "de", "en", "it"]);
+
 /**
- * Bouton « Télécharger l'app » (desktop) → modale façon Revolut :
- * un QR code à scanner (renvoie vers la fiche App Store) + le badge Apple
- * officiel en repli direct. Tous les textes viennent du namespace `Download`
- * (fr/de/en/it) ; le QR est un asset STATIQUE (URL App Store fixe), donc aucun
- * appel réseau ni dépendance runtime.
+ * « Télécharger l'app » → modale façon Revolut : un QR code à scanner (renvoie
+ * vers la fiche App Store) + le badge Apple officiel en repli direct. Textes
+ * localisés (namespace `Download`, fr/de/en/it) ; QR = asset STATIQUE (URL fixe),
+ * donc aucun appel réseau ni dépendance runtime.
+ *
+ * `variant` :
+ *  - "button" (navbar) : petit bouton texte + icône télécharger.
+ *  - "badge"  (footer) : le badge Apple officiel sert directement de déclencheur.
  */
-export default function DownloadAppButton({ dark = false }: { dark?: boolean }) {
+export default function DownloadAppButton({
+  dark = false,
+  variant = "button",
+  badgeHeight = 44,
+}: {
+  dark?: boolean;
+  variant?: "button" | "badge";
+  badgeHeight?: number;
+}) {
   const t = useTranslations("Download");
+  const locale = useLocale();
+  const lang = BADGE_LANGS.has(locale) ? locale : "en";
 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button
-          type="button"
-          className={[
-            "inline-flex items-center gap-2 rounded-full px-4 py-2 text-[14px] font-bold transition-colors",
-            dark
-              ? "text-white/90 hover:text-white group-hover:text-slate-700 group-hover:hover:text-slate-900"
-              : "text-slate-700 hover:text-slate-900",
-          ].join(" ")}
-        >
-          <Download className="h-4 w-4" />
-          {t("cta")}
-        </button>
+        {variant === "badge" ? (
+          <button
+            type="button"
+            aria-label={t("cta")}
+            className="inline-block cursor-pointer transition-transform hover:scale-[1.03]"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/appstore/${lang}.svg`} alt={t("cta")} style={{ height: badgeHeight, width: "auto" }} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={[
+              "inline-flex items-center gap-2 rounded-full px-4 py-2 text-[14px] font-bold transition-colors",
+              dark
+                ? "text-white/90 hover:text-white group-hover:text-slate-700 group-hover:hover:text-slate-900"
+                : "text-slate-700 hover:text-slate-900",
+            ].join(" ")}
+          >
+            <Download className="h-4 w-4" />
+            {t("cta")}
+          </button>
+        )}
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-md rounded-[28px] p-8 text-center">
@@ -59,7 +86,7 @@ export default function DownloadAppButton({ dark = false }: { dark?: boolean }) 
           <span className="h-px flex-1 bg-slate-200" />
         </div>
 
-        {/* Badge Apple officiel localisé (fr/de/en/it) */}
+        {/* Badge Apple officiel localisé (fr/de/en/it) — lien direct App Store */}
         <div className="flex justify-center mt-4">
           <AppStoreBadge height={46} />
         </div>
