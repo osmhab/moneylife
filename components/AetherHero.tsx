@@ -4,8 +4,10 @@ import React, { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { ArrowRight, Zap } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 export default function AetherHero() {
+  const t = useTranslations("ThirdPillar");
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // --- MOTEUR DE PARTICULES INTERACTIF ---
@@ -178,7 +180,7 @@ export default function AetherHero() {
           className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#1A0B2E] border border-[#a855f7]/30 mb-8"
         >
           <Zap size={14} className="text-[#a855f7]" />
-          <span className="text-[12px] font-medium text-slate-300">Technologie CreditX</span>
+          <span className="text-[12px] font-medium text-slate-300">{t("hero_badge")}</span>
         </motion.div>
 
         {/* Le grand titre blanc pur */}
@@ -188,7 +190,7 @@ export default function AetherHero() {
           transition={{ duration: 0.8, delay: 0.1 }}
           className="text-6xl md:text-8xl lg:text-[100px] font-black tracking-tighter text-white leading-[1.0] mb-6"
         >
-          3e pilier
+          {t("hero_title")}
         </motion.h1>
 
         {/* Le sous-titre gris clair */}
@@ -198,7 +200,7 @@ export default function AetherHero() {
           transition={{ duration: 0.8, delay: 0.2 }}
           className="text-lg md:text-xl text-[#A1A1AA] font-medium leading-relaxed mb-10 text-balance"
         >
-          Un écosystème intelligent et adaptatif pour créer des plans de prévoyance qui évoluent en temps réel. Assemblez épargne et protection sur-mesure.
+          {t("hero_subtitle")}
         </motion.p>
 
         {/* Le bouton blanc (Identique à l'image) */}
@@ -211,7 +213,7 @@ export default function AetherHero() {
             href="/signup"
             className="group inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-white text-black font-bold text-[15px] transition-all hover:bg-slate-200 active:scale-95"
           >
-            Explore the Engine
+            {t("hero_cta")}
             <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
           </Link>
         </motion.div>

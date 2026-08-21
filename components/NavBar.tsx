@@ -7,6 +7,7 @@ import { Menu, X, ChevronDown } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import DownloadAppButton from "@/app-components/DownloadAppButton";
 
 // Import du hook de traduction
 import { useTranslations } from "next-intl";
@@ -214,6 +215,12 @@ export default function NavBar({
           
           <div className={["hidden sm:flex items-center transition-colors", isDarkBar ? "text-white/90 group-hover:text-slate-600" : "text-slate-600"].join(" ")}>
             <LanguageSwitcher />
+          </div>
+
+          {/* Télécharger l'app — ouvre une modale QR (façon Revolut), localisée (fr/de/en/it).
+              Desktop uniquement (sur mobile, la Smart App Banner iOS s'en charge). */}
+          <div className="hidden lg:flex items-center">
+            <DownloadAppButton dark={isDarkBar} />
           </div>
 
           <Link

@@ -1,6 +1,6 @@
 // app/[locale]/(site)/page.tsx
 import Link from "next/link";
-import { ChevronRight, ShieldCheck, HeartPulse, ScanFace, FileText, CheckCircle, Activity, Landmark, ArrowRight } from "lucide-react";
+import { ChevronRight, ShieldCheck, HeartPulse, ScanFace, FileText, CheckCircle, Activity, Landmark, Building2, ArrowRight } from "lucide-react";
 import CookieManageButton from "app/components/CookieManageButton";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import PrevoyanceCarousel from "app/components/PrevoyanceCarousel";
@@ -59,41 +59,64 @@ export default async function LandingPage({ params }: { params: Promise<{ locale
             </div>
           </div>
 
-          {/* WIDGET HERO */}
-          <div className="w-full max-w-md mx-auto animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-500">
-            <div className="bg-white/10 backdrop-blur-none rounded-[32px] p-5 border border-white/20 shadow-2xl text-left flex flex-col gap-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-1">{t("Hero.widget_capital")}</p>
-                  <p className="text-2xl font-black text-white tracking-tighter">682'000</p>
-                </div>
-                <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-1">{t("Hero.widget_rente")}</p>
-                  <p className="text-2xl font-black text-white">48'000 <span className="text-sm text-white">{t("Hero.widget_an")}</span></p>
+          {/* WIDGET HERO — verre dépoli translucide (façon app) : gros total,
+              dots dynamiques, puis les 3 piliers (1er inclus) en rangées glass.
+              Peu de couleurs : icônes en verre blanc, pas de dégradés saturés. */}
+          <div className="w-full max-w-sm mx-auto animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-500">
+            <div className="bg-white/10 backdrop-blur-xl rounded-[32px] p-5 border border-white/20 shadow-2xl text-left flex flex-col gap-5">
+
+              {/* Total + dots dynamiques */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/60 mb-1.5">{t("Hero.widget_total_label")}</p>
+                <p className="text-[38px] leading-none font-semibold text-white tracking-tight tabular-nums">
+                  586'400 <span className="text-base font-medium text-white/50 align-top">CHF</span>
+                </p>
+                <div className="flex items-center gap-1.5 mt-4">
+                  <span className="h-1.5 w-5 rounded-full bg-white" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-white/30" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-white/30" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-white/30" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-white/30" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-white/30" />
                 </div>
               </div>
 
-              <div className="space-y-2 mt-1">
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-900/60 flex items-center justify-center text-white shrink-0 border border-white/5"><Landmark size={18} /></div>
-                    <div>
-                      <p className="text-sm font-bold text-white leading-tight">{t("Hero.widget_2p")}</p>
-                      <p className="text-[10px] text-white/50 font-medium">LPP ACME Sàrl</p>
-                    </div>
+              {/* Les 3 piliers — rangées translucides, icônes en verre */}
+              <div className="space-y-2">
+                {/* 1er pilier */}
+                <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white shrink-0">
+                    <Landmark size={18} />
                   </div>
-                  <div className="px-2 py-1 rounded-full bg-white border border-white/20 text-[9px] font-black uppercase tracking-widest">{t("Hero.widget_actif")}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-white leading-tight">{t("Hero.widget_1p")}</p>
+                    <p className="text-[10px] text-white/50 font-medium">{t("Hero.widget_1p_desc")}</p>
+                  </div>
+                  <p className="text-sm font-bold text-white tabular-nums">2'350<span className="text-[10px] font-semibold text-white/50">{t("Hero.widget_mois")}</span></p>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-500/60 flex items-center justify-center text-white shrink-0 border border-white/5"><ShieldCheck size={18} /></div>
-                    <div>
-                      <p className="text-sm font-bold text-white leading-tight">{t("Hero.widget_3p")}</p>
-                      <p className="text-[10px] text-white/50 font-medium">{t("Hero.widget_3p_desc")}</p>
-                    </div>
+                {/* 2e pilier */}
+                <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white shrink-0">
+                    <Building2 size={18} />
                   </div>
-                  <div className="px-2 py-1 rounded-full bg-white border border-white/20 text-[9px] font-black uppercase tracking-widest">{t("Hero.widget_actif")}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-white leading-tight">{t("Hero.widget_2p")}</p>
+                    <p className="text-[10px] text-white/50 font-medium">{t("Hero.widget_2p_desc")}</p>
+                  </div>
+                  <p className="text-sm font-bold text-white tabular-nums">512'400</p>
+                </div>
+
+                {/* 3e pilier */}
+                <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-white shrink-0">
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-white leading-tight">{t("Hero.widget_3p")}</p>
+                    <p className="text-[10px] text-white/50 font-medium">{t("Hero.widget_3p_desc")}</p>
+                  </div>
+                  <p className="text-sm font-bold text-white tabular-nums">74'000</p>
                 </div>
               </div>
             </div>

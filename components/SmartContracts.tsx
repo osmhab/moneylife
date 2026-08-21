@@ -3,54 +3,56 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Landmark, ShieldCheck, HeartPulse, ShieldAlert, CreditCard, ChevronDown, CheckCircle, ArrowRight } from "lucide-react";
-
-const profiles = [
-  {
-    id: "young",
-    name: "David,Employé (22 ans)",
-    title: "100% Croissance",
-    desc: "Un plan épargne sur deux fronts. L'un pour une utilisation à moyen terme et l'autre pour une stratégie long terme (retraite).",
-    image: "/images/avatar-jeune.png",
-    // Passage au mode sombre/monochrome pour le wallet
-    gradient: "from-slate-800 to-black",
-    masterCard: "CreditX 3a Plan",
-    subCards: [
-      { provider: "AXA", product: "Épargne 100% Actions", icon: ShieldCheck, color: "text-slate-700", logo: "/images/logo-axa.png" },
-      { provider: "UBS", product: "Epargne", icon: Landmark, color: "text-slate-700", logo: "/images/logo-ubs.png" }
-    ]
-  },
-  {
-    id: "career",
-    name: "Sophie, Indépendante (35 ans)",
-    title: "Sécurité du Revenu",
-    desc: "En tant qu'indépendante, le filet social est faible. Ce plan maximise les économies d'impôts tout en garantissant le maintien du salaire en cas de coup dur.",
-    image: "/images/avatar-freelance.png",
-    gradient: "from-zinc-800 to-neutral-950",
-    masterCard: "CreditX Plan",
-    subCards: [
-      { provider: "AXA", product: "Epargne 3b 60% Actions", icon: Landmark, color: "text-slate-700", logo: "/images/logo-axa.png" },
-      { provider: "SwissLife", product: "Rente Incapacité de gain 24k", icon: ShieldAlert, color: "text-slate-700", logo: "/images/logo-swisslife.png" },
-      { provider: "Helvetia", product: "Capital Décès 105k", icon: HeartPulse, color: "text-slate-700", logo: "/images/logo-helvetiaBaloise.png" }
-    ]
-  },
-  {
-    id: "family",
-    name: "Adrian, Père de Famille (42 ans)",
-    title: "Protection Familiale",
-    desc: "La priorité est de mettre les enfants à l'abri et de garantir le paiement de l'hypothèque si le pire devait arriver, tout en préparant sereinement la retraite.",
-    image: "/images/avatar-famille.png",
-    gradient: "from-gray-900 to-black",
-    masterCard: "CreditX Plan",
-    subCards: [
-      { provider: "Raiffeisen", product: "Epargne 60% Actions (En gage)", icon: Landmark, color: "text-slate-700", logo: "/images/logo-raiffeisen.png" },
-      { provider: "PAX", product: "Capital Décès 300k", icon: HeartPulse, color: "text-slate-700", logo: "/images/logo-pax.png" },
-      { provider: "AXA", product: "Rente Invalidité 15k", icon: ShieldAlert, color: "text-slate-700", logo: "/images/logo-axa.png" }
-    ]
-  }
-];
+import { useTranslations } from "next-intl";
 
 export default function SmartContracts() {
+  const t = useTranslations("ThirdPillar");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Non textuel (image, gradient, logos, icônes) ici ; libellés via traductions.
+  const profiles = [
+    {
+      id: "young",
+      name: t("sc_young_name"),
+      title: t("sc_young_title"),
+      desc: t("sc_young_desc"),
+      image: "/images/avatar-jeune.png",
+      gradient: "from-slate-800 to-black",
+      masterCard: "CreditX 3a Plan",
+      subCards: [
+        { provider: "AXA", product: t("sc_young_c1"), icon: ShieldCheck, color: "text-slate-700", logo: "/images/logo-axa.png" },
+        { provider: "UBS", product: t("sc_young_c2"), icon: Landmark, color: "text-slate-700", logo: "/images/logo-ubs.png" }
+      ]
+    },
+    {
+      id: "career",
+      name: t("sc_career_name"),
+      title: t("sc_career_title"),
+      desc: t("sc_career_desc"),
+      image: "/images/avatar-freelance.png",
+      gradient: "from-zinc-800 to-neutral-950",
+      masterCard: "CreditX Plan",
+      subCards: [
+        { provider: "AXA", product: t("sc_career_c1"), icon: Landmark, color: "text-slate-700", logo: "/images/logo-axa.png" },
+        { provider: "SwissLife", product: t("sc_career_c2"), icon: ShieldAlert, color: "text-slate-700", logo: "/images/logo-swisslife.png" },
+        { provider: "Helvetia", product: t("sc_career_c3"), icon: HeartPulse, color: "text-slate-700", logo: "/images/logo-helvetiaBaloise.png" }
+      ]
+    },
+    {
+      id: "family",
+      name: t("sc_family_name"),
+      title: t("sc_family_title"),
+      desc: t("sc_family_desc"),
+      image: "/images/avatar-famille.png",
+      gradient: "from-gray-900 to-black",
+      masterCard: "CreditX Plan",
+      subCards: [
+        { provider: "Raiffeisen", product: t("sc_family_c1"), icon: Landmark, color: "text-slate-700", logo: "/images/logo-raiffeisen.png" },
+        { provider: "PAX", product: t("sc_family_c2"), icon: HeartPulse, color: "text-slate-700", logo: "/images/logo-pax.png" },
+        { provider: "AXA", product: t("sc_family_c3"), icon: ShieldAlert, color: "text-slate-700", logo: "/images/logo-axa.png" }
+      ]
+    }
+  ];
 
   const toggleDeck = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
@@ -84,7 +86,7 @@ export default function SmartContracts() {
                 onClick={() => toggleDeck(profile.id)}
                 className="group flex items-center gap-3 text-sm font-bold text-slate-900 uppercase tracking-widest hover:text-slate-600 transition-colors"
               >
-                <span>{isExpanded ? "Fermer l'architecture" : "Inspecter le plan CreditX"}</span>
+                <span>{isExpanded ? t("sc_expand_close") : t("sc_expand_open")}</span>
                 <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
@@ -150,7 +152,7 @@ export default function SmartContracts() {
                     <div className="flex items-start justify-between">
                       <div>
                         <CreditCard size={28} className="text-white/60 mb-2" />
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-white/50">Plan 3e Pilier Consolidé</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-white/50">{t("sc_card_label")}</p>
                       </div>
                       <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md shadow-inner border border-white/5">
                         <ChevronDown size={20} className="text-white/80" />
@@ -158,7 +160,7 @@ export default function SmartContracts() {
                     </div>
                     <div>
                       <p className="text-3xl font-black tracking-tight mb-1">{profile.masterCard}</p>
-                      <p className="text-sm font-medium text-white/60">{isExpanded ? "Contrats dégroupés révélés" : "Appuyez pour inspecter le plan"}</p>
+                      <p className="text-sm font-medium text-white/60">{isExpanded ? t("sc_card_opened") : t("sc_card_open_hint")}</p>
                     </div>
                   </motion.div>
 

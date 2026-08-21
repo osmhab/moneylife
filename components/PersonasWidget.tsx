@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence, animate } from "framer-motion";
 import { Landmark, ShieldCheck, HeartPulse, Layers, ArrowRight, CheckCircle } from "lucide-react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 // --- COMPOSANT COMPTEUR ANIMÉ ---
 function AnimatedNumber({ value }: { value: number }) {
@@ -21,50 +22,52 @@ function AnimatedNumber({ value }: { value: number }) {
   return <>{displayValue}</>;
 }
 
-// --- DONNÉES DES PERSONAS ---
-const personas = [
-  {
-    id: "young",
-    label: "Jeune Actif (22 ans)",
-    title: "Priorité à la croissance.",
-    desc: "Horizon de placement très long et aucune charge de famille. L'objectif est d'investir 100% de la prime sur les marchés financiers avec un profil dynamique pour maximiser les intérêts composés.",
-    image: "/images/avatar-jeune.png", 
-    price: 350,
-    blocks: [
-      { id: "epargne", title: "Socle Épargne", subtitle: "Investi (Profil Dynamique)", icon: Landmark, color: "bg-blue-500", shadow: "shadow-blue-500/30" }
-    ]
-  },
-  {
-    id: "career",
-    label: "Indépendante (35 ans)",
-    title: "Protéger ses revenus.",
-    desc: "Haute rémunération mais filet social plus faible en tant qu'indépendante. Le plan maximise l'économie d'impôt et garantit le versement d'une rente en cas d'incapacité de gain.",
-    image: "/images/avatar-freelance.png", 
-    price: 580,
-    blocks: [
-      { id: "epargne", title: "Socle Épargne", subtitle: "Investi (Profil Équilibré)", icon: Landmark, color: "bg-blue-500", shadow: "shadow-blue-500/30" },
-      { id: "revenu", title: "Revenu Protect", subtitle: "Rente: 4'000 CHF / mois", icon: ShieldCheck, color: "bg-indigo-500", shadow: "shadow-indigo-500/30" }
-    ]
-  },
-  {
-    id: "family",
-    label: "Père de Famille (42 ans)",
-    title: "Sécurité avant tout.",
-    desc: "Propriétaire avec deux enfants. L'enjeu est de garantir l'hypothèque et de mettre la famille à l'abri financièrement, tout en préparant la retraite.",
-    image: "/images/avatar-famille.png", 
-    price: 720,
-    blocks: [
-      { id: "epargne", title: "Socle Épargne", subtitle: "Garanti (Taux Fixe)", icon: Landmark, color: "bg-blue-500", shadow: "shadow-blue-500/30" },
-      { id: "revenu", title: "Revenu Protect", subtitle: "Rente: 3'000 CHF / mois", icon: ShieldCheck, color: "bg-indigo-500", shadow: "shadow-indigo-500/30" },
-      { id: "family", title: "Family Protect", subtitle: "Capital: 300'000 CHF", icon: HeartPulse, color: "bg-rose-500", shadow: "shadow-rose-500/30" }
-    ]
-  }
-];
-
 export default function PersonasWidget() {
+  const t = useTranslations("ThirdPillar");
   const [activeIdx, setActiveIdx] = useState(0);
+
+  // Données des personas : les valeurs non textuelles (image, prix, icône, couleur)
+  // restent ici ; les libellés viennent des traductions (namespace ThirdPillar).
+  const personas = [
+    {
+      id: "young",
+      label: t("pw_young_label"),
+      title: t("pw_young_title"),
+      desc: t("pw_young_desc"),
+      image: "/images/avatar-jeune.png",
+      price: 350,
+      blocks: [
+        { id: "epargne", title: t("pw_young_b1_title"), subtitle: t("pw_young_b1_sub"), icon: Landmark, color: "bg-blue-500", shadow: "shadow-blue-500/30" }
+      ]
+    },
+    {
+      id: "career",
+      label: t("pw_career_label"),
+      title: t("pw_career_title"),
+      desc: t("pw_career_desc"),
+      image: "/images/avatar-freelance.png",
+      price: 580,
+      blocks: [
+        { id: "epargne", title: t("pw_career_b1_title"), subtitle: t("pw_career_b1_sub"), icon: Landmark, color: "bg-blue-500", shadow: "shadow-blue-500/30" },
+        { id: "revenu", title: t("pw_career_b2_title"), subtitle: t("pw_career_b2_sub"), icon: ShieldCheck, color: "bg-indigo-500", shadow: "shadow-indigo-500/30" }
+      ]
+    },
+    {
+      id: "family",
+      label: t("pw_family_label"),
+      title: t("pw_family_title"),
+      desc: t("pw_family_desc"),
+      image: "/images/avatar-famille.png",
+      price: 720,
+      blocks: [
+        { id: "epargne", title: t("pw_family_b1_title"), subtitle: t("pw_family_b1_sub"), icon: Landmark, color: "bg-blue-500", shadow: "shadow-blue-500/30" },
+        { id: "revenu", title: t("pw_family_b2_title"), subtitle: t("pw_family_b2_sub"), icon: ShieldCheck, color: "bg-indigo-500", shadow: "shadow-indigo-500/30" },
+        { id: "family", title: t("pw_family_b3_title"), subtitle: t("pw_family_b3_sub"), icon: HeartPulse, color: "bg-rose-500", shadow: "shadow-rose-500/30" }
+      ]
+    }
+  ];
+
   const activePersona = personas[activeIdx];
-  
   const angleStep = 360 / personas.length;
 
   return (
@@ -112,7 +115,7 @@ export default function PersonasWidget() {
 
         {/* 5. CŒUR DU RÉACTEUR AJUSTÉ (w-32 h-32) */}
         <div className="relative z-20 flex flex-col items-center justify-center text-center w-32 h-32 sm:w-48 sm:h-48 rounded-full bg-[#050505] border border-slate-800 shadow-2xl backdrop-blur-md">
-            <p className="text-[9px] sm:text-xs font-black text-slate-500 uppercase tracking-widest mb-1">Total Mensuel</p>
+            <p className="text-[9px] sm:text-xs font-black text-slate-500 uppercase tracking-widest mb-1">{t("pw_total")}</p>
             <div className="flex items-end gap-1 text-white">
               <span className="text-3xl sm:text-5xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400">
                 <AnimatedNumber value={activePersona.price} />
@@ -126,7 +129,7 @@ export default function PersonasWidget() {
       <div className="flex-1 w-full flex flex-col items-start max-w-xl z-10">
         <div className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-[#1A0B2E] border border-[#a855f7]/30 mb-6">
           <Layers size={14} className="text-[#a855f7]" />
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">Profil {activePersona.label}</span>
+          <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">{t("pw_profile", { label: activePersona.label })}</span>
         </div>
 
         <AnimatePresence mode="wait">
@@ -158,7 +161,7 @@ export default function PersonasWidget() {
         </AnimatePresence>
 
         <div className="w-full flex flex-col gap-3 mb-8">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Composition IA du plan</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">{t("pw_composition")}</p>
           <AnimatePresence initial={false}>
             {activePersona.blocks.map((block, index) => {
               const Icon = block.icon;
@@ -188,7 +191,7 @@ export default function PersonasWidget() {
         </div>
 
         <Link href="/signup" className="group inline-flex items-center justify-center gap-3 px-6 sm:px-8 py-4 rounded-xl bg-white text-black font-bold text-sm sm:text-[15px] transition-all hover:bg-slate-200 active:scale-95 w-full sm:w-auto shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:shadow-[0_0_40px_rgba(255,255,255,0.2)]">
-          Créer mon plan unique <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+          {t("pw_cta")} <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
         </Link>
       </div>
     </div>

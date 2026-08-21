@@ -43,8 +43,8 @@ export default async function SiteLayout({
               label: t("link_prevoyance"), 
               href: "#", // Agit comme déclencheur du menu déroulant
               subLinks: [
-                { href: "/", label: "Vue d'ensemble", desc: "L'approche CreditX" },
-                { href: "/prevoyance/3e-pilier", label: "Le 3e Pilier", desc: "La prévoyance sur-mesure" }
+                { href: "/", label: t("sub_overview_label"), desc: t("sub_overview_desc") },
+                { href: "/prevoyance/3e-pilier", label: t("sub_3a_label"), desc: t("sub_3a_desc") }
               ]
             },
             { label: t("link_hypo"), href: "/hypotheque", disabled: true },

@@ -1,4 +1,11 @@
 {
+  "Download": {
+    "cta": "Scarica l'app",
+    "title": "Ottieni l'app CreditX",
+    "subtitle": "Scansiona il codice QR per scaricare l'app",
+    "qr_alt": "Codice QR App Store CreditX",
+    "or": "oppure scarica direttamente"
+  },
   "ConfidentialitePage": {
     "title_metadata": "Informativa sulla privacy | CreditX",
     "description_metadata": "Informativa sulla privacy e trattamento dei dati personali di CreditX.",
