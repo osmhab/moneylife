@@ -58,6 +58,26 @@ export default function AdminClientAnalysePrevoyanceClient() {
 
   const setField = (k: string, v: any) => setClient((c) => ({ ...c, [k]: v }));
 
+  // ── 3e pilier (plans privés 3a/3b) ────────────────────────────────────────
+  const is3rdPillar = (t: any) =>
+    typeof t === "string" && (t.startsWith("PILIER_3") || t.startsWith("3A") || t === "3B" || t === "3A_BANQUE");
+  const updatePlanTop = (idx: number, key: string, val: any) =>
+    setPlans((ps) => ps.map((p, i) => (i === idx ? { ...p, [key]: val } : p)));
+  const updatePlanData = (idx: number, key: string, val: any) =>
+    setPlans((ps) => ps.map((p, i) => (i === idx ? { ...p, data: { ...(p.data || {}), [key]: val } } : p)));
+  const removePlan = (idx: number) => setPlans((ps) => ps.filter((_, i) => i !== idx));
+  const addPilier3 = () =>
+    setPlans((ps) => [
+      ...ps,
+      {
+        id: `p3-${Date.now()}`,
+        type: "PILIER_3A_POLICE",
+        status: "ACTIVE",
+        label: "",
+        data: { occurrence: "mois", isRegulier: true },
+      },
+    ]);
+
   // ── Chargement du contexte (données perso + plans) ────────────────────────
   React.useEffect(() => {
     if (!uid) {
@@ -298,6 +318,30 @@ export default function AdminClientAnalysePrevoyanceClient() {
               </div>
             )}
 
+            {/* 3e pilier (contrats privés 3a/3b) — existants chargés + ajout */}
+            <div className="space-y-2 rounded-md border p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">3e pilier (privé)</span>
+                <Button variant="outline" size="sm" onClick={addPilier3}>
+                  <Plus className="h-4 w-4 mr-1" /> Ajouter
+                </Button>
+              </div>
+              {plans.map((p, i) =>
+                is3rdPillar(p?.type) ? (
+                  <Pilier3Card
+                    key={p.id || i}
+                    plan={p}
+                    onTop={(k, v) => updatePlanTop(i, k, v)}
+                    onData={(k, v) => updatePlanData(i, k, v)}
+                    onRemove={() => removePlan(i)}
+                  />
+                ) : null
+              )}
+              {!plans.some((p) => is3rdPillar(p?.type)) && (
+                <div className="text-xs text-muted-foreground">Aucun 3e pilier. « Ajouter » pour en intégrer un.</div>
+              )}
+            </div>
+
             <Button onClick={runAnalyse} disabled={running} className="w-full">
               {running ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Calculator className="h-4 w-4 mr-2" />}
               Lancer l'analyse
@@ -325,6 +369,149 @@ export default function AdminClientAnalysePrevoyanceClient() {
 }
 
 // ── Sous-composants ──────────────────────────────────────────────────────────
+
+const PILIER3_TYPES: { value: string; label: string }[] = [
+  { value: "PILIER_3A_POLICE", label: "3a assurance" },
+  { value: "PILIER_3A_BANK", label: "3a banque" },
+  { value: "PILIER_3B", label: "3b" },
+];
+
+const PROFILS = ["defensif", "equilibre", "growth", "dynamique"];
+
+function Pilier3Card({
+  plan,
+  onTop,
+  onData,
+  onRemove,
+}: {
+  plan: AnyObj;
+  onTop: (k: string, v: any) => void;
+  onData: (k: string, v: any) => void;
+  onRemove: () => void;
+}) {
+  const d = plan.data || {};
+  const isBank = plan.type === "PILIER_3A_BANK" || plan.type === "3A_BANQUE";
+  const [showPrimes, setShowPrimes] = React.useState(false);
+  const num = (k: string, label: string) => (
+    <Field label={label}>
+      <Input type="number" value={d[k] ?? ""} onChange={(e) => onData(k, Number(e.target.value) || 0)} />
+    </Field>
+  );
+
+  return (
+    <div className="space-y-2 rounded-md bg-slate-50 p-3">
+      <div className="flex items-center gap-2">
+        <select
+          className="h-8 rounded-md border border-input bg-transparent px-2 text-xs"
+          value={plan.type}
+          onChange={(e) => onTop("type", e.target.value)}
+        >
+          {PILIER3_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <Input
+          className="h-8 flex-1"
+          placeholder={isBank ? "Banque / fondation" : "Compagnie"}
+          value={plan.label || ""}
+          onChange={(e) => onTop("label", e.target.value)}
+        />
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onRemove}>
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {isBank ? (
+        <div className="grid grid-cols-2 gap-2">
+          {num("soldeActuel", "Solde actuel")}
+          {num("montantRegulier", "Versement / période")}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            {num("valeurRachatActuelle", "Valeur de rachat")}
+            {num("projectionAssureur", "Capital projeté 65")}
+          </div>
+
+          {/* Capital décès (éventuellement croissant) */}
+          <div className="grid grid-cols-2 gap-2">
+            {num("capitalDecesFixe", "Capital décès actuel")}
+            {num("capitalDecesAugmentation", "Augmentation annuelle")}
+          </div>
+
+          {/* Rente incapacité de gain + délai d'attente */}
+          <div className="grid grid-cols-2 gap-2">
+            {num("renteInvalidite", "Rente incapacité / an")}
+            <Field label="Délai d'attente">
+              <select
+                className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+                value={String(d.delaiAttente ?? 0)}
+                onChange={(e) => onData("delaiAttente", Number(e.target.value))}
+              >
+                <option value="0">—</option>
+                <option value="3">3 mois</option>
+                <option value="12">12 mois</option>
+                <option value="24">24 mois</option>
+              </select>
+            </Field>
+          </div>
+
+          {/* Primes : prime totale (toujours), détail par couverture (optionnel) */}
+          <div className="grid grid-cols-2 gap-2">
+            {num("primeTotale", "Prime TOTALE / période")}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowPrimes((v) => !v)}
+            className="text-[11px] font-medium text-indigo-600"
+          >
+            {showPrimes ? "− Masquer le détail des primes" : "+ Détailler les primes par couverture"}
+          </button>
+          {showPrimes && (
+            <div className="grid grid-cols-2 gap-2 rounded-md bg-white p-2">
+              {num("primeEpargne", "Prime épargne")}
+              {num("primeIncapacite", "Prime incapacité de gain")}
+              {num("primeLiberation", "Prime libération des primes")}
+              {num("primeDeces", "Prime capital décès")}
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 text-xs">
+          <span>Périodicité</span>
+          <select
+            className="h-7 rounded-md border border-input bg-transparent px-1"
+            value={d.occurrence || "mois"}
+            onChange={(e) => onData("occurrence", e.target.value)}
+          >
+            <option value="mois">/ mois</option>
+            <option value="annee">/ an</option>
+          </select>
+        </div>
+        <label className="flex items-center gap-1.5 text-xs">
+          <Checkbox checked={!!d.isInvesti} onCheckedChange={(v) => onData("isInvesti", !!v)} /> Investi
+        </label>
+        {d.isInvesti && (
+          <select
+            className="h-7 rounded-md border border-input bg-transparent px-1 text-xs"
+            value={d.profil || "equilibre"}
+            onChange={(e) => onData("profil", e.target.value)}
+          >
+            {PROFILS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

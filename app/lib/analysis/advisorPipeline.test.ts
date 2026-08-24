@@ -97,6 +97,35 @@ describe("Outil conseiller — analyse synchrone en mémoire", () => {
     console.log("Décès      → besoin:", Math.round(a.deces.besoin), "couverture:", Math.round(a.deces.couverture), "lacune:", Math.round(a.deces.lacune));
   });
 
+  it("intègre un 3e pilier (la couverture retraite augmente)", () => {
+    const base: any = {
+      Enter_dateNaissance: "15.06.1985",
+      Enter_salaireAnnuel: 90000,
+      Enter_etatCivil: 0,
+    };
+    const analyse = (plans: any[]) => {
+      const projections = {
+        retraite: buildRetraiteMatrix(base, legal, echelle44, plans),
+        invalidite_maladie: buildInvaliditeMaladieMatrix(base, legal, echelle44, plans),
+        invalidite_accident: buildInvaliditeAccidentMatrix(base, legal, echelle44, plans),
+        deces_maladie: buildDecesMaladieMatrix(base, legal, echelle44, plans),
+        deces_accident: buildDecesAccidentMatrix(base, legal, echelle44, plans),
+      };
+      return computeSituationAnalysis({ cloudData: { ...base, projections }, plans });
+    };
+    // Plan 3a après normalisation route (capitalRetraiteProjete posé).
+    const plan3a = {
+      id: "p3a",
+      type: "PILIER_3A_POLICE",
+      status: "ACTIVE",
+      data: { capitalRetraiteProjete: 150000, valeurRachatActuelle: 20000, capitalDecesFixe: 100000 },
+    };
+    const sans = analyse([])!;
+    const avec = analyse([plan3a])!;
+    // Le 3a réduit le capital manquant à la retraite.
+    expect(avec.capManquantRetraite).toBeLessThan(sans.capManquantRetraite);
+  });
+
   it("refuse une analyse sans salaire (garde-fou)", () => {
     const projections = {
       retraite: buildRetraiteMatrix({} as any, legal, echelle44, []),

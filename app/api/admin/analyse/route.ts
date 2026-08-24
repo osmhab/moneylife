@@ -20,6 +20,7 @@ import { LEGAL_2025 } from "@/lib/core/legal";
 import { Legal_Echelle44_2025 } from "@/lib/registry/echelle44";
 import { computeMinimalLPP, buildMinimalLPPPlan } from "@/lib/calculs/lppMinimum";
 import { computeDetailRentes } from "@/lib/analysis/detailRentes";
+import { computeProjections3aBanque, computeProjections3aAssurance } from "@/lib/calculs/3epilier";
 // Les agrégateurs de matrices vivent dans la copie « shared » (celle qu'utilise
 // la Cloud Function). Types censés identiques à app/lib → on caste au passage
 // de frontière pour éviter la friction des deux copies (dette connue).
@@ -43,6 +44,39 @@ const LPP_RENTE_FIELDS = [
   "Enter_renteConjointLPP",
   "Enter_renteOrphelinLPP",
 ];
+
+const is3rdPillar = (t: any) =>
+  typeof t === "string" && (t.startsWith("PILIER_3") || t.startsWith("3A") || t === "3B" || t === "3A_BANQUE");
+
+function birthYearOf(client: any): number {
+  const s = String(client?.Enter_dateNaissance ?? "").trim();
+  const dot = s.split(".");
+  if (dot.length === 3 && dot[2].length === 4) return Number(dot[2]);
+  const dash = s.split("-");
+  if (dash.length === 3 && dash[0].length === 4) return Number(dash[0]);
+  const m = s.match(/(19|20)\d{2}/);
+  return m ? Number(m[0]) : NaN;
+}
+
+/**
+ * Normalise les plans 3e pilier : `situation.ts` lit le capital retraite depuis
+ * `capitalRetraiteProjete`/`capitalRetraiteGlobal` — pas depuis `projectionAssureur`
+ * ni via les projections. On calcule donc et on pose `capitalRetraiteProjete` (si
+ * absent) pour que le 3a compte dans le capital retraite ET les sources.
+ */
+function normalize3aPlans(plans: any[], clientAge: number): any[] {
+  return plans.map((p) => {
+    if (!is3rdPillar(p?.type)) return p;
+    const d = { ...(p.data || {}) };
+    if (!(Number(d.capitalRetraiteProjete) > 0 || Number(d.capitalRetraiteGlobal) > 0)) {
+      const isBank = p.type === "PILIER_3A_BANK" || p.type === "3A_BANQUE";
+      d.capitalRetraiteProjete = isBank
+        ? computeProjections3aBanque(d, clientAge)
+        : computeProjections3aAssurance(d, clientAge);
+    }
+    return { ...p, data: d };
+  });
+}
 
 export async function POST(req: NextRequest) {
   // Auth interne
@@ -99,6 +133,13 @@ export async function POST(req: NextRequest) {
     } catch {
       /* estimation impossible → on continue sans LPP */
     }
+  }
+
+  // ── NORMALISATION 3e PILIER ───────────────────────────────────────────────
+  {
+    const by = birthYearOf(client);
+    const clientAge = Number.isNaN(by) ? 40 : new Date().getFullYear() - by;
+    plans = normalize3aPlans(plans, clientAge);
   }
 
   // ── NORMALISATION LPP ─────────────────────────────────────────────────────
