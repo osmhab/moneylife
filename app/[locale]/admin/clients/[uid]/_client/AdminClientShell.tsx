@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { UserRound, FileText, Shield, Sparkles, PenTool } from "lucide-react";
+import { UserRound, FileText, Shield, Sparkles, PenTool, Calculator } from "lucide-react";
 
 function isActive(pathname: string, href: string) {
   // active si exact match, ou si la route commence par href (sauf pour overview)
@@ -40,6 +40,12 @@ export default function AdminClientShell({
         href: `${base}/analyse`,
         label: "Analyse",
         icon: Sparkles,
+        badge: null,
+    },
+    {
+        href: `${base}/analyse-prevoyance`,
+        label: "Analyse conseiller",
+        icon: Calculator,
         badge: null,
     },
     {
