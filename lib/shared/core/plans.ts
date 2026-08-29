@@ -5,12 +5,24 @@ import { ClientDataSchema } from "./schema";
 export const PlanTypeEnum = z.enum([
   "LPP_BASE",
   "LPP_COMPL",
+  // Libre passage (avoir de 2e pilier « parqué » hors emploi). Capital seul dans l'analyse :
+  // compte pour le capital retraite (projeté) et le capital décès (solde versé), PAS de rentes.
+  "LIBRE_PASSAGE_POLICE",  // émis par un ASSUREUR (police)
+  "LIBRE_PASSAGE_COMPTE",  // émis par une BANQUE / fondation (compte)
   "PILIER_3A_POLICE",
   "PILIER_3A_BANK",
   "PILIER_3B",
 ]);
 
 export type PlanType = z.infer<typeof PlanTypeEnum>;
+
+/** 2e pilier ACTIF (caisse de pension) : base + complémentaire → rentes + capital.
+ *  ("LPP" = alias legacy de la base, encore présent dans d'anciens plans/tests.) */
+export const isDeuxiemePilierActif = (t?: string) => t === "LPP_BASE" || t === "LPP_COMPL" || t === "LPP";
+/** Libre passage : avoir parqué → capital seul (retraite + capital décès), pas de rentes. */
+export const isLibrePassage = (t?: string) => t === "LIBRE_PASSAGE_POLICE" || t === "LIBRE_PASSAGE_COMPTE";
+/** Tout le 2e pilier (actif + libre passage). */
+export const isDeuxiemePilier = (t?: string) => isDeuxiemePilierActif(t) || isLibrePassage(t);
 
 /**
  * Structure d'un Plan Individuel
@@ -46,6 +58,8 @@ export const getPlanDisplayInfo = (type: PlanType) => {
   switch (type) {
     case "LPP_BASE":
     case "LPP_COMPL":
+    case "LIBRE_PASSAGE_POLICE":
+    case "LIBRE_PASSAGE_COMPTE":
       return { icon: "/icons/lpp.svg", color: "#3B82F6", category: "2ème pilier" };
     case "PILIER_3A_POLICE":
     case "PILIER_3A_BANK":

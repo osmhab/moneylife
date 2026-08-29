@@ -18,6 +18,7 @@ import {
   computeDeathBenefitAssurance,
 } from "@/lib/calculs/3epilier";
 import { computeLPPProjectionRetraite } from "@/lib/calculs/lpp";
+import { isDeuxiemePilier, isDeuxiemePilierActif, isLibrePassage } from "@/lib/core/plans";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -80,12 +81,23 @@ function computeTotals(plans: any[], clientAge: number): Totals {
 
   const acc = active.reduce((acc: Totals, p: any) => {
     const d = p.data || {};
-    const isLPP = p.type === "LPP_BASE";
+    const isLPP = isDeuxiemePilierActif(p.type); // base + complémentaire
+    const isLP = isLibrePassage(p.type);         // libre passage → capital seul
     const isBank = p.type === "PILIER_3A_BANK" || p.type === "3A_BANQUE";
     // Épargne libre (cash) : décès = solde (succession), EPL = solde (100% dispo).
     const isCash = p.type === "EPARGNE_LIBRE";
 
-    if (isLPP) {
+    if (isLP) {
+      // Libre passage : capital SEUL. Compte pour le capital retraite (projeté à 65) et le
+      // capital décès (le solde est versé). Aucune rente / invalidité / EPL / rachat.
+      const solde = Number(d.valeurRachatActuelle) || Number(d.soldeActuel) || 0;
+      acc.current += solde;
+      acc.capital65 +=
+        Number(d.capitalRetraiteGlobal) ||
+        Number(d.Enter_lppCapitalProjete65) ||
+        solde * Math.pow(1.0125, Math.max(0, 65 - clientAge));
+      acc.deces += solde;
+    } else if (isLPP) {
       acc.current += Number(d.Enter_avoirVieillesseTotal) || 0;
       // Priorité au capital stocké (= projection figée au scan) ; à défaut, on
       // recalcule via le moteur (même valeur que la carte plan), au lieu de 0.
@@ -171,10 +183,11 @@ export async function POST(req: NextRequest) {
 
     // Sous-ensembles : LPP / privé (3e pilier, hors épargne libre) / épargne libre
     // (cash, sa propre page) / global (tous, l'épargne libre y compte comme cash).
-    const lppPlans = plans.filter((p) => p.type === "LPP_BASE");
+    // 2e pilier = base + complémentaire + libre passage (tous agrégés).
+    const lppPlans = plans.filter((p) => isDeuxiemePilier(p.type));
     const epargneLibrePlans = plans.filter((p) => p.type === "EPARGNE_LIBRE");
     const privatePlans = plans.filter(
-      (p) => p.type !== "LPP_BASE" && p.type !== "EPARGNE_LIBRE"
+      (p) => !isDeuxiemePilier(p.type) && p.type !== "EPARGNE_LIBRE"
     );
 
     return NextResponse.json({

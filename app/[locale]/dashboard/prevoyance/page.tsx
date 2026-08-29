@@ -927,8 +927,8 @@ function CategoryPage({ t, locale, amountLabel, plans, clientAge, gradient, onAd
         {pendingPlans.length > 0 && (
           <div className="mb-8 space-y-4">
             <div className="flex items-center gap-2 px-2">
-              <div className="w-2 h-2 rounded-full bg-slate-400 animate-pulse" />
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("pending_docs_lbl", { count: pendingPlans.length })}</p>
+              <div className="w-2 h-2 rounded-full bg-white/80 animate-pulse" />
+              <p className="text-xs font-black text-white/90 uppercase tracking-widest">{t("pending_docs_lbl")}</p>
             </div>
             {pendingPlans.map((p: any) => {
               const isProcessing = p.status === "PENDING_INSURANCE";

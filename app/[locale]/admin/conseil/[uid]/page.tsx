@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { db, auth } from "@/lib/firebase";
-import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { 
   Building2, UserCheck, ShieldCheck, Users, Target, 
@@ -71,6 +71,11 @@ export default function AdminConseilPage() {
   // Notes rapides persistantes
   const [isQuickNotesOpen, setIsQuickNotesOpen] = useState(false);
   const [quickNotes, setQuickNotes] = useState("");
+
+  // Auto-sauvegarde du brouillon d'entretien (survit à la fermeture avant finalisation).
+  const [draftState, setDraftState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const draftDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftLoadedRef = React.useRef(false); // évite d'écraser le brouillon pendant sa restauration
 
   // Étape 4 : Formulaire CRUD réactif exhaustif
   const [clientForm, setClientForm] = useState<any>({
@@ -189,6 +194,79 @@ export default function AdminConseilPage() {
     fetchClientData();
   }, [uid]);
 
+  // 1b. Restauration du brouillon d'entretien (localStorage puis Firestore) à l'ouverture.
+  useEffect(() => {
+    if (!uid) return;
+    const id = uid as string;
+    const lsKey = `conseil_draft_${id}`;
+    draftLoadedRef.current = false;
+    let cancelled = false;
+
+    (async () => {
+      let restored = false;
+      // localStorage : filet instantané (offline / crash navigateur).
+      try {
+        const raw = localStorage.getItem(lsKey);
+        if (raw && !cancelled) {
+          const d = JSON.parse(raw);
+          if (typeof d.notes === "string") setQuickNotes(d.notes);
+          if (d.nextRdv) setNextRdv((p) => ({ ...p, ...d.nextRdv }));
+          restored = restored || !!d.notes?.trim();
+        }
+      } catch { /* ignore */ }
+      // Firestore : source de vérité (multi-appareil / cache vidé).
+      try {
+        const snap = await getDoc(doc(db, "clients", id, "conseils_drafts", "current"));
+        if (snap.exists() && !cancelled) {
+          const d = snap.data() as any;
+          if (typeof d.notes === "string") setQuickNotes(d.notes);
+          if (d.nextRdv) setNextRdv((p) => ({ ...p, ...d.nextRdv }));
+          restored = restored || !!d.notes?.trim();
+        }
+      } catch { /* ignore */ }
+      if (!cancelled) {
+        draftLoadedRef.current = true;
+        if (restored) toast.info("Brouillon d'entretien restauré.");
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [uid]);
+
+  // 1c. Auto-sauvegarde du brouillon (localStorage immédiat + Firestore debouncé).
+  useEffect(() => {
+    if (!uid || !draftLoadedRef.current) return;
+    if (quickNotes.trim().length === 0) return;
+    const id = uid as string;
+    const lsKey = `conseil_draft_${id}`;
+
+    try { localStorage.setItem(lsKey, JSON.stringify({ notes: quickNotes, nextRdv, ts: Date.now() })); } catch { /* quota */ }
+
+    setDraftState("saving");
+    if (draftDebounceRef.current) clearTimeout(draftDebounceRef.current);
+    draftDebounceRef.current = setTimeout(async () => {
+      try {
+        await setDoc(
+          doc(db, "clients", id, "conseils_drafts", "current"),
+          {
+            notes: quickNotes,
+            nextRdv,
+            status: "DRAFT",
+            clientName: `${clientForm.Enter_prenom || ""} ${clientForm.Enter_nom || ""}`.trim(),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+        setDraftState("saved");
+      } catch (e) {
+        console.error("Auto-sauvegarde brouillon échouée :", e);
+        setDraftState("error"); // le brouillon localStorage reste intact
+      }
+    }, 800);
+
+    return () => { if (draftDebounceRef.current) clearTimeout(draftDebounceRef.current); };
+  }, [quickNotes, nextRdv, uid, clientForm.Enter_prenom, clientForm.Enter_nom]);
+
   // Boucle d'auto-rotation continue pour l'Étape 5 (Doit être un hook de premier niveau)
   useEffect(() => {
     if (currentStep !== 5 || activeNodeId !== null) return;
@@ -266,6 +344,12 @@ export default function AdminConseilPage() {
         ...(ensuredByServer ? {} : { referralCode: newRefCode }),
         referralIban: clientForm.Enter_referralIban || ""
       }, { merge: true });
+
+      // 2b. Session figée : on purge le brouillon (Firestore + localStorage).
+      if (draftDebounceRef.current) clearTimeout(draftDebounceRef.current);
+      await deleteDoc(doc(db, "clients", uid as string, "conseils_drafts", "current")).catch(() => {});
+      try { localStorage.removeItem(`conseil_draft_${uid as string}`); } catch { /* ignore */ }
+      setDraftState("idle");
 
       // 3. ENVOI SILENCIEUX DE L'E-MAIL DE CLÔTURE
       if (client?.email) {
@@ -392,7 +476,19 @@ export default function AdminConseilPage() {
       {isQuickNotesOpen && (
         <div className="fixed top-24 right-8 z-[100] w-80 md:w-96 bg-white border border-slate-200 rounded-3xl shadow-2xl p-5 animate-in slide-in-from-top-4 duration-300">
           <div className="flex justify-between items-center mb-3">
-            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Notes rapides</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Notes rapides</p>
+              {draftState !== "idle" && (
+                <span
+                  className={`text-[9px] font-bold uppercase tracking-wider ${
+                    draftState === "error" ? "text-rose-500" : draftState === "saving" ? "text-slate-400" : "text-emerald-600"
+                  }`}
+                  title="Vos notes sont sauvegardées automatiquement en brouillon."
+                >
+                  {draftState === "saving" ? "· enregistrement…" : draftState === "error" ? "· hors-ligne (local)" : "· enregistré"}
+                </span>
+              )}
+            </div>
             <button onClick={() => setIsQuickNotesOpen(false)}><X size={14} className="text-slate-400" /></button>
           </div>
           <textarea

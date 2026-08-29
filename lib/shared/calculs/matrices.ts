@@ -1,6 +1,10 @@
 // lib/shared/calculs/matrices.ts
 import type { ClientData, Legal_Settings, Legal_Echelle44Row } from "../core/types";
 import { normalizeDateMask, isValidDateMask } from "../core/dates";
+// Helpers 2e pilier définis EN LOCAL (pas d'import depuis ../core/plans, qui tire `zod`
+// → le bundle de la Cloud Function n'embarque pas zod, ça crasherait au démarrage).
+const isDeuxiemePilierActif = (t?: string) => t === "LPP_BASE" || t === "LPP_COMPL" || t === "LPP";
+const isLibrePassage = (t?: string) => t === "LIBRE_PASSAGE_POLICE" || t === "LIBRE_PASSAGE_COMPTE";
 
 // Import des moteurs de calcul (Shared)
 import { computeInvaliditeMaladie } from "./events/invaliditeMaladie";
@@ -53,13 +57,23 @@ interface PlanTotals {
 function sumFromPlans(plans: any[], category: 'retraite' | 'deces' | 'invalidite', clientAge: number = 35): PlanTotals {
   return plans.reduce((acc, plan) => {
     const d = { ...plan, ...(plan.data || {}) };
-    const isLPP = plan.type === "LPP_BASE";
+    // 2e pilier ACTIF = base + complémentaire (mêmes champs Enter_* → s'additionnent).
+    const isLPP = isDeuxiemePilierActif(plan.type);
+    // Libre passage = avoir parqué → CAPITAL SEUL (retraite + capital décès), aucune rente.
+    const isLP = isLibrePassage(plan.type);
     const isBank = plan.type === "PILIER_3A_BANK" || plan.type === "3A_BANQUE";
 
     if (category === 'retraite') {
       if (isLPP) {
         acc.lppRente += Number(d.Enter_rentevieillesseLPP65) || 0;
         acc.lppCapital += Number(d.capitalRetraiteGlobal) || Number(d.Enter_lppCapitalProjete65) || 0;
+      } else if (isLP) {
+        // Capital projeté à 65 ans (le libre passage grossit à l'intérêt jusqu'à la retraite).
+        // À défaut de projection sur le doc, on projette le solde au taux minimal LPP (1.25 %).
+        acc.lppCapital +=
+          Number(d.capitalRetraiteGlobal) ||
+          Number(d.Enter_lppCapitalProjete65) ||
+          (Number(d.valeurRachatActuelle) || Number(d.soldeActuel) || 0) * Math.pow(1.0125, Math.max(0, 65 - clientAge));
       } else {
         const projection = isBank ? computeProjections3aBanque(d, clientAge) : computeProjections3aAssurance(d, clientAge);
         acc.priveCapital += projection;
@@ -74,6 +88,9 @@ function sumFromPlans(plans: any[], category: 'retraite' | 'deces' | 'invalidite
         // Capital décès INDÉPENDANT : versé TOUJOURS, en plus du "plus rente" (et de la
         // rente de survivant). Additif inconditionnel → toujours dans le capital décès.
         acc.lppCapital += Number(d.Enter_CapitalDecesIndependantMal) || 0;
+      } else if (isLP) {
+        // Le solde du libre passage est versé au décès → capital (pas de rente de survivant).
+        acc.lppCapital += Number(d.valeurRachatActuelle) || Number(d.soldeActuel) || 0;
       } else {
         acc.priveCapital += isBank ? (Number(d.soldeActuel) || 0) : computeDeathBenefitAssurance(d);
       }
@@ -83,6 +100,8 @@ function sumFromPlans(plans: any[], category: 'retraite' | 'deces' | 'invalidite
       if (isLPP) {
         acc.lppRente += Number(d.Enter_renteInvaliditeMaladie) || 0;
         acc.lppRenteEnfant += Number(d.Enter_renteEnfantInvalideMaladie) || 0;
+      } else if (isLP) {
+        // Capital seul : le libre passage ne verse AUCUNE prestation d'invalidité (il reste parqué).
       } else {
         acc.priveRente += Number(d.renteInvalidite) || 0;
         acc.priveCapital += Number(d.soldeActuel) || Number(d.valeurRachatActuelle) || 0;

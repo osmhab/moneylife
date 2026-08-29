@@ -2,12 +2,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc, where, serverTimestamp, deleteDoc, collectionGroup, setDoc } from "firebase/firestore";
 import { 
   Search, ChevronRight, CheckCircle2, AlertCircle,
   LayoutDashboard, User, Phone, MapPin, 
-  Stethoscope, Briefcase, X, ShieldCheck, Loader2, Plus, Trash2, Landmark, CalendarDays, Mail, Heart, Clock, FileSignature, Edit2, Users, Sparkles, FolderLock, ScanSearch, Hash, PhoneCall, Bell
+  Stethoscope, Briefcase, X, ShieldCheck, Loader2, Plus, Trash2, Landmark, CalendarDays, Mail, Heart, Clock, FileSignature, Edit2, Users, Sparkles, FolderLock, ScanSearch, Hash, PhoneCall, Bell, LogOut
 } from "lucide-react"; // 👈 Ajout de ScanSearch
 import Link from "next/link";
 import { useLocale } from "next-intl";
@@ -122,6 +123,14 @@ export default function OffresWizardEntry() {
   // sans elle, personne ne saurait qu'une signature ou un paiement attend.
   const locale = useLocale();
   const [unreadAlerts, setUnreadAlerts] = useState(0);
+
+  // Compte admin connecté (affiché dans l'en-tête) — évite de travailler « à l'aveugle »
+  // sans savoir sous quel compte on agit.
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  useEffect(() => onAuthStateChanged(auth, (u) => setUserEmail(u?.email ?? null)), []);
+  const handleLogout = async () => {
+    try { await signOut(auth); } finally { window.location.href = `/${locale}/login`; }
+  };
 
   
 
@@ -422,9 +431,35 @@ export default function OffresWizardEntry() {
       {/* HEADER & TABS */}
       <div className="flex flex-col gap-6 border-b pb-6 border-slate-200">
         <div>
-          <div className="flex items-center gap-2 text-slate-400 mb-2">
-            <LayoutDashboard size={14} />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em]">CreditX Admin</span>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="flex items-center gap-2 text-slate-400">
+              <LayoutDashboard size={14} />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em]">CreditX Admin</span>
+            </div>
+            {/* Barre compte : savoir sous quel compte on agit + accès CRM + déconnexion */}
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/${locale}/admin/clients`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-500 text-xs font-bold shadow-sm transition-colors"
+              >
+                <Users size={14} /> CRM Clients
+              </Link>
+              {userEmail && (
+                <span
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold"
+                  title="Compte connecté"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" /> {userEmail}
+                </span>
+              )}
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:text-rose-600 hover:border-rose-400 text-xs font-bold shadow-sm transition-colors"
+                title="Se déconnecter"
+              >
+                <LogOut size={14} /> Déconnexion
+              </button>
+            </div>
           </div>
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <h1 className="text-4xl font-black tracking-tighter text-slate-900 italic">CreditX CRM</h1>

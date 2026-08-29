@@ -33,7 +33,10 @@ export default function AdminSignedPlanProcessor({ isOpen, onClose, plan, client
 
     const unsub = onSnapshot(doc(db, "clients", clientUid, "plans", plan.id), (snap) => {
       if (snap.exists()) {
-        setLivePlan({ id: snap.id, ...snap.data() });
+        // On RÉINJECTE clientUid : le doc lui-même ne le porte pas (il est déduit du chemin
+        // parent au chargement). Sans ça, `onEditPlan(livePlan)` renverrait un plan sans
+        // clientUid → l'éditeur (AdminPlanGenerator) ne préremplit pas et bloque au refus.
+        setLivePlan({ id: snap.id, clientUid, ...snap.data() });
       }
     });
 

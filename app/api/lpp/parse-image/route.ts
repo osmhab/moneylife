@@ -47,9 +47,25 @@ function parseAmountToIntCHF(val: any): number | null {
   return isNaN(parsed) ? null : parsed;
 }
 
+// FAMILLE de document 2e pilier détectée par l'IA (fiable) → type de plan interne.
+// NB : base vs complémentaire N'EST PAS décidé par l'IA (indistinguable sur une pièce
+// seule : une caisse de base a aussi une « part LPP » faible). C'est l'app qui tranche
+// par CONTEXTE (1re caisse = base, 2e = complémentaire), avec bascule en un tap.
+const FAMILY_TO_PLANTYPE: Record<string, string> = {
+  CAISSE: "LPP_BASE", // défaut ; l'UI passe en LPP_COMPL s'il existe déjà une caisse
+  LIBRE_PASSAGE_POLICE: "LIBRE_PASSAGE_POLICE",
+  LIBRE_PASSAGE_COMPTE: "LIBRE_PASSAGE_COMPTE",
+};
+
 function getGeminiJsonSchema() {
   const properties: Record<string, any> = {
     institutionName: { type: "STRING", description: "Nom de la caisse identifiée ou 'AUTRE'" },
+    // Classification du document (voir prompt). Chaînes libres validées côté serveur.
+    documentSubtype: {
+      type: "STRING",
+      description: "Famille du document : CAISSE, LIBRE_PASSAGE_POLICE ou LIBRE_PASSAGE_COMPTE",
+    },
+    subtypeConfidence: { type: "STRING", description: "HIGH si la famille est claire, LOW si ambigu" },
   };
   TEXT_FIELDS.forEach((f) => (properties[f] = { type: "STRING" }));
   FINANCIAL_FIELDS.forEach((f) => (properties[f] = { type: "INTEGER", description: "Montant entier en CHF nettoyé" }));
@@ -101,6 +117,13 @@ ${MULTILINGUAL_PREAMBLE}
 2. Ne laisse jamais les salaires/taux d'activité vides si l'info est présente (synonymes : "Traitement assuré", "Taux d'occupation").
 3. RENTES INVALIDITÉ (MIRRORING) : sauf règle contraire de l'institution, si aucune distinction Maladie/Accident n'est visible, duplique la même valeur dans les deux.
 
+🔎 CLASSIFICATION DU DOCUMENT (champ "documentSubtype", OBLIGATOIRE) — choisis EXACTEMENT une des 3 FAMILLES. NE cherche PAS à distinguer « base » vs « complémentaire » (décidé ailleurs par le contexte) :
+- "CAISSE" : certificat d'une CAISSE DE PENSION rattachée à un EMPLOYEUR (cotisations employé + employeur en cours, avoir de vieillesse, taux de conversion, rentes). Plan de base OU complémentaire/surobligatoire/cadres → dans les DEUX cas c'est "CAISSE".
+- "LIBRE_PASSAGE_POLICE" : POLICE de LIBRE PASSAGE émise par un ASSUREUR (avoir de 2e pilier « parqué » hors emploi). Signes : « libre passage » + assureur, valeur de rachat, AUCUN employeur, pas de cotisations en cours.
+- "LIBRE_PASSAGE_COMPTE" : COMPTE de LIBRE PASSAGE dans une BANQUE / fondation de libre passage. Signes : « compte de libre passage », banque/fondation, un solde, AUCUN employeur.
+Renseigne "subtypeConfidence" = "HIGH" si la famille est claire (présence ou non d'un employeur + cotisations en cours → quasi toujours net), "LOW" seulement si vraiment ambigu.
+Pour un LIBRE PASSAGE, mets le montant de l'avoir/prestation de libre passage dans "Enter_avoirVieillesseTotal", et la projection à 65 ans (si présente) dans "Enter_lppCapitalProjete65".
+
 RÈGLES PAR INSTITUTION :
 ${knowledgeBase}
 
@@ -132,6 +155,8 @@ ${MULTILINGUAL_LPP_GLOSSARY}
     // Nettoyage : textes trimés, montants en entiers CHF, nulls sinon.
     const data: Record<string, any> = {};
     Object.keys(getGeminiJsonSchema().properties).forEach((key) => {
+      // Les 2 clés de classification ne sont PAS des montants → traitées à part.
+      if (key === "documentSubtype" || key === "subtypeConfidence") return;
       const val = geminiParsed[key];
       if (val !== undefined && val !== null && val !== "" && val !== "null") {
         if (TEXT_FIELDS.includes(key) || key === "institutionName") {
@@ -145,7 +170,33 @@ ${MULTILINGUAL_LPP_GLOSSARY}
     // Retire les `0` accident qui bloqueraient le fallback maladie du moteur.
     dropBlockingZeroAccident(data);
 
-    return NextResponse.json({ data });
+    // ── Classification de la FAMILLE 2e pilier (caisse / libre passage police / compte) ──
+    // base vs complémentaire n'est PAS décidé ici (indistinguable sur une pièce) → l'UI tranche
+    // par contexte (1re caisse = base, 2e = complémentaire).
+    const rawSubtype = String(geminiParsed.documentSubtype || "").trim().toUpperCase();
+    const subtypeKind = FAMILY_TO_PLANTYPE[rawSubtype] ? rawSubtype : "CAISSE";
+    const confidence: "HIGH" | "LOW" =
+      FAMILY_TO_PLANTYPE[rawSubtype] && String(geminiParsed.subtypeConfidence || "").toUpperCase() === "HIGH"
+        ? "HIGH"
+        : "LOW";
+    const planType = FAMILY_TO_PLANTYPE[subtypeKind];
+
+    // Libre passage = capital seul : on mappe l'avoir vers le champ lu par le moteur
+    // (solde pour un compte, valeur de rachat pour une police) + la projection à 65.
+    if (planType === "LIBRE_PASSAGE_COMPTE" || planType === "LIBRE_PASSAGE_POLICE") {
+      const solde = Number(data.Enter_avoirVieillesseTotal) || 0;
+      if (solde > 0) {
+        if (planType === "LIBRE_PASSAGE_COMPTE") data.soldeActuel = solde;
+        else data.valeurRachatActuelle = solde;
+      }
+      if (Number(data.Enter_lppCapitalProjete65) > 0) data.capitalRetraiteGlobal = Number(data.Enter_lppCapitalProjete65);
+    }
+
+    return NextResponse.json({
+      data,
+      // Classification exposée à l'UI : type de plan + confiance (silencieux si HIGH, sinon confirmer).
+      subtype: { kind: subtypeKind, planType, confidence },
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Erreur de parsing" }, { status: 500 });
   }

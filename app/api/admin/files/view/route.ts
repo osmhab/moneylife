@@ -22,9 +22,21 @@ export async function GET(req: Request) {
     // 3. Récupérer le contenu du fichier sous forme de Buffer
     const [content] = await file.download();
 
-    // 4. Déterminer le type de contenu (Optionnel mais plus propre)
+    // 4. Déterminer le type de contenu depuis l'extension.
+    // La route sert aussi les pièces d'une candidature (/careers) : CV Word,
+    // photo JPEG… d'où une table plutôt qu'un simple test PDF/PNG.
     const fileName = path.split('/').pop() || "document.pdf";
-    const contentType = path.toLowerCase().endsWith('.png') ? 'image/png' : 'application/pdf';
+    const ext = (fileName.split('.').pop() || "").toLowerCase();
+    const CONTENT_TYPES: Record<string, string> = {
+      pdf: "application/pdf",
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      webp: "image/webp",
+      doc: "application/msword",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    };
+    const contentType = CONTENT_TYPES[ext] ?? "application/octet-stream";
 
     // 5. Retourner le fichier (Correction du type Buffer pour le build)
     return new NextResponse(new Uint8Array(content), {

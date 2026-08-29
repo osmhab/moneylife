@@ -70,6 +70,13 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  /* Manquaient → bg-popover / bg-card / bg-destructive ne rendaient RIEN (menus déroulants
+     transparents). Mappés ici pour que Select/Dropdown/Popover/Card aient un vrai fond. */
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-destructive: var(--destructive);
 
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;

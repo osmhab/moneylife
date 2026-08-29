@@ -41,8 +41,6 @@ import { Label } from "@/components/ui/label";
 
 import {
   Search,
-  RefreshCw,
-  UserRound,
   ArrowRight,
   Archive,
   ShieldCheck,
@@ -51,6 +49,7 @@ import {
   UserPlus,
   Copy,
   Mail,
+  X,
 } from "lucide-react";
 
 type ClientRow = {
@@ -104,11 +103,30 @@ async function copyToClipboard(text: string) {
 
 export default function ClientsCrmPageClient() {
   const locale = useLocale();
-  const [q, setQ] = useState("");
+  // Recherche + filtres restaurés depuis sessionStorage : au retour depuis une fiche
+  // client (fil d'Ariane), la liste et les résultats précédents réapparaissent.
+  const [q, setQ] = useState<string>(() =>
+    typeof window === "undefined" ? "" : sessionStorage.getItem("crm_clients_q") || "",
+  );
   const qDebounced = useDebouncedValue(q, 250);
 
-  const [hasDP, setHasDP] = useState<FilterHasDP>("all");
-  const [status, setStatus] = useState<FilterStatus>("all");
+  const [hasDP, setHasDP] = useState<FilterHasDP>(() =>
+    typeof window === "undefined" ? "all" : (sessionStorage.getItem("crm_clients_hasDP") as FilterHasDP) || "all",
+  );
+  const [status, setStatus] = useState<FilterStatus>(() =>
+    typeof window === "undefined" ? "all" : (sessionStorage.getItem("crm_clients_status") as FilterStatus) || "all",
+  );
+
+  // Persiste la recherche/les filtres à chaque changement.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("crm_clients_q", q);
+      sessionStorage.setItem("crm_clients_hasDP", hasDP);
+      sessionStorage.setItem("crm_clients_status", status);
+    } catch {
+      /* quota / mode privé */
+    }
+  }, [q, hasDP, status]);
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<ClientRow[]>([]);
@@ -387,7 +405,13 @@ export default function ClientsCrmPageClient() {
     setSendWelcomeLoading(false);
   };
 
+  // La liste ne se charge QUE lorsqu'une recherche est active. Au repos : rien.
   useEffect(() => {
+    if (qDebounced.trim().length === 0) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     fetchItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qDebounced, hasDP, status]);
@@ -409,7 +433,7 @@ export default function ClientsCrmPageClient() {
   }, [items, hasDP, status]);
 
   const total = filtered.length;
-  const totalWith = filtered.filter((x) => x.hasDonneesPersonnelles).length;
+  const isSearching = qDebounced.trim().length > 0;
 
   const statusBadge = (s?: string) => {
     const v = (s || "active").toLowerCase();
@@ -469,26 +493,15 @@ export default function ClientsCrmPageClient() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-2xl bg-muted flex items-center justify-center">
-              <UserRound className="h-4 w-4" />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-semibold truncate">
-              CRM — Clients
-            </h1>
+    <div className="mx-auto max-w-[1400px] px-4 lg:px-6 py-6">
+        {/* En-tête du dashboard conseiller */}
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Tableau de bord</h1>
+            <p className="text-sm text-slate-400">Recherchez un client ou ouvrez un dossier.</p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {loading
-              ? "Chargement…"
-              : `${total} clients affichés • ${totalWith} avec données personnelles`}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
           <Button
+            className="rounded-xl"
             onClick={() => {
               resetCreateForm();
               setCreateOpen(true);
@@ -497,69 +510,64 @@ export default function ClientsCrmPageClient() {
             <UserPlus className="h-4 w-4 mr-2" />
             Créer un client
           </Button>
-
-          <Button
-            variant="secondary"
-            onClick={() => {
-              fetchItems();
-              toast("Refresh", { description: "Liste mise à jour." });
-            }}
-            disabled={loading}
-          >
-            <RefreshCw
-              className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
-            />
-            Actualiser
-          </Button>
         </div>
-      </div>
 
-      <Card className="rounded-2xl">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Recherche & filtres</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <div className="sm:col-span-2">
-              <div className="relative">
-                <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-                <Input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Rechercher: nom, prénom, email, UID, date naissance…"
-                  className="pl-9"
-                />
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                Astuce: colle un UID ici pour accéder vite au dossier.
-              </div>
-            </div>
-
-            <div>
-              <Select
-                value={hasDP}
-                onValueChange={(v) => setHasDP(v as FilterHasDP)}
+        {/* Barre de recherche */}
+        <div className={`mx-auto w-full max-w-2xl ${isSearching ? "pt-4" : ""}`}>
+          <div className="relative">
+            <Search className="h-5 w-5 text-slate-400 absolute left-5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Input
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Nom, prénom, email, UID, date de naissance…"
+              className="h-16 pl-14 pr-14 rounded-2xl border-slate-200 bg-white text-lg shadow-sm focus-visible:ring-2 focus-visible:ring-blue-500"
+            />
+            {q && (
+              <button
+                type="button"
+                onClick={() => setQ("")}
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label="Effacer"
               >
-                <SelectTrigger className="w-full">
+                <X className="h-5 w-5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+      {!isSearching && (
+        <div className="mt-6 rounded-3xl border border-dashed border-slate-200 bg-white/50 p-10 text-center">
+          <span className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-500">
+            <Search className="h-6 w-6" />
+          </span>
+          <p className="text-base font-semibold text-slate-700">Recherchez un client</p>
+          <p className="mt-1 text-sm text-slate-400">
+            Tapez un nom, un email ou collez un UID — les résultats apparaîtront ici.
+          </p>
+        </div>
+      )}
+
+      {isSearching && (
+        <div className="w-full space-y-4 pt-8">
+          {/* Compteur + filtres compacts */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-500">
+              {loading ? "Recherche…" : `${total} résultat${total > 1 ? "s" : ""}`}
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              <Select value={hasDP} onValueChange={(v) => setHasDP(v as FilterHasDP)}>
+                <SelectTrigger className="h-9 w-[185px] rounded-xl bg-white">
                   <SelectValue placeholder="Données perso" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Tous</SelectItem>
-                  <SelectItem value="yes">Avec données personnelles</SelectItem>
-                  <SelectItem value="no">Sans données personnelles</SelectItem>
+                  <SelectItem value="all">Toutes complétudes</SelectItem>
+                  <SelectItem value="yes">Avec données perso</SelectItem>
+                  <SelectItem value="no">Sans données perso</SelectItem>
                 </SelectContent>
               </Select>
-              <div className="text-xs text-muted-foreground mt-1">
-                Filtre complétude.
-              </div>
-            </div>
-
-            <div>
-              <Select
-                value={status}
-                onValueChange={(v) => setStatus(v as FilterStatus)}
-              >
-                <SelectTrigger className="w-full">
+              <Select value={status} onValueChange={(v) => setStatus(v as FilterStatus)}>
+                <SelectTrigger className="h-9 w-[145px] rounded-xl bg-white">
                   <SelectValue placeholder="Statut" />
                 </SelectTrigger>
                 <SelectContent>
@@ -569,24 +577,16 @@ export default function ClientsCrmPageClient() {
                   <SelectItem value="deleted">Supprimés</SelectItem>
                 </SelectContent>
               </Select>
-              <div className="text-xs text-muted-foreground mt-1">
-                Filtre statut CRM.
-              </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      <Card className="rounded-2xl">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Clients</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error ? (
-            <div className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
-              {error}
-            </div>
-          ) : null}
+          <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <CardContent className="p-3 sm:p-4">
+              {error ? (
+                <div className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+                  {error}
+                </div>
+              ) : null}
 
           <div className="mt-2 rounded-xl border overflow-hidden">
             <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs font-medium text-muted-foreground bg-muted/40">
@@ -713,12 +713,10 @@ export default function ClientsCrmPageClient() {
             )}
           </div>
 
-          <div className="mt-3 text-xs text-muted-foreground">
-            Note: suppression ={" "}
-            <span className="font-mono">status: "deleted"</span> (soft delete).
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Soft delete confirm */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>

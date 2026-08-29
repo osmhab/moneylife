@@ -171,19 +171,56 @@ export function computeProjections3aBanque(data: any, clientAge: number): number
 /**
  * Projection ASSURANCE
  */
+// Parseur de date souple (ISO "aaaa-mm-jj" OU masque "jj.mm.aaaa"). Inliné ici pour rester
+// autonome dans le bundle de la Cloud Function (pas d'import supplémentaire).
+function parseFlexibleDate3a(input: string | null | undefined): Date | null {
+  if (!input) return null;
+  const s = String(input).trim();
+  if (!s) return null;
+  let y: number, m: number, d: number;
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const mask = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (iso) {
+    [, y, m, d] = iso.map(Number) as unknown as [unknown, number, number, number];
+  } else if (mask) {
+    [, d, m, y] = mask.map(Number) as unknown as [unknown, number, number, number];
+  } else {
+    return null;
+  }
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null;
+  return date;
+}
+
+// Horizon de capitalisation = échéance RÉELLE de la police si connue, sinon 65 − âge.
+export function yearsToMaturity(
+  dateEcheance: string | null | undefined,
+  clientAge: number,
+  at: Date = new Date(),
+): number {
+  const end = parseFlexibleDate3a(dateEcheance);
+  if (end) {
+    const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
+    return Math.max(0, (end.getTime() - at.getTime()) / MS_PER_YEAR);
+  }
+  return Math.max(0, 65 - clientAge);
+}
+
+// ⚠️ ALIGNÉ SUR app/lib (= la version consommée par l'app iOS, source de vérité, CLAUDE.md §2.3) :
+//  1) priorité à `projectionAssureur` (la projection de l'assureur fait foi) ;
+//  2) horizon = échéance réelle de la police (`yearsToMaturity`), pas « 65 − âge ».
+// Avant, cette copie priorisait `capitalRetraiteGlobal` + horizon 65 → écart ~1.3 % sur le
+// capital 3a affiché entre la matrice (client) et le détail du plan (app/iOS).
 export function computeProjections3aAssurance(data: any, clientAge: number): number {
   const d = data || {};
+  if (Number(d.projectionAssureur) > 0) return Math.round(Number(d.projectionAssureur));
 
-  // 1. PRIORITÉ : Valeur enregistrée dans Firestore
-  if (Number(d.capitalRetraiteGlobal) > 0) return Math.round(Number(d.capitalRetraiteGlobal));
-
-  // 2. FALLBACK : Calcul dynamique
   const { valeurRachatActuelle = 0, primeEpargne = 0, occurrence = "mois", isInvesti, profil, isLibere } = d;
   const r = getRate(isInvesti, profil);
-  const n = Math.max(0, 65 - clientAge);
-  if (n <= 0) return Math.round(valeurRachatActuelle);
+  const n = yearsToMaturity(d.dateEcheance, clientAge);
+  if (n === 0) return Math.round(valeurRachatActuelle);
 
-  const P = isLibere ? 0 : (occurrence === "mois" ? primeEpargne * 12 : primeEpargne);
+  const P = isLibere ? 0 : (occurrence === "annee" ? primeEpargne : primeEpargne * 12);
   const capExistant = valeurRachatActuelle * Math.pow(1 + r, n);
   const epargneFuture = r <= 0 ? P * n : P * ((Math.pow(1 + r, n) - 1) / r);
 

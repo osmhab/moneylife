@@ -9,17 +9,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 
-import { 
-  FileText, 
-  Shield, 
-  UserRound, 
-  ArrowRight, 
-  RefreshCw, 
+import {
+  FileText,
+  UserRound,
+  ArrowRight,
+  RefreshCw,
   FileSignature,
   Download,
-  CheckCircle2 
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Lock,
+  Gift,
+  StickyNote,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -116,6 +119,9 @@ export default function AdminClientOverviewClient() {
 
   // État Dialog
   const [transferOpen, setTransferOpen] = useState(false);
+
+  // Masque la zone confidentielle conseiller quand l'écran fait face au client.
+  const [hidePrivate, setHidePrivate] = useState(false);
 
   const fetchOverview = async () => {
     try {
@@ -298,50 +304,42 @@ export default function AdminClientOverviewClient() {
   }, [uid]);
 
   const dp = data?.donneesPersonnelles;
-  const displayName =
-    dp && (dp.firstName || dp.Enter_prenom || dp.lastName || dp.Enter_nom)
-      ? `${dp.lastName || dp.Enter_nom || ""} ${dp.firstName || dp.Enter_prenom || ""}`.trim()
-      : "Client";
 
   return (
-    <div className="space-y-4">
-      {/* HEADER */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-2xl bg-muted flex items-center justify-center">
-              <UserRound className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-lg font-semibold truncate flex items-center gap-2">
-                {loading ? "Chargement…" : displayName}
-                {referral?.referredBy && (
-                  <Badge className="rounded-full bg-amber-100 text-amber-900 hover:bg-amber-100">
-                    🎁 Recommandé par {referral.referredBy.name}
-                  </Badge>
-                )}
-              </div>
-              <div className="text-xs text-muted-foreground font-mono truncate">{uid}</div>
-            </div>
-          </div>
+    <div className="space-y-5">
+      {/* Barre d'actions */}
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-bold tracking-tight text-slate-900">Aperçu du dossier</h2>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={hidePrivate ? "default" : "outline"}
+            size="sm"
+            className="rounded-xl"
+            onClick={() => setHidePrivate((v) => !v)}
+            title="Masquer les informations confidentielles quand l'écran fait face au client"
+          >
+            {hidePrivate ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+            {hidePrivate ? "Confidentiel masqué" : "Masquer le confidentiel"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="rounded-xl"
+            onClick={() => {
+              fetchOverview();
+              fetchSignedDocs();
+              toast("Rafraîchissement...");
+            }}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Actualiser
+          </Button>
         </div>
-
-        <Button
-          variant="secondary"
-          onClick={() => {
-            fetchOverview();
-            fetchSignedDocs();
-            toast("Rafraîchissement...");
-          }}
-          disabled={loading}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Actualiser
-        </Button>
       </div>
 
       {/* PROSPECT → conversion en compte connectable (email ajouté, dossier conservé) */}
-      {!metaLoading && clientEmail === null && (
+      {!metaLoading && clientEmail === null && !hidePrivate && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
             <UserRound className="h-4 w-4" />
@@ -404,55 +402,60 @@ export default function AdminClientOverviewClient() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           {/* CARTE : DONNÉES PERSONNELLES */}
-          <Card className="rounded-2xl">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center justify-between">
-                <span className="inline-flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Données personnelles
+          <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between text-base">
+                <span className="inline-flex items-center gap-2.5">
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <FileText className="h-4 w-4" />
+                  </span>
+                  <span className="font-bold text-slate-900">Données personnelles</span>
                 </span>
                 {dp?.exists ? (
-                  <Badge className="rounded-full">OK</Badge>
+                  <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-600">
+                    Complet
+                  </span>
                 ) : (
-                  <Badge variant="secondary" className="rounded-full">
+                  <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-600">
                     À compléter
-                  </Badge>
+                  </span>
                 )}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <div>
-                  <div className="text-xs text-muted-foreground">Nom</div>
-                  <div className="font-medium">{dp?.lastName || dp?.Enter_nom || "—"}</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Nom</div>
+                  <div className="mt-0.5 text-sm font-semibold text-slate-900">{dp?.lastName || dp?.Enter_nom || "—"}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Prénom</div>
-                  <div className="font-medium">{dp?.firstName || dp?.Enter_prenom || "—"}</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Prénom</div>
+                  <div className="mt-0.5 text-sm font-semibold text-slate-900">{dp?.firstName || dp?.Enter_prenom || "—"}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Naissance</div>
-                  <div className="font-medium">{dp?.birthdate || "—"}</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Naissance</div>
+                  <div className="mt-0.5 text-sm font-semibold text-slate-900">{dp?.birthdate || "—"}</div>
                 </div>
               </div>
-              <Separator />
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="text-xs text-muted-foreground">
-                  Dernière mise à jour : <span className="font-medium text-foreground">{formatTs(dp?.updatedAt ?? null)}</span>
+              <div className="flex flex-col gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-xs text-slate-400">
+                  Dernière mise à jour : <span className="font-medium text-slate-600">{formatTs(dp?.updatedAt ?? null)}</span>
                 </div>
                 <Link href={`/admin/clients/${uid}/donnees-personnelles`}>
-                  <Button size="sm">Éditer <ArrowRight className="h-4 w-4 ml-2" /></Button>
+                  <Button size="sm" className="rounded-xl">Éditer <ArrowRight className="h-4 w-4 ml-2" /></Button>
                 </Link>
               </div>
             </CardContent>
           </Card>
 
           {/* CARTE : DOCUMENTS SIGNÉS */}
-          <Card className="rounded-2xl border-green-100 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                Documents signés
+          <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2.5 text-base">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                </span>
+                <span className="font-bold text-slate-900">Documents signés</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -491,35 +494,124 @@ export default function AdminClientOverviewClient() {
             </CardContent>
           </Card>
 
-          {/* CARTE : PARRAINAGE */}
-          {referral && (referral.referralCode || referral.bank?.iban || referral.bank?.phone || (referral.referees?.length ?? 0) > 0) && (
-            <Card className="rounded-2xl border-amber-100">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">🎁 Parrainage</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        </div>
+
+        {/* SIDEBAR : ACTIONS (côté client-safe) */}
+        <Card className="rounded-3xl border-slate-200 shadow-sm h-fit">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                <FileSignature className="h-4 w-4" />
+              </span>
+              <span className="font-bold text-slate-900">Actions &amp; outils</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Link href={`/admin/clients/${uid}/donnees-personnelles`} className="block">
+              <Button variant="secondary" className="w-full justify-between rounded-xl">
+                Données perso <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+
+            <Button
+              variant="outline"
+              className="w-full justify-between rounded-xl border-blue-200 text-blue-600 hover:bg-blue-50"
+              onClick={() => setTransferOpen(true)}
+            >
+              Résiliation et transfert 3ème pilier <FileSignature className="h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ─────────── ESPACE CONSEILLER — CONFIDENTIEL ─────────── */}
+      <Card className="overflow-hidden rounded-3xl border-amber-200 bg-amber-50/30 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center justify-between text-base">
+            <span className="inline-flex items-center gap-2.5">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                <Lock className="h-4 w-4" />
+              </span>
+              <span className="flex flex-col">
+                <span className="font-bold text-slate-900">Espace conseiller</span>
+                <span className="text-xs font-normal text-amber-600">Confidentiel — ne pas montrer au client</span>
+              </span>
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl text-amber-700 hover:bg-amber-100"
+              onClick={() => setHidePrivate((v) => !v)}
+            >
+              {hidePrivate ? <Eye className="h-4 w-4 mr-2" /> : <EyeOff className="h-4 w-4 mr-2" />}
+              {hidePrivate ? "Afficher" : "Masquer"}
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {hidePrivate ? (
+            <div className="flex flex-col items-center justify-center gap-1 py-10 text-center">
+              <EyeOff className="h-6 w-6 text-amber-400" />
+              <p className="text-sm font-medium text-amber-700">Contenu confidentiel masqué</p>
+              <p className="text-xs text-amber-600">Cliquez sur « Afficher » pour le révéler.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* Notes internes */}
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <StickyNote className="h-4 w-4 text-amber-600" /> Notes internes
+                </div>
+                <textarea
+                  className="w-full min-h-[160px] rounded-2xl border border-amber-200 bg-white p-3 text-sm outline-none focus:ring-2 focus:ring-amber-400/50"
+                  placeholder="Ajouter une note interne (visible conseiller uniquement)…"
+                  value={internalNotes}
+                  onChange={(e) => { setInternalNotes(e.target.value); setNotesDirty(true); }}
+                  spellCheck={false}
+                />
+                <div className="mt-2 flex justify-end">
+                  <Button
+                    size="sm"
+                    className="rounded-xl"
+                    onClick={saveNotes}
+                    disabled={metaLoading || notesSaving || !notesDirty}
+                  >
+                    {notesSaving ? "..." : "Enregistrer"}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Parrainage */}
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <Gift className="h-4 w-4 text-amber-600" /> Parrainage
+                </div>
+                {referral?.referredBy && (
+                  <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                    <Gift className="h-3.5 w-3.5" /> Recommandé par {referral.referredBy.name}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <div className="text-xs text-muted-foreground">IBAN (versement)</div>
-                    <div className="font-medium break-all">
-                      {referral.bank?.iban || "— (non renseigné)"}
-                    </div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">IBAN (versement)</div>
+                    <div className="mt-0.5 break-all text-sm font-medium text-slate-900">{referral?.bank?.iban || "— (non renseigné)"}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted-foreground">Code de parrainage</div>
-                    <div className="font-mono font-medium">{referral.referralCode || "—"}</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Code de parrainage</div>
+                    <div className="mt-0.5 font-mono text-sm font-medium text-slate-900">{referral?.referralCode || "—"}</div>
                   </div>
                 </div>
-                <Separator />
-                <div>
-                  <div className="text-xs text-muted-foreground mb-2">Filleuls ({referral.referees?.length ?? 0})</div>
-                  {(referral.referees?.length ?? 0) === 0 ? (
-                    <div className="text-muted-foreground">Aucun filleul pour le moment.</div>
+                <div className="mt-3 border-t border-amber-200/70 pt-3">
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Filleuls ({referral?.referees?.length ?? 0})
+                  </div>
+                  {(referral?.referees?.length ?? 0) === 0 ? (
+                    <div className="text-sm text-slate-400">Aucun filleul pour le moment.</div>
                   ) : (
                     <div className="space-y-1.5">
                       {referral.referees.map((r: any) => (
                         <div key={r.id} className="flex items-center justify-between">
-                          <span className="font-medium">{r.name}</span>
+                          <span className="text-sm font-medium text-slate-900">{r.name}</span>
                           <Badge variant="secondary" className="rounded-full text-[10px]">
                             {refStatusLabel(r.status)}{r.amountCHF ? ` · ${r.amountCHF} CHF` : ""}
                           </Badge>
@@ -528,59 +620,11 @@ export default function AdminClientOverviewClient() {
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* SIDEBAR : ACTIONS */}
-        <Card className="rounded-2xl h-fit">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Actions & Outils</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Link href={`/admin/clients/${uid}/donnees-personnelles`} className="block">
-              <Button variant="secondary" className="w-full justify-between">
-                Données perso <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-
-            <Link href={`/admin/clients/${uid}/sante`} className="block">
-              <Button variant="secondary" className="w-full justify-between">
-                Santé <Shield className="h-4 w-4" />
-              </Button>
-            </Link>
-
-            <Button 
-              variant="outline" 
-              className="w-full justify-between border-blue-200 text-blue-600 hover:bg-blue-50"
-              onClick={() => setTransferOpen(true)}
-            >
-              Résiliation et transfert 3ème pilier <FileSignature className="h-4 w-4" />
-            </Button>
-
-            <div className="pt-2">
-              <div className="text-sm font-medium">Notes internes</div>
-              <textarea
-                className="mt-2 w-full min-h-[160px] rounded-xl border bg-background p-3 text-sm focus:ring-1 focus:ring-primary outline-none"
-                placeholder="Ajouter une note..."
-                value={internalNotes}
-                onChange={(e) => { setInternalNotes(e.target.value); setNotesDirty(true); }}
-                spellCheck={false}
-              />
-              <div className="flex justify-end mt-2">
-                <Button
-                  size="sm"
-                  onClick={saveNotes}
-                  disabled={metaLoading || notesSaving || !notesDirty}
-                >
-                  {notesSaving ? "..." : "Enregistrer"}
-                </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* DIALOG TRANSFERT */}
       {dp && (

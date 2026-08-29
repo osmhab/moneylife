@@ -21,6 +21,7 @@ import { Legal_Echelle44_2025 } from "@/lib/registry/echelle44";
 import { computeMinimalLPP, buildMinimalLPPPlan } from "@/lib/calculs/lppMinimum";
 import { computeDetailRentes } from "@/lib/analysis/detailRentes";
 import { computeProjections3aBanque, computeProjections3aAssurance } from "@/lib/calculs/3epilier";
+import { isDeuxiemePilierActif } from "@/lib/core/plans";
 // Les agrégateurs de matrices vivent dans la copie « shared » (celle qu'utilise
 // la Cloud Function). Types censés identiques à app/lib → on caste au passage
 // de frontière pour éviter la friction des deux copies (dette connue).
@@ -148,12 +149,16 @@ export async function POST(req: NextRequest) {
   // la lisent depuis les CHAMPS CLIENT. On alimente donc les DEUX depuis une
   // source unique : si un certificat est saisi côté client sans plan, on
   // synthétise un plan LPP_BASE ; puis on reporte les rentes du plan sur le client.
-  let lppPlan = plans.find((p: any) => p?.type === "LPP_BASE");
+  // TOUS les plans 2e pilier ACTIFS (base + complémentaire). Le libre passage est
+  // exclu ici : capital seul, il ne porte pas de rentes reportées sur le client.
+  let lppActifs = plans.filter((p: any) => isDeuxiemePilierActif(p?.type));
   const clientHasCert =
     (client.Enter_Affilie_LPP && LPP_RENTE_FIELDS.some((f) => Number(client[f]) > 0)) ||
     Number(client.Enter_lppCapitalProjete65) > 0;
-  if (!lppPlan && clientHasCert) {
-    lppPlan = {
+  if (lppActifs.length === 0 && clientHasCert) {
+    // Aucun plan 2e pilier fourni mais un certificat saisi côté client → on synthétise
+    // un plan LPP_BASE (les matrices lisent la LPP via les PLANS).
+    const synth = {
       id: "lpp-saisie",
       type: "LPP_BASE",
       status: "ACTIVE",
@@ -168,17 +173,25 @@ export async function POST(req: NextRequest) {
         Enter_renteOrphelinLPP: client.Enter_renteOrphelinLPP,
       },
     };
-    plans = [...plans, lppPlan];
+    plans = [...plans, synth];
+    lppActifs = [synth];
   }
-  const lppSrc: any = lppPlan ? { ...lppPlan, ...(lppPlan.data || {}) } : {};
+  // effectiveClient : les fonctions d'événement (détail rentes, 1er pilier) lisent la LPP
+  // depuis les CHAMPS CLIENT → on y reporte la SOMME des rentes/capital de TOUS les plans
+  // 2e pilier actifs (base + complémentaire), pas seulement le premier.
   const effectiveClient: any = { ...client };
-  if (lppPlan) effectiveClient.Enter_Affilie_LPP = true; // requis par les gardes LPP (rente conjoint)
+  if (lppActifs.length > 0) effectiveClient.Enter_Affilie_LPP = true; // gardes LPP (rente conjoint)
+  const sumField = (f: string) =>
+    lppActifs.reduce((a: number, p: any) => a + (Number({ ...p, ...(p.data || {}) }[f]) || 0), 0);
   for (const f of LPP_RENTE_FIELDS) {
-    if (lppSrc[f] != null) effectiveClient[f] = lppSrc[f];
+    const s = sumField(f);
+    if (s > 0) effectiveClient[f] = s;
   }
-  if (lppSrc.Enter_lppCapitalProjete65 != null) {
-    effectiveClient.Enter_lppCapitalProjete65 = lppSrc.Enter_lppCapitalProjete65;
-  }
+  const capSum = lppActifs.reduce((a: number, p: any) => {
+    const d = { ...p, ...(p.data || {}) };
+    return a + (Number(d.Enter_lppCapitalProjete65) || Number(d.capitalRetraiteGlobal) || 0);
+  }, 0);
+  if (capSum > 0) effectiveClient.Enter_lppCapitalProjete65 = capSum;
 
   try {
     // ── COUCHE A : les 5 matrices de projection, calculées EN MÉMOIRE ────────
@@ -244,7 +257,10 @@ export async function POST(req: NextRequest) {
       /* profil incomplet → pas de détail rentes */
     }
 
-    return NextResponse.json({ analysis, lppEstimation, detailRentes });
+    // `projections` = les 5 matrices tous-piliers (AVS/LPP/LAA/3e pilier/capital),
+    // calculées EN MÉMOIRE depuis {client, plans} édités → graphiques live et complets
+    // côté conseiller (les AreaCharts client, eux, ignorent plans + 3a).
+    return NextResponse.json({ analysis, lppEstimation, detailRentes, projections });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Erreur serveur" }, { status: 500 });
   }

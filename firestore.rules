@@ -223,6 +223,19 @@ service cloud.firestore {
     }
 
     // ===============================
+    // 💼 CANDIDATURES (page publique /careers)
+    // ===============================
+    // SERVEUR UNIQUEMENT, dans les deux sens (l'Admin SDK contourne ces règles) :
+    //   - écriture par /api/careers/apply (le candidat n'est pas authentifié) ;
+    //   - lecture par /api/admin/careers/applications (garde `requireInternal`).
+    // Refus TOTAL côté navigateur, y compris pour un compte interne : un dossier
+    // contient un casier judiciaire et des poursuites, données qui n'ont aucune
+    // raison de transiter par le SDK client. Aucun écran ne dépend de cette règle.
+    match /job_applications/{applicationId} {
+      allow read, write: if false;
+    }
+
+    // ===============================
     // PAR DÉFAUT
     // ===============================
     match /{document=**} {

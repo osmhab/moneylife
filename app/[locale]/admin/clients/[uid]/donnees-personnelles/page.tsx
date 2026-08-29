@@ -11,7 +11,7 @@ export default async function Page({
 
   return (
     <RequireAdmin>
-      <DonneesPersonnellesEditor targetUid={uid} />
+      <DonneesPersonnellesEditor targetUid={uid} admin />
     </RequireAdmin>
   );
 }

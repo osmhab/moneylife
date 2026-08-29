@@ -1,10 +1,10 @@
 //app/admin/offres-wizard/_client/AdminConseilWizard.tsx
 "use client";
 
-import React, { useState } from "react";
-import { X, ChevronRight, ChevronLeft, Save, Sparkles, Target, FileText, CheckCircle2, ShieldAlert } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { X, ChevronRight, ChevronLeft, Save, Sparkles, Target, FileText, CheckCircle2, ShieldAlert, Cloud, CloudOff } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -29,6 +29,88 @@ export default function AdminConseilWizard({ isOpen, onClose, client }: AdminCon
     immobilier: false,
   });
 
+  // État de l'auto-sauvegarde du brouillon ("idle" | "saving" | "saved" | "error").
+  const [draftState, setDraftState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedRef = useRef(false); // évite de ré-écrire le brouillon pendant la restauration
+
+  const uid: string | undefined = client?.uid;
+  const lsKey = uid ? `conseil_draft_${uid}` : "";
+
+  // ── Restauration du brouillon à l'ouverture (localStorage puis Firestore) ──
+  useEffect(() => {
+    if (!isOpen || !uid) return;
+    loadedRef.current = false;
+    let cancelled = false;
+
+    const hasContent = (n: string, p: Record<string, boolean> | undefined) =>
+      !!(n?.trim()) || Object.values(p || {}).some(Boolean);
+
+    (async () => {
+      let restored = false;
+      // 1) localStorage : filet instantané, disponible même hors-ligne.
+      try {
+        const raw = localStorage.getItem(lsKey);
+        if (raw && !cancelled) {
+          const d = JSON.parse(raw);
+          setNotes(d.notes || "");
+          setPriorities((p) => ({ ...p, ...(d.priorities || {}) }));
+          restored = restored || hasContent(d.notes, d.priorities);
+        }
+      } catch { /* ignore */ }
+      // 2) Firestore : source de vérité (multi-appareil / après vidage du cache).
+      try {
+        const snap = await getDoc(doc(db, "clients", uid, "conseils_drafts", "current"));
+        if (snap.exists() && !cancelled) {
+          const d = snap.data() as any;
+          setNotes(d.notes || "");
+          setPriorities((p) => ({ ...p, ...(d.priorities || {}) }));
+          restored = restored || hasContent(d.notes, d.priorities);
+        }
+      } catch { /* ignore */ }
+      if (!cancelled) {
+        loadedRef.current = true;
+        if (restored) toast.info("Brouillon d'entretien restauré.");
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [isOpen, uid, lsKey]);
+
+  // ── Auto-sauvegarde du brouillon à chaque changement (localStorage immédiat + Firestore debouncé) ──
+  useEffect(() => {
+    if (!isOpen || !uid || !loadedRef.current) return;
+    const hasContent = notes.trim().length > 0 || Object.values(priorities).some(Boolean);
+    if (!hasContent) return;
+
+    // Filet synchrone : écrit avant même l'appel réseau (survit à un crash/fermeture immédiate).
+    try { localStorage.setItem(lsKey, JSON.stringify({ notes, priorities, ts: Date.now() })); } catch { /* quota */ }
+
+    setDraftState("saving");
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        await setDoc(
+          doc(db, "clients", uid, "conseils_drafts", "current"),
+          {
+            notes,
+            priorities,
+            status: "DRAFT",
+            clientName: `${client?.firstName || ""} ${client?.lastName || ""}`.trim(),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+        setDraftState("saved");
+      } catch (e) {
+        console.error("Auto-sauvegarde brouillon échouée :", e);
+        setDraftState("error"); // le brouillon localStorage reste, lui, intact
+      }
+    }, 800);
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [notes, priorities, isOpen, uid, lsKey, client?.firstName, client?.lastName]);
+
   if (!isOpen || !client) return null;
 
   const handleSaveSession = async () => {
@@ -45,11 +127,17 @@ export default function AdminConseilWizard({ isOpen, onClose, client }: AdminCon
         advisorNotes: `Session physique effectuée avec ${client.firstName} ${client.lastName}`,
       });
 
+      // Session figée : on nettoie le brouillon (Firestore + localStorage) pour ne pas le restaurer ensuite.
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      await deleteDoc(doc(db, "clients", client.uid, "conseils_drafts", "current")).catch(() => {});
+      try { localStorage.removeItem(lsKey); } catch { /* ignore */ }
+
       toast.success("Conseil clôturé et synchronisé sur le profil client !", { id: toastId });
       onClose();
       setCurrentStep("OBJECTIFS");
       setNotes("");
       setPriorities({ impots: false, retraite: false, famille: false, immobilier: false });
+      setDraftState("idle");
     } catch (error) {
       console.error(error);
       toast.error("Erreur lors de la sauvegarde de la session.", { id: toastId });
@@ -75,9 +163,26 @@ export default function AdminConseilWizard({ isOpen, onClose, client }: AdminCon
               </h2>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white bg-white/5 rounded-full transition-colors">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-3">
+            {draftState !== "idle" && (
+              <span
+                className={`hidden sm:flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full border ${
+                  draftState === "error"
+                    ? "text-rose-300 border-rose-500/30 bg-rose-500/10"
+                    : draftState === "saving"
+                      ? "text-slate-300 border-white/10 bg-white/5"
+                      : "text-emerald-300 border-emerald-500/20 bg-emerald-500/10"
+                }`}
+                title="Vos notes sont sauvegardées automatiquement en brouillon."
+              >
+                {draftState === "error" ? <CloudOff size={12} /> : <Cloud size={12} />}
+                {draftState === "saving" ? "Enregistrement…" : draftState === "error" ? "Hors-ligne (brouillon local)" : "Brouillon enregistré"}
+              </span>
+            )}
+            <button onClick={onClose} className="p-2 text-slate-400 hover:text-white bg-white/5 rounded-full transition-colors">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* CONTENU CENTRAL ÉVOLUTIF */}

@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { usePublishAdminSubnav } from "@/[locale]/admin/_components/adminSubnav";
 import {
   Select,
   SelectTrigger,
@@ -36,7 +38,8 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import { useRouter } from "next/navigation";
-import { ArrowLeft, AlertTriangle, Download, Scan } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Download, Scan, Check, ChevronsUpDown } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { motion, useScroll, useSpring, useTransform } from "framer-motion";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
@@ -166,6 +169,180 @@ function toLabelMap(obj: Record<string, string>) {
 const sexeOptions = toLabelMap(ENUM_Sexe);
 const etatCivilOptions = toLabelMap(ENUM_EtatCivil);
 const statutProOptions = toLabelMap(ENUM_StatutProfessionnel);
+
+// Nationalité : liste EXHAUSTIVE des pays, noms en FRANÇAIS (même format que l'app iOS, qui
+// stocke le nom — pas le code — dans Enter_nationalite → synchro préservée). Générée via
+// Intl.DisplayNames ; repli sur une liste curée si l'ICU n'est pas disponible (SSR).
+const paysOptions: string[] = (() => {
+  try {
+    const dn = new Intl.DisplayNames(["fr"], { type: "region" });
+    // Exclut les entités non-pays (zone euro, UE, ONU, régions agrégées…).
+    const NON_PAYS = new Set(["EU", "EZ", "UN", "QO", "XA", "XB", "ZZ"]);
+    const names: string[] = [];
+    for (let i = 65; i <= 90; i++) {
+      for (let j = 65; j <= 90; j++) {
+        const code = String.fromCharCode(i) + String.fromCharCode(j);
+        if (NON_PAYS.has(code)) continue;
+        const name = dn.of(code);
+        if (name && name !== code) names.push(name); // écarte les codes non attribués
+      }
+    }
+    const uniq = Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, "fr"));
+    if (uniq.length < 100) throw new Error("liste incomplète"); // ICU partielle → repli
+    return [...uniq, "Autre"];
+  } catch {
+    return [
+      "Suisse", "France", "Italie", "Allemagne", "Portugal", "Espagne", "Royaume-Uni",
+      "Belgique", "Kosovo", "Serbie", "Autriche", "Pays-Bas", "Pologne", "Roumanie",
+      "Grèce", "Turquie", "Brésil", "États-Unis", "Canada", "Maroc", "Tunisie", "Algérie",
+      "Inde", "Chine", "Portugal", "Autre",
+    ];
+  }
+})();
+const permisOptions: [string, string][] = [
+  ["B", "Permis B"],
+  ["C", "Permis C"],
+  ["G", "Permis G (frontalier)"],
+  ["L", "Permis L"],
+  ["Ci", "Permis Ci"],
+  ["Autre", "Autre permis"],
+];
+
+// Indicatifs téléphoniques (mêmes que l'app iOS). Valeur stockée : "+41 79 000 00 00".
+const dialCodes: { flag: string; name: string; dial: string }[] = [
+  { flag: "🇨🇭", name: "Suisse", dial: "+41" }, { flag: "🇫🇷", name: "France", dial: "+33" },
+  { flag: "🇩🇪", name: "Allemagne", dial: "+49" }, { flag: "🇮🇹", name: "Italie", dial: "+39" },
+  { flag: "🇦🇹", name: "Autriche", dial: "+43" }, { flag: "🇵🇹", name: "Portugal", dial: "+351" },
+  { flag: "🇪🇸", name: "Espagne", dial: "+34" }, { flag: "🇬🇧", name: "Royaume-Uni", dial: "+44" },
+  { flag: "🇽🇰", name: "Kosovo", dial: "+383" }, { flag: "🇷🇸", name: "Serbie", dial: "+381" },
+  { flag: "🇹🇷", name: "Turquie", dial: "+90" }, { flag: "🇺🇸", name: "USA/Canada", dial: "+1" },
+];
+
+function formatPhone(digits: string, dial: string): string {
+  const groups = dial === "+41" ? [2, 3, 2, 2] : [2, 2, 2, 2, 2];
+  const out: string[] = [];
+  let i = 0;
+  for (const g of groups) {
+    if (i >= digits.length) break;
+    out.push(digits.slice(i, i + g));
+    i += g;
+  }
+  if (i < digits.length) out.push(digits.slice(i));
+  return out.join(" ");
+}
+
+function parsePhone(raw: string): { dial: string; digits: string } {
+  const t = (raw || "").trim();
+  if (t.startsWith("+")) {
+    const m = dialCodes.map((d) => d.dial).sort((a, b) => b.length - a.length).find((d) => t.startsWith(d));
+    if (m) return { dial: m, digits: t.slice(m.length).replace(/\D/g, "") };
+  }
+  return { dial: "+41", digits: t.replace(/\D/g, "") };
+}
+
+// Champ téléphone façon iOS : indicatif (drapeau + code) + numéro formaté.
+function PhoneField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const initial = parsePhone(value);
+  const [dial, setDial] = React.useState(initial.dial);
+  const [digits, setDigits] = React.useState(initial.digits);
+  const compose = (d: string, g: string) => (g ? `${d} ${formatPhone(g, d)}` : "");
+  // Resynchronise si la valeur change de l'extérieur (chargement), sans casser la saisie.
+  React.useEffect(() => {
+    if (compose(dial, digits) === (value || "")) return;
+    const p = parsePhone(value);
+    setDial(p.dial);
+    setDigits(p.digits);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  // On NE remonte au parent (onChange → setField) QU'au blur / changement d'indicatif :
+  // sinon un setField à chaque frappe re-render l'éditeur et remonte le champ (perte de focus).
+  return (
+    <div className="flex gap-2">
+      <select
+        value={dial}
+        onChange={(e) => {
+          const d = e.target.value;
+          setDial(d);
+          onChange(compose(d, digits)); // l'indicatif se commit tout de suite
+        }}
+        className="h-11 shrink-0 rounded-md border border-input bg-background px-2 text-[15px]"
+      >
+        {dialCodes.map((c) => (
+          <option key={c.dial} value={c.dial}>{c.flag} {c.dial}</option>
+        ))}
+      </select>
+      <input
+        value={formatPhone(digits, dial)}
+        onChange={(e) => setDigits(e.target.value.replace(/\D/g, "").slice(0, 13))}
+        onBlur={() => onChange(compose(dial, digits))}
+        inputMode="tel"
+        placeholder="79 000 00 00"
+        className="h-11 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-[15px] outline-none focus:ring-1 focus:ring-primary"
+      />
+    </div>
+  );
+}
+
+// Combobox pays AVEC recherche (insensible aux accents) — pour la liste mondiale (~250 pays).
+function CountryCombobox({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [q, setQ] = React.useState("");
+  const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const filtered = React.useMemo(() => {
+    const nq = norm(q.trim());
+    return nq ? options.filter((o) => norm(o).includes(nq)) : options;
+  }, [q, options]);
+
+  return (
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setQ(""); }}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-11 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-[15px]"
+        >
+          <span className={value ? "" : "text-muted-foreground"}>{value || "Choisir un pays…"}</span>
+          <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+        <div className="border-b p-2">
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Rechercher un pays…"
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+        <div className="max-h-64 overflow-y-auto p-1">
+          {filtered.length === 0 ? (
+            <div className="px-2 py-3 text-sm text-muted-foreground">Aucun pays trouvé.</div>
+          ) : (
+            filtered.map((o) => (
+              <button
+                key={o}
+                type="button"
+                onClick={() => { onChange(o); setOpen(false); setQ(""); }}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+              >
+                <Check className={`h-4 w-4 shrink-0 ${o === value ? "opacity-100" : "opacity-0"}`} />
+                {o}
+              </button>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 const typeSalaireAssureOptions = [
   { value: "general", label: "Salaire assuré unique" },
@@ -343,7 +520,14 @@ function BufferedTextarea({
    PAGE
 =========================== */
 
-export default function DonneesPersonnellesEditor({ targetUid }: { targetUid?: string }) {
+export default function DonneesPersonnellesEditor({
+  targetUid,
+  admin = false,
+}: {
+  targetUid?: string;
+  /** Variante conseiller (fiche CRM) : layout desktop 2 colonnes, en-tête slim, SANS scan. */
+  admin?: boolean;
+}) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -635,6 +819,70 @@ const handleScanFile = async (file: File) => {
     }
   };
 
+  // Publie les sous-sections dans la sidebar admin (arborescence Clients › Nom › Données
+  // personnelles › Identité/Adresse…). Uniquement en variante admin ET une fois les données
+  // chargées (pour que les ancres existent). No-op côté client (aucun provider).
+  const dpMarried = [1, 3].includes(asNumber(draft.Enter_etatCivil, 0));
+  const dpName = `${asString(draft.Enter_prenom)} ${asString(draft.Enter_nom)}`.trim();
+  usePublishAdminSubnav(
+    admin && data
+      ? {
+          crumbs: [dpName || "Client", "Données personnelles"],
+          items: [
+            { id: "sec-identite", label: "Identité" },
+            { id: "sec-adresse", label: "Adresse" },
+            { id: "sec-pro", label: "Situation professionnelle" },
+            ...(dpMarried ? [{ id: "sec-conjoint", label: "Conjoint" }] : []),
+            { id: "sec-enfants", label: "Enfants" },
+            { id: "sec-avs", label: "AVS" },
+            { id: "sec-ij", label: "Indemnités journalières" },
+          ],
+        }
+      : null,
+    [admin, !!data, dpMarried, dpName],
+  );
+
+  // ⚠️ Stabilisés via useMemo (AVANT tout return conditionnel — règle des hooks) : sans ça,
+  // ces composants seraient recréés à CHAQUE render, donc chaque setField (ex. ajouter un
+  // enfant) remonterait tout le formulaire → scroll qui saute en haut + perte de focus.
+  const Section = React.useMemo(
+    () =>
+      ({ id, title, subtitle, children }: any) => (
+        <div id={id} className="scroll-mt-24 rounded-xl border bg-background">
+          <div className="px-4 py-3 border-b">
+            <div className="text-sm font-semibold">{title}</div>
+            {subtitle ? <div className="text-xs text-muted-foreground">{subtitle}</div> : null}
+          </div>
+          <div className="p-4 space-y-4">{children}</div>
+        </div>
+      ),
+    [],
+  );
+
+  const Row = React.useMemo(
+    () =>
+      ({ label, helper, children }: any) =>
+        admin ? (
+          // Admin : label à largeur FIXE + champ qui remplit le reste (pas de vide entre les deux).
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-5">
+            <div className="sm:w-52 sm:shrink-0">
+              <Label className="text-sm font-medium">{label}</Label>
+              {helper ? <div className="text-xs text-muted-foreground">{helper}</div> : null}
+            </div>
+            <div className="min-w-0 flex-1">{children}</div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-start">
+            <div className="sm:col-span-1 space-y-0.5">
+              <Label className="text-sm">{label}</Label>
+              {helper ? <div className="text-xs text-muted-foreground">{helper}</div> : null}
+            </div>
+            <div className="sm:col-span-2">{children}</div>
+          </div>
+        ),
+    [admin],
+  );
+
   if (loading) return <div className="text-sm text-muted-foreground">Chargement…</div>;
 
   if (!data) {
@@ -646,34 +894,28 @@ const handleScanFile = async (file: File) => {
     );
   }
 
-  const Section = ({ title, subtitle, children }: any) => (
-    <div className="rounded-xl border bg-background">
-      <div className="px-4 py-3 border-b">
-        <div className="text-sm font-semibold">{title}</div>
-        {subtitle ? <div className="text-xs text-muted-foreground">{subtitle}</div> : null}
-      </div>
-      <div className="p-4 space-y-4">{children}</div>
-    </div>
-  );
-
-  const Row = ({ label, helper, children }: any) => (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-start">
-      <div className="sm:col-span-1 space-y-0.5">
-        <Label className="text-sm">{label}</Label>
-        {helper ? <div className="text-xs text-muted-foreground">{helper}</div> : null}
-      </div>
-      <div className="sm:col-span-2">{children}</div>
-    </div>
-  );
-
   // arrays
   const enfants = ensureArray(draft.Enter_enfants);
+  const isMarried = [1, 3].includes(asNumber(draft.Enter_etatCivil, 0)); // marié / partenariat
   const anneesManquantes = ensureArray<number>(draft.Enter_anneesManquantesAVS);
   const decesCapitaux = ensureArray(draft.DecesCapitaux);
 
   return (
     <div className="w-full">
-      {/* Header */}
+      {/* Header — conseiller (CRM) : barre slim + Save ; client : sticky mobile + progression. */}
+      {admin ? (
+        <div className="sticky top-4 z-30 mb-4 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur">
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-slate-900">Données personnelles</div>
+            <p className="text-xs text-slate-400">
+              Miroir du dossier client — toute modification est répercutée sur son app.
+            </p>
+          </div>
+          <Button onClick={save} disabled={saving || !isDirty} className="rounded-xl shrink-0">
+            {saving ? "Enregistrement…" : isDirty ? "Enregistrer" : "À jour ✓"}
+          </Button>
+        </div>
+      ) : (
       <div className="sticky top-0 z-30 w-full bg-white/80 dark:bg-zinc-950/80 backdrop-blur border-b">
         <div className="px-4 py-3 flex items-center gap-3">
           <div className="max-w-4xl mx-auto w-full flex items-center gap-3">
@@ -709,22 +951,31 @@ const handleScanFile = async (file: File) => {
           />
         </motion.div>
       </div>
+      )}
 
-      {/* Content */}
-      <div className="max-w-4xl mx-auto space-y-4 px-4 py-4">
-                {/* Input caché pour scan LPP (job direct) */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/pdf,image/*"
-          className="sr-only"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (!f) return;
-            if (fileInputRef.current) fileInputRef.current.value = "";
-            handleScanFile(f);
-          }}
-        />
+      {/* Content — admin : desktop en 2 colonnes (masonry) ; client : colonne unique. */}
+      <div
+        className={
+          admin
+            ? "w-full space-y-5 pb-10 [&_input]:h-11 [&_input]:text-[15px] [&_[role=combobox]]:h-11 [&_[role=combobox]]:text-[15px]"
+            : "max-w-4xl mx-auto space-y-4 px-4 py-4"
+        }
+      >
+                {/* Input caché pour scan LPP (job direct) — pas de scan sur la fiche conseiller */}
+        {!admin && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf,image/*"
+            className="sr-only"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              if (fileInputRef.current) fileInputRef.current.value = "";
+              handleScanFile(f);
+            }}
+          />
+        )}
         {error ? (
           <div className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
             {error}
@@ -732,7 +983,7 @@ const handleScanFile = async (file: File) => {
         ) : null}
 
         {/* Identité */}
-        <Section title="Identité" subtitle="Informations de base">
+        <Section id="sec-identite" title="Identité" subtitle="Informations de base">
           <Row label="Prénom">
             <BufferedText
               id="dp-Enter_prenom"
@@ -753,12 +1004,44 @@ const handleScanFile = async (file: File) => {
             />
           </Row>
 
+          <Row label="Nationalité">
+            <CountryCombobox
+              value={asString(draft.Enter_nationalite)}
+              options={paysOptions}
+              onChange={(v) => setField("Enter_nationalite", v)}
+            />
+          </Row>
+
+          {/* Permis de séjour — uniquement si non-Suisse (comme iOS) */}
+          {asString(draft.Enter_nationalite) && asString(draft.Enter_nationalite) !== "Suisse" && (
+            <Row label="Permis de séjour">
+              <Select
+                value={asString(draft.Enter_permisSejour) || undefined}
+                onValueChange={(v) => setField("Enter_permisSejour", v)}
+              >
+                <SelectTrigger><SelectValue placeholder="Choisir…" /></SelectTrigger>
+                <SelectContent>
+                  {permisOptions.map(([val, lbl]) => (
+                    <SelectItem key={val} value={val}>{lbl}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Row>
+          )}
+
           <Row label="Date de naissance" helper="Format jj.mm.aaaa">
             <BufferedText
               id="dp-Enter_dateNaissance"
               value={asString(draft.Enter_dateNaissance)}
               placeholder="01.01.1990"
               commit={(v) => setField("Enter_dateNaissance", v)}
+            />
+          </Row>
+
+          <Row label="Téléphone">
+            <PhoneField
+              value={asString(draft.Enter_telephone)}
+              onChange={(v) => setField("Enter_telephone", v)}
             />
           </Row>
 
@@ -792,7 +1075,21 @@ const handleScanFile = async (file: File) => {
         </Section>
 
         {/*Adresse */}
-        <Section title="Adresse" subtitle="Coordonnées de résidence">
+        <Section id="sec-adresse" title="Adresse" subtitle="Coordonnées de résidence">
+          {/* Recherche Google (comme iOS) : remplit rue, NPA et localité d'un coup. */}
+          <AddressAutocomplete
+            label="Rechercher une adresse"
+            placeholder="Commencez à taper l'adresse…"
+            initialStreet={asString(draft.Enter_adresse)}
+            initialZip={asString(draft.Enter_npa)}
+            initialCity={asString(draft.Enter_localite)}
+            onAddressSelected={(a) => {
+              setField("Enter_adresse", a.street);
+              if (a.zip) setField("Enter_npa", a.zip);
+              if (a.city) setField("Enter_localite", a.city);
+            }}
+          />
+
           <Row label="Rue et numéro">
             <BufferedText
               id="dp-Enter_adresse"
@@ -826,7 +1123,7 @@ const handleScanFile = async (file: File) => {
         </Section>
 
         {/* Situation pro */}
-        <Section title="Situation professionnelle" subtitle="Activité et revenus">
+        <Section id="sec-pro" title="Situation professionnelle" subtitle="Activité et revenus">
           <Row label="Statut professionnel">
             <Select
               value={String(asNumber(draft.Enter_statutProfessionnel, 0))}
@@ -839,6 +1136,15 @@ const handleScanFile = async (file: File) => {
                 ))}
               </SelectContent>
             </Select>
+          </Row>
+
+          <Row label="Profession">
+            <BufferedText
+              id="dp-Enter_profession"
+              value={asString(draft.Enter_profession)}
+              placeholder="Ex. Infirmière"
+              commit={(v) => setField("Enter_profession", v)}
+            />
           </Row>
 
           <Row label="Salaire annuel (CHF)">
@@ -861,8 +1167,53 @@ const handleScanFile = async (file: File) => {
           </Row>
         </Section>
 
+        {/* Conjoint — comme l'app iOS : affiché uniquement si marié / partenariat enregistré */}
+        {[1, 3].includes(asNumber(draft.Enter_etatCivil, 0)) && (
+          <Section id="sec-conjoint" title="Conjoint" subtitle="Mariage / partenariat enregistré">
+            <Row label="Prénom">
+              <BufferedText
+                id="dp-Enter_spousePrenom"
+                value={asString(draft.Enter_spousePrenom)}
+                placeholder="Ex. Alex"
+                commit={(v) => setField("Enter_spousePrenom", v)}
+              />
+            </Row>
+
+            <Row label="Sexe">
+              <Select
+                value={String(asNumber(draft.Enter_spouseSexe, 1))}
+                onValueChange={(v) => setField("Enter_spouseSexe", Number(v))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {sexeOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Row>
+
+            <Row label="Date de naissance" helper="Format jj.mm.aaaa">
+              <BufferedText
+                id="dp-Enter_spouseDateNaissance"
+                value={asString(draft.Enter_spouseDateNaissance)}
+                placeholder="01.01.1990"
+                commit={(v) => setField("Enter_spouseDateNaissance", v)}
+              />
+            </Row>
+
+            <Row label="Salaire annuel (CHF)">
+              <BufferedMoney
+                id="dp-Enter_spouseSalaireAnnuel"
+                amount={asNumber(draft.Enter_spouseSalaireAnnuel, 0)}
+                commit={(n) => setField("Enter_spouseSalaireAnnuel", n)}
+              />
+            </Row>
+          </Section>
+        )}
+
         {/* Enfants */}
-        <Section title="Enfants" subtitle="Enfant(s) à charge">
+        <Section id="sec-enfants" title="Enfants" subtitle="Enfant(s) à charge">
           <Row label="A des enfants à charge ?">
             <Switch
               checked={asBool(draft.Enter_hasEnfants)}
@@ -880,6 +1231,19 @@ const handleScanFile = async (file: File) => {
                 <div key={idx} className="rounded-lg border p-3 space-y-2">
                   <div className="text-sm font-medium">Enfant #{idx + 1}</div>
 
+                  <Row label="Prénom">
+                    <BufferedText
+                      id={`dp-kid-${idx}-prenom`}
+                      value={asString(kid?.Enter_prenom)}
+                      placeholder="Ex. Léa"
+                      commit={(v) => {
+                        const next = enfants.slice();
+                        next[idx] = { ...(next[idx] ?? {}), Enter_prenom: v };
+                        setField("Enter_enfants", next);
+                      }}
+                    />
+                  </Row>
+
                   <Row label="Date de naissance" helper="jj.mm.aaaa">
                     <BufferedText
                       id={`dp-kid-${idx}-dob`}
@@ -888,6 +1252,30 @@ const handleScanFile = async (file: File) => {
                       commit={(v) => {
                         const next = enfants.slice();
                         next[idx] = { ...(next[idx] ?? {}), Enter_dateNaissance: v };
+                        setField("Enter_enfants", next);
+                      }}
+                    />
+                  </Row>
+
+                  {isMarried && (
+                    <Row label="Enfant commun avec le conjoint">
+                      <Switch
+                        checked={kid?.Enter_enfantCommunConjoint !== false}
+                        onCheckedChange={(v) => {
+                          const next = enfants.slice();
+                          next[idx] = { ...(next[idx] ?? {}), Enter_enfantCommunConjoint: v };
+                          setField("Enter_enfants", next);
+                        }}
+                      />
+                    </Row>
+                  )}
+
+                  <Row label="En formation" helper="18-25 ans, en études">
+                    <Switch
+                      checked={asBool(kid?.Enter_enFormation)}
+                      onCheckedChange={(v) => {
+                        const next = enfants.slice();
+                        next[idx] = { ...(next[idx] ?? {}), Enter_enFormation: v };
                         setField("Enter_enfants", next);
                       }}
                     />
@@ -911,7 +1299,12 @@ const handleScanFile = async (file: File) => {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => setField("Enter_enfants", [...enfants, { Enter_dateNaissance: "" }])}
+                onClick={() =>
+                  setField("Enter_enfants", [
+                    ...enfants,
+                    { Enter_prenom: "", Enter_dateNaissance: "", Enter_enfantCommunConjoint: true, Enter_enFormation: false },
+                  ])
+                }
               >
                 + Ajouter un enfant
               </Button>
@@ -922,7 +1315,7 @@ const handleScanFile = async (file: File) => {
         </Section>
 
         {/* AVS */}
-        <Section title="AVS" subtitle="Cotisations et lacunes">
+        <Section id="sec-avs" title="AVS" subtitle="Cotisations et lacunes">
           <Row label="Âge début cotisations AVS">
             <BufferedNumber
               id="dp-Enter_ageDebutCotisationsAVS"
@@ -979,7 +1372,7 @@ const handleScanFile = async (file: File) => {
         </Section>
 
         {/* IJ */}
-        <Section title="Indemnités journalières / LAA" subtitle="Maladie / accident">
+        <Section id="sec-ij" title="Indemnités journalières / LAA" subtitle="Maladie / accident">
           <Row label="IJ maladie ?">
             <Switch checked={asBool(draft.Enter_ijMaladie)} onCheckedChange={(v) => setField("Enter_ijMaladie", v)} />
           </Row>
@@ -1004,17 +1397,22 @@ const handleScanFile = async (file: File) => {
         </Section>
 
         {/* LPP */}
+        {/* Section LPP (certificat/prévoyance) — PAS des données perso → masquée sur la
+            fiche conseiller (comme le form « Données personnelles » de l'app iOS). */}
+        {!admin && (
         <Section title="LPP" subtitle="Données du certificat LPP">
   {/* --- BLOC 1 : GESTION DU DOCUMENT & SCAN --- */}
   <div className="mb-8 pb-6 border-b">
     <div className="flex flex-col gap-4">
-      <div className="space-y-1">
-        <Label className="text-sm font-semibold text-zinc-900">Source des données</Label>
-        <p className="text-[11px] text-muted-foreground">
-          Utilisez le scan pour importer automatiquement les données de votre certificat.
-        </p>
-      </div>
-      
+      {!admin && (
+        <div className="space-y-1">
+          <Label className="text-sm font-semibold text-zinc-900">Source des données</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Utilisez le scan pour importer automatiquement les données de votre certificat.
+          </p>
+        </div>
+      )}
+
       {/* Zone du fichier existant (Discrète) */}
       {asString(data?.Enter_lppFilePath).trim() && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-muted/20 w-fit group">
@@ -1062,20 +1460,22 @@ const handleScanFile = async (file: File) => {
         </div>
       )}
 
-      {/* Bouton Scan / Remplacer */}
-      <div className="flex items-center gap-3">
-        <Button
-          type="button"
-          variant={asString(data?.Enter_lppFilePath).trim() ? "outline" : "default"}
-          onClick={handleClickScanLpp}
-          disabled={!canScanHere || scanState === "scanning"}
-          size="sm"
-          className="h-9 px-4 shadow-sm"
-        >
-          <Scan className="h-3.5 w-3.5 mr-2" />
-          {asString(data?.Enter_lppFilePath).trim() ? "Remplacer le certificat" : "Scanner mon certificat LPP"}
-        </Button>
-      </div>
+      {/* Bouton Scan / Remplacer — masqué sur la fiche conseiller (pas de scan sur cet onglet) */}
+      {!admin && (
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant={asString(data?.Enter_lppFilePath).trim() ? "outline" : "default"}
+            onClick={handleClickScanLpp}
+            disabled={!canScanHere || scanState === "scanning"}
+            size="sm"
+            className="h-9 px-4 shadow-sm"
+          >
+            <Scan className="h-3.5 w-3.5 mr-2" />
+            {asString(data?.Enter_lppFilePath).trim() ? "Remplacer le certificat" : "Scanner mon certificat LPP"}
+          </Button>
+        </div>
+      )}
     </div>
 
 {/* --- NOUVEAU : ESPACE CAISSE DE PENSION --- */}
@@ -1418,8 +1818,10 @@ const handleScanFile = async (file: File) => {
       )}
     </div>
   </Section>
+        )}
 
-        {/* Mode avancé */}
+        {/* Mode avancé (éditeur JSON) — masqué sur la fiche conseiller (données perso uniquement). */}
+        {!admin && (
         <div className="rounded-xl border bg-background">
           <div className="px-4 py-3 border-b">
             <div className="flex items-center justify-between gap-3">
@@ -1464,6 +1866,7 @@ const handleScanFile = async (file: File) => {
             </div>
           ) : null}
         </div>
+        )}
 
         {/* Sticky bar */}
         <div className="sticky bottom-3">

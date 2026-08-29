@@ -5,6 +5,7 @@
 // NB : ne contient PAS le pricing ML (threeA-engine) — c'est une couche séparée.
 
 import { plafond3aAnnuel } from "./plafond3a";
+import { isDeuxiemePilier, isDeuxiemePilierActif } from "../core/plans";
 
 type AnyObj = Record<string, any>;
 
@@ -205,32 +206,49 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   // n'est qu'AFFICHÉ (« X destinés à la retraite »).
   const retraiteSources: { planId: string; label: string; type: string; capital: number; allocation: number }[] = [];
 
+  // TOUS les plans 2e pilier : base + complémentaire + libre passage (chacun s'additionne).
   const lppPlans = plans.filter(
-    (p: any) => String(p.type || "").toUpperCase().startsWith("LPP") && (p.status === "ACTIVE" || !p.status)
+    (p: any) => isDeuxiemePilier(p.type) && (p.status === "ACTIVE" || !p.status)
   );
   let retLppEffectifAnnuel = retLppAnnuelle;
-  if (retLppAnnuelle > 0) {
-    const lppPlan = lppPlans[0];
-    const lppAlloc = lppPlan ? allocOf(lppPlan) : 100;
+  if (retLppAnnuelle > 0 || lppPlans.length > 0) {
+    // Rente : la rente LPP agrégée vient déjà de la matrice ; on lui applique l'allocation
+    // du 1er plan ACTIF (les caisses ont quasi toujours 100 %).
+    const actif = lppPlans.find((p: any) => isDeuxiemePilierActif(p.type)) || lppPlans[0];
+    const lppAlloc = actif ? allocOf(actif) : 100;
     retLppEffectifAnnuel = retLppAnnuelle * (lppAlloc / 100);
-    // Capital AFFICHÉ = capital projeté du CERTIFICAT (le chiffre que le client
-    // reconnaît), et non « rente × 25 ». Cet ancien calcul reconvertissait la
-    // rente LPP (versée à ~6.8%) au taux de 4% (×25), gonflant le capital (ex.
-    // 350'945 devenait ~540'000). Repli sur l'ancien calcul si le certificat ne
-    // porte pas de projection. N'affecte PAS la lacune (basée sur la rente).
-    const ld = lppPlan?.data || {};
-    const lppCapitalCertificat =
-      parseAmount(ld.Enter_lppCapitalProjete65) ||
-      parseAmount(ld.capitalRetraiteGlobal) ||
-      parseAmount(ld.capitalRetraiteProjete) ||
-      Math.round(retLppAnnuelle * 25);
-    retraiteSources.push({
-      planId: lppPlan?.id ?? "lpp",
-      label: lppPlan ? planLabel(lppPlan) : "LPP (2e pilier)",
-      type: "LPP_BASE",
-      capital: Math.round(lppCapitalCertificat),
-      allocation: lppAlloc,
-    });
+
+    // Capital AFFICHÉ = SOMME des capitaux projetés de CHAQUE plan 2e pilier (base +
+    // complémentaire + libre passage), le chiffre que le client reconnaît sur ses certificats.
+    let anyCap = false;
+    for (const p of lppPlans) {
+      const d = p.data || {};
+      const cap =
+        parseAmount(d.Enter_lppCapitalProjete65) ||
+        parseAmount(d.capitalRetraiteGlobal) ||
+        parseAmount(d.capitalRetraiteProjete) ||
+        0;
+      if (cap <= 0) continue;
+      anyCap = true;
+      retraiteSources.push({
+        planId: p.id ?? "lpp",
+        label: planLabel(p),
+        type: p.type === "LPP" ? "LPP_BASE" : p.type, // normalise l'alias legacy
+        capital: Math.round(cap),
+        allocation: allocOf(p),
+      });
+    }
+    // Repli « rente × 25 » UNIQUEMENT si aucun plan ne porte de capital projeté
+    // (sinon on double-compterait). N'affecte pas la lacune (basée sur la rente).
+    if (!anyCap && retLppAnnuelle > 0) {
+      retraiteSources.push({
+        planId: actif?.id ?? "lpp",
+        label: actif ? planLabel(actif) : "LPP (2e pilier)",
+        type: actif?.type && actif.type !== "LPP" ? actif.type : "LPP_BASE",
+        capital: Math.round(retLppAnnuelle * 25),
+        allocation: lppAlloc,
+      });
+    }
   }
 
   // Capitaux privés (3a / 3b / épargne long terme) : capital × allocation.

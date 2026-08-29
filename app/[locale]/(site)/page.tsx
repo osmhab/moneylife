@@ -395,6 +395,7 @@ export default async function LandingPage({ params }: { params: Promise<{ locale
           </div>
           
           <div className="flex flex-wrap items-center justify-center gap-6 md:gap-8 text-sm font-medium text-slate-500">
+            <Link href="/careers" className="hover:text-slate-900 transition">{t("Footer.careers")}</Link>
             <Link href="/contact" className="hover:text-slate-900 transition">{t("Footer.contact")}</Link>
             <Link href="/legal/cgu" className="hover:text-slate-900 transition">{t("Footer.terms")}</Link>
             <Link href="/legal/confidentialite" className="hover:text-slate-900 transition">{t("Footer.privacy")}</Link>
