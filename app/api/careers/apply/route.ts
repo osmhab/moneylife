@@ -315,7 +315,18 @@ async function sendEmails(input: {
   sgMail.setApiKey(SENDGRID_API_KEY);
 
   const toEmail = process.env.CAREERS_TO_EMAIL || process.env.CONTACT_TO_EMAIL || "info@creditx.ch";
-  const fromEmail = process.env.CONTACT_FROM_EMAIL || "no-reply@creditx.ch";
+
+  // ⚠️ `SENDGRID_FROM` avant le repli en dur : SendGrid REJETTE (403) tout envoi
+  // depuis une adresse non vérifiée, et la prod n'a ni `CAREERS_FROM_EMAIL` ni
+  // `CONTACT_FROM_EMAIL`. Sans ce maillon, on partirait sur `no-reply@creditx.ch`
+  // et les deux e-mails échoueraient en silence (la candidature reste stockée,
+  // mais personne n'est prévenu). Définir `CAREERS_FROM_EMAIL` pour un expéditeur
+  // aux couleurs CreditX, une fois l'adresse vérifiée côté SendGrid.
+  const fromEmail =
+    process.env.CAREERS_FROM_EMAIL ||
+    process.env.CONTACT_FROM_EMAIL ||
+    process.env.SENDGRID_FROM ||
+    "no-reply@creditx.ch";
   const fromName = process.env.CONTACT_FROM_NAME || "CreditX";
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://creditx.ch";
 
