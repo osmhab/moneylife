@@ -377,12 +377,12 @@ async function sendEmails(input: {
   });
 
   // → Candidat (accusé de réception)
-  // `replyTo` explicite : l'expéditeur est une adresse `no-reply`, une réponse du
-  // candidat partirait donc dans le vide. On la redirige vers le recrutement.
+  // Volontairement SANS `replyTo` : l'accusé de réception part d'une adresse
+  // `no-reply` et le reste ainsi. Une réponse du candidat n'aboutit donc nulle
+  // part — c'est assumé, le dialogue se fait à l'initiative du recrutement.
   await sgMail.send({
     to: email,
     from: { email: fromEmail, name: fromName },
-    replyTo: { email: toEmail, name: fromName },
     subject: `Votre candidature — ${job.title} (${reference})`,
     html: `
       <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;line-height:1.7;">
@@ -397,6 +397,9 @@ async function sendEmails(input: {
         </p>
         <p style="margin:0 0 24px;">Merci de l'intérêt que vous portez à CreditX.</p>
         <p style="margin:0;color:#64748b;">L'équipe CreditX — Sion</p>
+        <p style="margin:28px 0 0;padding-top:16px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:13px;line-height:1.6;">
+          Merci de ne pas répondre à ce message&nbsp;: il est envoyé depuis une adresse non surveillée.
+        </p>
       </div>
     `,
   });

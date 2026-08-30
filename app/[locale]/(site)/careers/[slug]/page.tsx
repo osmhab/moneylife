@@ -61,6 +61,8 @@ export default async function JobPage({
       "@type": "Place",
       address: { "@type": "PostalAddress", addressLocality: "Sion", addressRegion: "VS", addressCountry: "CH" },
     },
+    // Pas de `baseSalary` : l'annonce ne publie aucun montant, et un balisage
+    // vide ou approximatif desservirait plus qu'il n'aiderait.
   };
 
   return (

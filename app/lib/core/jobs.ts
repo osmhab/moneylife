@@ -70,7 +70,7 @@ export type Job = {
   /** Modalité de travail, ex. « Sur site ». */
   workMode: string;
   workload: string;
-  /** Résumé du modèle de rémunération, affiché dans « En bref ». */
+  /** Modèle de rémunération, affiché dans « En bref ». */
   compensation: string;
   /** ISO (YYYY-MM-DD) — sert au tri et au balisage JSON-LD. */
   publishedAt: string;
@@ -108,24 +108,21 @@ const SPECIALISTE_PREVOYANCE: Job = {
   location: "Sion",
   workMode: "Sur site",
   workload: "100 %",
-  compensation: "Principalement à la performance",
+  compensation: "Lié à la performance",
   publishedAt: "2026-08-29",
   contentLocale: "fr",
   summary:
-    "Conseil en prévoyance auprès d'une clientèle privée, en forte autonomie, avec un modèle de rémunération progressif directement lié à vos résultats.",
+    "Bilans de prévoyance, solutions retraite et couverture des risques pour une clientèle privée, avec le développement de votre propre portefeuille.",
   intro:
-    "CreditX poursuit son développement et recherche un·e spécialiste en prévoyance expérimenté·e souhaitant exercer son activité avec une forte autonomie et bénéficier d'un modèle de rémunération directement lié à ses performances. Ce poste s'adresse à un profil commercial confirmé, disposant de résultats démontrables dans le domaine de la prévoyance et capable de développer sa clientèle de manière autonome.",
+    "CreditX poursuit son développement et recherche un·e spécialiste en prévoyance expérimenté·e souhaitant exercer son activité avec une forte autonomie. Ce poste s'adresse à un profil commercial confirmé, disposant de résultats démontrables dans le domaine de la prévoyance et capable de développer sa propre clientèle.",
   sections: [
     {
       title: "Votre mission",
-      lead: "Vous accompagnez une clientèle privée dans les domaines de la prévoyance, de la retraite et de la couverture des risques.",
+      lead: "Vous accompagnez une clientèle privée dans les domaines de la prévoyance, de la retraite, de la protection familiale et de la couverture des risques.",
       items: [
-        "Analyser la situation financière et de prévoyance des clients.",
-        "Réaliser des bilans de prévoyance complets.",
-        "Identifier les besoins en matière de retraite, de protection familiale et de couverture des risques.",
+        "Analyser la situation financière et de prévoyance des clients, et établir des bilans complets.",
         "Proposer des solutions adaptées à la situation et aux objectifs de chaque client.",
-        "Élaborer et actualiser les plans de prévoyance et de retraite.",
-        "Assurer un suivi régulier et rigoureux des dossiers.",
+        "Élaborer, actualiser et suivre les plans de prévoyance et de retraite.",
         "Développer et fidéliser votre clientèle.",
         "Présenter l'application CreditX et accompagner les clients dans son utilisation.",
         "Collaborer avec le back-office et les spécialistes produits de CreditX.",
@@ -134,13 +131,10 @@ const SPECIALISTE_PREVOYANCE: Job = {
     {
       title: "Ce que CreditX met à votre disposition",
       items: [
-        "Des conditions de rémunération particulièrement attractives et progressives.",
-        "Des prestations sociales attractives et des couvertures d'assurance supérieures aux standards usuels.",
+        "Des prestations sociales et des couvertures d'assurance supérieures aux standards usuels.",
         "Un environnement de travail moderne et de qualité, au cœur du quartier Cour de Gare à Sion.",
-        "L'application et l'écosystème numérique CreditX.",
-        "Des outils d'analyse et de simulation de dernière génération, conçus pour simplifier et optimiser le travail du conseiller.",
-        "Un CRM et une infrastructure administrative adaptés à l'activité.",
-        "Un environnement numérique intelligent qui automatise et simplifie les tâches administratives.",
+        "L'application CreditX et ses outils d'analyse et de simulation de dernière génération, conçus pour le travail du conseiller.",
+        "Un CRM et une infrastructure administrative qui automatisent les tâches répétitives.",
       ],
     },
     {
@@ -154,7 +148,7 @@ const SPECIALISTE_PREVOYANCE: Job = {
         "Excellente maîtrise du système suisse de prévoyance.",
         "Capacité à analyser des situations complexes et à formuler des recommandations claires.",
         "Sens élevé des responsabilités et de l'éthique professionnelle.",
-        "Autonomie, rigueur et forte orientation résultats.",
+        "Autonomie et rigueur dans l'organisation de votre activité.",
         "Maîtrise courante du français ; toute autre langue constitue un atout.",
         "Très bonne maîtrise des outils numériques.",
       ],
@@ -162,8 +156,8 @@ const SPECIALISTE_PREVOYANCE: Job = {
   ],
   closing: {
     paragraphs: [
-      "Vous êtes un conseiller expérimenté, disposez de résultats démontrables et souhaitez que votre rémunération reflète davantage votre niveau de production ?",
-      "Nous serions heureux d'échanger avec vous en toute confidentialité.",
+      "Vous êtes un conseiller expérimenté et disposez de résultats démontrables ?",
+      "Nous serions heureux d'échanger avec vous.",
     ],
     note: "Toutes les démarches seront traitées de manière strictement confidentielle.",
   },
