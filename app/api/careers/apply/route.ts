@@ -316,12 +316,10 @@ async function sendEmails(input: {
 
   const toEmail = process.env.CAREERS_TO_EMAIL || process.env.CONTACT_TO_EMAIL || "info@creditx.ch";
 
-  // ⚠️ `SENDGRID_FROM` avant le repli en dur : SendGrid REJETTE (403) tout envoi
-  // depuis une adresse non vérifiée, et la prod n'a ni `CAREERS_FROM_EMAIL` ni
-  // `CONTACT_FROM_EMAIL`. Sans ce maillon, on partirait sur `no-reply@creditx.ch`
-  // et les deux e-mails échoueraient en silence (la candidature reste stockée,
-  // mais personne n'est prévenu). Définir `CAREERS_FROM_EMAIL` pour un expéditeur
-  // aux couleurs CreditX, une fois l'adresse vérifiée côté SendGrid.
+  // `creditx.ch` est authentifié comme DOMAINE chez SendGrid : n'importe quelle
+  // adresse de ce domaine expédie, sans avoir à être inscrite une par une dans les
+  // expéditeurs vérifiés. Le repli en dur est donc sûr. `SENDGRID_FROM` reste dans
+  // la chaîne pour couvrir un environnement où ce domaine ne serait pas configuré.
   const fromEmail =
     process.env.CAREERS_FROM_EMAIL ||
     process.env.CONTACT_FROM_EMAIL ||
@@ -379,9 +377,12 @@ async function sendEmails(input: {
   });
 
   // → Candidat (accusé de réception)
+  // `replyTo` explicite : l'expéditeur est une adresse `no-reply`, une réponse du
+  // candidat partirait donc dans le vide. On la redirige vers le recrutement.
   await sgMail.send({
     to: email,
     from: { email: fromEmail, name: fromName },
+    replyTo: { email: toEmail, name: fromName },
     subject: `Votre candidature — ${job.title} (${reference})`,
     html: `
       <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f172a;line-height:1.7;">
