@@ -112,7 +112,7 @@ const SPECIALISTE_PREVOYANCE: Job = {
   publishedAt: "2026-08-29",
   contentLocale: "fr",
   summary:
-    "Bilans de prévoyance, solutions retraite et couverture des risques pour une clientèle privée, avec le développement de votre propre portefeuille.",
+    "Développez et fidélisez un portefeuille de clientèle tout en accompagnant vos clientes et clients dans leurs besoins en prévoyance. Un poste destiné à un·e spécialiste expérimenté·e et autonome.",
   intro:
     "CreditX poursuit son développement et recherche un·e spécialiste en prévoyance expérimenté·e souhaitant exercer son activité avec une forte autonomie. Ce poste s'adresse à un profil commercial confirmé, disposant de résultats démontrables dans le domaine de la prévoyance et capable de développer sa propre clientèle.",
   sections: [
@@ -155,7 +155,7 @@ const SPECIALISTE_PREVOYANCE: Job = {
   ],
   closing: {
     paragraphs: [
-      "Vous êtes un conseiller expérimenté et disposez de résultats démontrables ?",
+      "Vous disposez d’une solide expérience en prévoyance et de résultats démontrables ?",
       "Nous serions heureux d'échanger avec vous.",
     ],
     note: "Toutes les démarches seront traitées de manière strictement confidentielle.",
