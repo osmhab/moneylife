@@ -120,9 +120,8 @@ const SPECIALISTE_PREVOYANCE: Job = {
       title: "Votre mission",
       lead: "Vous accompagnez une clientèle privée dans les domaines de la prévoyance, de la retraite, de la protection familiale et de la couverture des risques.",
       items: [
-        "Analyser la situation financière et de prévoyance des clients, et établir des bilans complets.",
+        "Analyser la situation de prévoyance des clients et établir des bilans complets.",
         "Proposer des solutions adaptées à la situation et aux objectifs de chaque client.",
-        "Élaborer, actualiser et suivre les plans de prévoyance et de retraite.",
         "Développer et fidéliser votre clientèle.",
         "Présenter l'application CreditX et accompagner les clients dans son utilisation.",
         "Collaborer avec le back-office et les spécialistes produits de CreditX.",
