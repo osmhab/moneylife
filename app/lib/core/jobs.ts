@@ -118,7 +118,7 @@ const SPECIALISTE_PREVOYANCE: Job = {
   sections: [
     {
       title: "Votre mission",
-      lead: "Vous accompagnez une clientèle privée dans les domaines de la prévoyance, de la retraite, de la protection familiale et de la couverture des risques.",
+      lead: "Vous accompagnez une clientèle privée dans le domaine de la prévoyance.",
       items: [
         "Analyser la situation de prévoyance des clients et établir des bilans complets.",
         "Proposer des solutions adaptées à la situation et aux objectifs de chaque client.",
