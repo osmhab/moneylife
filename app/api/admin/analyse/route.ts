@@ -20,6 +20,7 @@ import { LEGAL_2025 } from "@/lib/core/legal";
 import { Legal_Echelle44_2025 } from "@/lib/registry/echelle44";
 import { computeMinimalLPP, buildMinimalLPPPlan } from "@/lib/calculs/lppMinimum";
 import { computeDetailRentes } from "@/lib/analysis/detailRentes";
+import type { BesoinKey, BesoinOverrides } from "@/lib/analysis/situation";
 import { computeProjections3aBanque, computeProjections3aAssurance } from "@/lib/calculs/3epilier";
 import { isDeuxiemePilierActif } from "@/lib/core/plans";
 // Les agrégateurs de matrices vivent dans la copie « shared » (celle qu'utilise
@@ -79,6 +80,28 @@ function normalize3aPlans(plans: any[], clientAge: number): any[] {
   });
 }
 
+/** Thèmes acceptés pour un besoin forcé — tout le reste est ignoré. */
+const BESOIN_KEYS: BesoinKey[] = ["retraite", "invaliditeMaladie", "invaliditeAccident", "deces"];
+
+/**
+ * Nettoie les besoins forcés reçus du navigateur : seuls les thèmes connus, un
+ * montant fini et positif, et un libellé borné à 200 caractères. Un montant
+ * absent laisse le libellé passer — le conseiller peut annoter sans imposer.
+ */
+function sanitizeBesoinOverrides(raw: any): BesoinOverrides | undefined {
+  const out: BesoinOverrides = {};
+  for (const key of BESOIN_KEYS) {
+    const entry = raw?.[key];
+    if (!entry || typeof entry !== "object") continue;
+    const n = Number(entry.valeur);
+    const valeur = Number.isFinite(n) && n > 0 ? n : null;
+    const libelle = String(entry.libelle ?? "").trim().slice(0, 200);
+    if (valeur === null && !libelle) continue;
+    out[key] = { valeur, ...(libelle ? { libelle } : {}) };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 export async function POST(req: NextRequest) {
   // Auth interne
   try {
@@ -94,6 +117,7 @@ export async function POST(req: NextRequest) {
   let plans: any[];
   let allocations: Record<string, number> | undefined;
   let lppMinimum = false;
+  let besoinOverrides: BesoinOverrides | undefined;
   try {
     const body = await req.json();
     client = body?.client ?? {};
@@ -101,6 +125,12 @@ export async function POST(req: NextRequest) {
     lppMinimum = !!body?.lppMinimum;
     if (body?.allocations && typeof body.allocations === "object") {
       allocations = body.allocations;
+    }
+    // Besoins forcés par le conseiller. Filtrés ici plutôt que pris tels quels :
+    // le corps vient du navigateur, on ne laisse passer que les 4 thèmes connus,
+    // un montant numérique et un libellé borné.
+    if (body?.besoinOverrides && typeof body.besoinOverrides === "object") {
+      besoinOverrides = sanitizeBesoinOverrides(body.besoinOverrides);
     }
   } catch {
     return NextResponse.json({ error: "Corps JSON invalide" }, { status: 400 });
@@ -234,6 +264,7 @@ export async function POST(req: NextRequest) {
       plans,
       allocations,
       avsCouplePlafondMensuel,
+      besoinOverrides,
     });
     if (!analysis) {
       return NextResponse.json(

@@ -26,7 +26,9 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calculator, Loader2, Plus, Trash2, AlertTriangle, ShieldCheck, ScanLine, Printer } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import DossierImagesDialog from "./DossierImagesDialog";
+import { Calculator, Loader2, Plus, Trash2, AlertTriangle, ShieldCheck, ScanLine, Printer, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { usePublishAdminSubnav } from "@/[locale]/admin/_components/adminSubnav";
 
@@ -81,7 +83,13 @@ export default function AdminClientAnalysePrevoyanceClient() {
   const [detailRentes, setDetailRentes] = React.useState<AnyObj | null>(null);
   const [projections, setProjections] = React.useState<AnyObj | null>(null);
   const [pdfBusy, setPdfBusy] = React.useState(false);
+  // Le bouton « Dossier PDF » ouvre d'abord le choix des images ; la génération
+  // n'a lieu qu'une fois les emplacements validés.
+  const [imagesOpen, setImagesOpen] = React.useState(false);
   const [lppMinimum, setLppMinimum] = React.useState(false);
+  // Besoins forcés par le conseiller (persistés sur la fiche client).
+  const [besoinOverrides, setBesoinOverrides] = React.useState<AnyObj>({});
+  const [besoinSaved, setBesoinSaved] = React.useState<"idle" | "saving" | "saved">("idle");
   const [scanNote, setScanNote] = React.useState<string | null>(null);
   const [debutMode, setDebutMode] = React.useState<"annee" | "age">("annee");
   const [pillar, setPillar] = React.useState<PillarId>("global");
@@ -252,6 +260,7 @@ export default function AdminClientAnalysePrevoyanceClient() {
         if (!res.ok) throw new Error(data?.error || "Chargement impossible");
         setClient(data.client || {});
         setPlans(Array.isArray(data.plans) ? data.plans : []);
+        setBesoinOverrides(data.besoinOverrides || {});
       } catch (e: any) {
         setError(e?.message || "Erreur de chargement");
       } finally {
@@ -262,6 +271,10 @@ export default function AdminClientAnalysePrevoyanceClient() {
 
   // ── Lancement de l'analyse ────────────────────────────────────────────────
   async function runAnalyse() {
+    return runAnalyseWith(besoinOverrides);
+  }
+
+  async function runAnalyseWith(overrides: AnyObj) {
     setRunning(true);
     setError(null);
     try {
@@ -269,7 +282,7 @@ export default function AdminClientAnalysePrevoyanceClient() {
       const res = await fetch("/api/admin/analyse", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ client, plans, lppMinimum }),
+        body: JSON.stringify({ client, plans, lppMinimum, besoinOverrides: overrides }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Analyse impossible");
@@ -285,8 +298,47 @@ export default function AdminClientAnalysePrevoyanceClient() {
     }
   }
 
+  // Un besoin modifié doit se répercuter sur l'analyse ET être enregistré, mais un
+  // glissement de curseur produit des dizaines d'événements : on diffère de 500 ms.
+  const besoinTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const analysisRef = React.useRef(analysis);
+  analysisRef.current = analysis;
+
+  function updateBesoin(key: string, patch: AnyObj) {
+    setBesoinOverrides((prev) => {
+      const next = { ...prev, [key]: { ...(prev[key] || {}), ...patch } };
+      // Un thème sans montant ni libellé n'a plus lieu d'être stocké.
+      const e = next[key];
+      if (!Number(e?.valeur) && !String(e?.libelle || "").trim()) delete next[key];
+
+      if (besoinTimer.current) clearTimeout(besoinTimer.current);
+      besoinTimer.current = setTimeout(() => {
+        void persistBesoins(next);
+        // On ne relance l'analyse que si elle a déjà tourné une fois.
+        if (analysisRef.current) void runAnalyseWith(next);
+      }, 500);
+      return next;
+    });
+  }
+
+  async function persistBesoins(besoins: AnyObj) {
+    if (!uid) return;
+    setBesoinSaved("saving");
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/admin/analyse/context?uid=${uid}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ besoins }),
+      });
+      setBesoinSaved(res.ok ? "saved" : "idle");
+    } catch {
+      setBesoinSaved("idle");
+    }
+  }
+
   // Génère le dossier en VRAI PDF (react-pdf, importé à la volée) et l'ouvre dans un nouvel onglet.
-  async function openPdf() {
+  async function openPdf(images: Record<string, any> = {}, notes = "", advisor: any = null) {
     if (!analysis) return;
     setPdfBusy(true);
     setError(null);
@@ -295,10 +347,13 @@ export default function AdminClientAnalysePrevoyanceClient() {
         import("@react-pdf/renderer"),
         import("./DossierPDF"),
       ]);
-      const advisorName = auth.currentUser?.displayName || auth.currentUser?.email || "";
+      // Signature saisie dans l'écran de préparation ; à défaut, le profil Firebase.
+      const advisorName = advisor?.nom
+        ? advisor
+        : (auth.currentUser?.displayName || auth.currentUser?.email || "");
       const today = new Date().toLocaleDateString("fr-CH", { day: "2-digit", month: "long", year: "numeric" });
       const blob = await pdf(
-        <DossierPDF client={client} plans={plans} analysis={analysis} advisor={advisorName} today={today} />,
+        <DossierPDF client={client} plans={plans} analysis={analysis} advisor={advisorName} today={today} images={images} notes={notes} />,
       ).toBlob();
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
@@ -473,6 +528,13 @@ export default function AdminClientAnalysePrevoyanceClient() {
 
   return (
     <div className="space-y-5">
+      <DossierImagesDialog
+        open={imagesOpen}
+        onOpenChange={setImagesOpen}
+        uid={uid}
+        onGenerate={(images, notes, advisor) => openPdf(images as Record<string, any>, notes, advisor)}
+      />
+
       {/* En-tête pilier + action */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -484,7 +546,7 @@ export default function AdminClientAnalysePrevoyanceClient() {
             variant="outline"
             size="sm"
             className="rounded-xl"
-            onClick={openPdf}
+            onClick={() => setImagesOpen(true)}
             disabled={!analysis || pdfBusy}
             title={analysis ? "Générer le dossier PDF (nouvel onglet)" : "Lancez l'analyse d'abord"}
           >
@@ -743,7 +805,17 @@ export default function AdminClientAnalysePrevoyanceClient() {
             </CardContent>
           </Card>
         ) : (
-          <ResultView analysis={analysis} lppEstimation={lppEstimation} detailRentes={detailRentes} projections={projections} plans={plans} uid={uid} />
+          <ResultView
+            analysis={analysis}
+            lppEstimation={lppEstimation}
+            detailRentes={detailRentes}
+            projections={projections}
+            plans={plans}
+            uid={uid}
+            besoinOverrides={besoinOverrides}
+            onBesoin={updateBesoin}
+            besoinSaved={besoinSaved}
+          />
         ))}
     </div>
   );
@@ -1416,6 +1488,101 @@ function MoneyField({
 const LAYER_COLORS: Record<string, string> = { avs: "#00D084", lpp: "#0075FF", laa: "#FF7A00", "3a": "#C21DC7" };
 const LAYER_LABEL: Record<string, string> = { avs: "AVS/AI", lpp: "LPP", laa: "LAA", "3a": "3e pilier" };
 
+/**
+ * Réglage du besoin d'un thème par le conseiller : curseur, saisie directe et
+ * justification affichée au client (« dette hypothécaire de 600'000 »).
+ *
+ * Le curseur couvre 0 → 2× le besoin calculé, ce qui suffit à la grande majorité
+ * des cas ; au-delà, la saisie directe n'est pas bornée. Le pas dépend de l'unité :
+ * 50 CHF pour une rente mensuelle, 10'000 pour un capital décès.
+ */
+function BesoinAdjuster({
+  besoinAuto, valeur, libelle, unit, onChange,
+}: {
+  besoinAuto: number;
+  valeur?: number | null;
+  libelle?: string;
+  unit: string;
+  onChange: (patch: AnyObj) => void;
+}) {
+  const force = !!Number(valeur);
+  const [open, setOpen] = React.useState(force || !!libelle);
+  const courant = force ? Number(valeur) : Math.round(besoinAuto);
+  const max = Math.max(Math.round(besoinAuto * 2) || 1, courant);
+  const step = unit === "/mois" ? 50 : 10000;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed py-1.5 text-xs text-muted-foreground transition hover:bg-muted/50"
+      >
+        <SlidersHorizontal className="h-3.5 w-3.5" />
+        Ajuster le besoin
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium">Besoin retenu</span>
+        <div className="flex items-center gap-1">
+          {force && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={() => onChange({ valeur: null })}
+              title="Revenir au calcul automatique"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Auto
+            </Button>
+          )}
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setOpen(false)}>
+            Fermer
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Slider
+          value={[Math.min(courant, max)]}
+          min={0}
+          max={max}
+          step={step}
+          onValueChange={([v]) => onChange({ valeur: v })}
+          className="flex-1"
+        />
+        <Input
+          value={courant ? String(courant) : ""}
+          onChange={(e) => {
+            const n = Number(e.target.value.replace(/[^0-9]/g, ""));
+            onChange({ valeur: n > 0 ? n : null });
+          }}
+          inputMode="numeric"
+          className="h-8 w-28 text-right tabular-nums"
+        />
+      </div>
+
+      <p className="text-[11px] text-muted-foreground">
+        Calculé automatiquement : {fmt(besoinAuto)}{unit}
+      </p>
+
+      <Input
+        value={libelle || ""}
+        onChange={(e) => onChange({ libelle: e.target.value })}
+        placeholder="Pourquoi ce montant ? (ex. dette hypothécaire) — visible dans le PDF client"
+        maxLength={200}
+        className="h-8 text-xs"
+      />
+    </div>
+  );
+}
+
 // Barre besoin vs couverture décomposée par pilier (façon LayeredCoverageChart iOS).
 function LayerBar({ besoin, couverture, lacune, layers }: { besoin: number; couverture: number; lacune: number; layers: any[] }) {
   const total = Math.max(besoin, couverture + lacune, 1);
@@ -1812,6 +1979,9 @@ function ResultView({
   projections,
   plans,
   uid,
+  besoinOverrides,
+  onBesoin,
+  besoinSaved,
 }: {
   analysis: AnyObj;
   lppEstimation?: AnyObj | null;
@@ -1819,6 +1989,9 @@ function ResultView({
   projections?: AnyObj | null;
   plans: AnyObj[];
   uid?: string;
+  besoinOverrides: AnyObj;
+  onBesoin: (key: string, patch: AnyObj) => void;
+  besoinSaved: "idle" | "saving" | "saved";
 }) {
   const score = Math.round(Number(analysis.totalScore) || 0);
   const scoreColor = score >= 70 ? "text-emerald-600" : score >= 40 ? "text-amber-600" : "text-red-600";
@@ -1838,6 +2011,11 @@ function ResultView({
           <div>
             <div className="text-sm text-muted-foreground">Score de prévoyance global</div>
             <div className={`text-4xl font-bold ${scoreColor}`}>{score}<span className="text-lg text-muted-foreground">/100</span></div>
+            {besoinSaved !== "idle" && (
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                {besoinSaved === "saving" ? "Enregistrement des besoins…" : "Besoins enregistrés"}
+              </div>
+            )}
           </div>
           <ShieldCheck className={`h-10 w-10 ${scoreColor}`} />
         </CardContent>
@@ -1890,9 +2068,25 @@ function ResultView({
                   <Metric label="Couverture" value={fmt(couv) + unit} />
                   <Metric label="Lacune" value={fmt(lacune) + unit} danger={!ok} />
                 </div>
+                {card.besoinForce && (
+                  <p className="flex items-start gap-1.5 text-[11px] text-amber-700">
+                    <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+                    <span>
+                      Besoin fixé par le conseiller{card.besoinLibelle ? ` — ${card.besoinLibelle}` : ""}
+                      {" "}(calculé : {fmt(Number(card.besoinAuto) || 0)}{unit})
+                    </span>
+                  </p>
+                )}
                 {Array.isArray(card.layers) && card.layers.some((l: any) => Number(l.amount) > 0) && (
                   <LayerBar besoin={besoin} couverture={couv} lacune={lacune} layers={card.layers} />
                 )}
+                <BesoinAdjuster
+                  besoinAuto={Number(card.besoinAuto) || besoin}
+                  valeur={besoinOverrides?.[key]?.valeur}
+                  libelle={besoinOverrides?.[key]?.libelle}
+                  unit={unit}
+                  onChange={(patch) => onBesoin(key, patch)}
+                />
               </CardContent>
             </Card>
           );

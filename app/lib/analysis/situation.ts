@@ -41,6 +41,43 @@ export interface SituationInput {
    *  la carte affiche la rente individuelle en principal + ce plafond en note « * ».
    *  Non additionné : c'est un total ménage, pas la rente de la personne. */
   avsCouplePlafondMensuel?: number;
+  /** Besoins forcés par le conseiller (cf. `BesoinOverrides`). Opt-in : sans eux,
+   *  le calcul est strictement inchangé — ce module sert aussi l'app cliente. */
+  besoinOverrides?: BesoinOverrides;
+}
+
+/** Les quatre thèmes dont le besoin peut être forcé par le conseiller. */
+export type BesoinKey = "retraite" | "invaliditeMaladie" | "invaliditeAccident" | "deces";
+
+export interface BesoinOverride {
+  /** Besoin imposé. `null`/absent = on garde le calcul automatique.
+   *  Unité identique à la carte : mensuel pour retraite/invalidité, capital pour décès. */
+  valeur?: number | null;
+  /** Justification affichée au client (« dette hypothécaire de 600'000 »). */
+  libelle?: string;
+}
+
+export type BesoinOverrides = Partial<Record<BesoinKey, BesoinOverride>>;
+
+/** Une valeur forcée exploitable a-t-elle été fournie ? (même critère que `resolveBesoin`) */
+function isBesoinForce(ov?: BesoinOverride): boolean {
+  const v = Number(ov?.valeur);
+  return Number.isFinite(v) && v > 0;
+}
+
+/** Besoin retenu pour un thème : la valeur forcée si elle est exploitable, sinon l'automatique. */
+function resolveBesoin(auto: number, ov?: BesoinOverride): number {
+  return isBesoinForce(ov) ? Number(ov!.valeur) : auto;
+}
+
+/** Champs de traçabilité ajoutés à chaque carte : d'où vient le besoin affiché. */
+function besoinMeta(auto: number, ov?: BesoinOverride) {
+  const libelle = (ov?.libelle || "").trim();
+  return {
+    besoinAuto: auto,
+    ...(isBesoinForce(ov) ? { besoinForce: true as const } : {}),
+    ...(libelle ? { besoinLibelle: libelle } : {}),
+  };
 }
 
 /** Une couche de prestation composant la couverture (AVS, LPP, LAA, 3e pilier…). */
@@ -69,6 +106,13 @@ export interface RiskCard {
   couverture: number;
   lacune: number;
   score: number;
+  /** Besoin calculé automatiquement, conservé même quand le conseiller le force —
+   *  l'écran et le PDF peuvent ainsi montrer « calculé X → retenu Y ». */
+  besoinAuto?: number;
+  /** Vrai quand `besoin` vient d'un override conseiller. */
+  besoinForce?: boolean;
+  /** Justification saisie par le conseiller, affichée au client. */
+  besoinLibelle?: string;
   /** Décomposition de la couverture par pilier (somme ≈ couverture). Pour le graphique en couches. */
   layers: BenefitLayer[];
   /** ÉVOLUTION (invalidité) : couverture MINIMALE à terme, quand les rentes d'enfant
@@ -289,11 +333,20 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   );
 
   const scoreRetraiteLocal = Math.round((renteTotaleAffichee / (salaireAnnuel / 12)) * 100) || 0;
-  const cibleRetraiteMensuelle = cibleRetAnnuelle / 12;
+  // ⚠️ `scoreRetraiteLocal` se mesure au SALAIRE, pas à la cible : forcer le besoin
+  // change la lacune, pas le score. Redéfinir la formule modifierait la signification
+  // du score dans l'app cliente, qui partage ce module.
+  const ov = input.besoinOverrides || {};
+  const cibleRetraiteAuto = cibleRetAnnuelle / 12;
+  const cibleRetraiteMensuelle = resolveBesoin(cibleRetraiteAuto, ov.retraite);
   const lacuneRetraiteMensuelle = Math.max(0, cibleRetraiteMensuelle - renteTotaleAffichee);
+  // Le capital manquant se recale sur le besoin retenu (25 ans de rente).
+  const cibleRetAnnuelleEff = cibleRetraiteMensuelle * 12;
 
   // ---- INVALIDITÉ (helper commun maladie/accident) ----
-  const cibleIGMensuelle = (salaireAnnuel * 0.9) / 12;
+  const cibleIGAuto = (salaireAnnuel * 0.9) / 12;
+  const cibleIGMaladie = resolveBesoin(cibleIGAuto, ov.invaliditeMaladie);
+  const cibleIGAccident = resolveBesoin(cibleIGAuto, ov.invaliditeAccident);
 
   // Nombre d'enfants ouvrant droit à une rente à l'année `year` (règle du moteur cloud
   // qui produit la projection : < 18 ans). Sert à étiqueter les PALIERS du carrousel.
@@ -305,7 +358,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
       return by > 0 && year - by < 18;
     }).length;
 
-  function analyseIG(proj: any): {
+  function analyseIG(proj: any, cibleIGMensuelle: number): {
     lacune: number;
     score: number;
     couverture: number;
@@ -400,8 +453,8 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
     return { lacune, score, couverture, layers, futureCouverture, futureLacune, futureFromYear, steps };
   }
 
-  const igMaladie = analyseIG(invM);
-  const igAccident = analyseIG(invA);
+  const igMaladie = analyseIG(invM, cibleIGMaladie);
+  const igAccident = analyseIG(invA, cibleIGAccident);
 
   // ---- DÉCÈS ----
   const estMarie = cloudData.Enter_etatCivil === 1;
@@ -417,7 +470,8 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
   });
   const salaireDeces = Number(cloudData.Enter_salaireAnnuel) || salaireAnnuel;
   const besoinConjoint = estMarie ? salaireDeces * 3 : 0;
-  const besoinDecesTotal = besoinConjoint + besoinEnfants || 20000;
+  const besoinDecesAuto = besoinConjoint + besoinEnfants || 20000;
+  const besoinDecesTotal = resolveBesoin(besoinDecesAuto, ov.deces);
 
   const capDecesLppLaa = getVal(decM, "Prestations en capital / indemnité unique");
   const capExistants = capDecesLppLaa + garantiesSaisies3a.capitalDeces;
@@ -489,7 +543,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
     totalScore,
     salaireMensuel: salaireAnnuel / 12,
     retraiteBaseMensuelle: prestationsRetAnnuelle / 12,
-    capManquantRetraite: Math.max(0, cibleRetAnnuelle - prestationsRetAnnuelle) * 25 - capitalUtilise,
+    capManquantRetraite: Math.max(0, cibleRetAnnuelleEff - prestationsRetAnnuelle) * 25 - capitalUtilise,
     // Sources retraite PAR PLAN (pour les sliders d'allocation côté UI).
     retraiteSources,
     // Plafond couple (affichage seul) : uniquement s'il dépasse la rente individuelle,
@@ -500,6 +554,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
       : {}),
     retraite: {
       besoin: cibleRetraiteMensuelle,
+      ...besoinMeta(cibleRetraiteAuto, ov.retraite),
       couverture: renteTotaleAffichee,
       lacune: lacuneRetraiteMensuelle,
       score: scoreRetraiteLocal,
@@ -510,7 +565,8 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
       ] as BenefitLayer[]).filter((l) => l.amount > 0),
     },
     invaliditeMaladie: {
-      besoin: cibleIGMensuelle,
+      besoin: cibleIGMaladie,
+      ...besoinMeta(cibleIGAuto, ov.invaliditeMaladie),
       couverture: igMaladie.couverture,
       lacune: igMaladie.lacune,
       score: igMaladie.score,
@@ -521,7 +577,8 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
       igSteps: igMaladie.steps.length > 1 ? igMaladie.steps : undefined,
     },
     invaliditeAccident: {
-      besoin: cibleIGMensuelle,
+      besoin: cibleIGAccident,
+      ...besoinMeta(cibleIGAuto, ov.invaliditeAccident),
       couverture: igAccident.couverture,
       lacune: igAccident.lacune,
       score: igAccident.score,
@@ -533,6 +590,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
     },
     deces: {
       besoin: besoinDecesTotal,
+      ...besoinMeta(besoinDecesAuto, ov.deces),
       couverture: capExistants,
       lacune: lacuneDeces,
       score: scoreDecFinal,
