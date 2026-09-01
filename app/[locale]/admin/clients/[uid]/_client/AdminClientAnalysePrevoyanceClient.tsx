@@ -28,6 +28,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import DossierImagesDialog from "./DossierImagesDialog";
+import NotesConseillerSection from "./NotesConseillerSection";
 import { Calculator, Loader2, Plus, Trash2, AlertTriangle, ShieldCheck, ScanLine, Printer, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { usePublishAdminSubnav } from "@/[locale]/admin/_components/adminSubnav";
@@ -817,6 +818,8 @@ export default function AdminClientAnalysePrevoyanceClient() {
             besoinSaved={besoinSaved}
           />
         ))}
+
+      <NotesConseillerSection uid={uid} />
     </div>
   );
 }

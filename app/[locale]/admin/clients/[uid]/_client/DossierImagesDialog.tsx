@@ -20,7 +20,6 @@ import { auth } from "@/lib/firebase";
 import { toast } from "sonner";
 import { Loader2, Upload, Trash2, Check, ImageOff, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -83,9 +82,11 @@ export default function DossierImagesDialog({
   const [active, setActive] = React.useState<Slot>("cover");
   const [busy, setBusy] = React.useState<string | null>(null);
   const [generating, setGenerating] = React.useState(false);
-  /** Notes imprimées en page « Notes d'entretien » ; vide = page réglée vierge. */
-  const [notes, setNotes] = React.useState("");
-  const [notesSaved, setNotesSaved] = React.useState<"idle" | "saving" | "saved">("idle");
+  // Les notes ne se SAISISSENT plus ici : elles sont rédigées dans la section
+  // « Notes du conseiller » de l'écran d'analyse, et l'entretien clôturé est une
+  // pièce datée. Ce dialogue ne fait que choisir ce qui part au client.
+  const [blocs, setBlocs] = React.useState<{ cle: string; titre: string; texte: string }[]>([]);
+  const [inclus, setInclus] = React.useState<Record<string, boolean>>({});
   /** Le paramétrage (bibliothèque, jeu maison) est réservé au propriétaire. */
   const [canManage, setCanManage] = React.useState(false);
   const [card, setCard] = React.useState<AdvisorCard>({ nom: "", fonction: "", agence: "" });
@@ -129,7 +130,6 @@ export default function DossierImagesDialog({
       );
       setHouse(norm(d.house));
       setClient(norm(d.client));
-      setNotes(d.notes || "");
       setCanManage(!!d.canManage);
       // Précharge les vignettes ; un échec isolé ne doit pas bloquer l'écran.
       (d.library || []).forEach((it: LibItem) => void objectUrl(it.path).catch(() => {}));
@@ -142,6 +142,33 @@ export default function DossierImagesDialog({
   }, [authed, uid, objectUrl]);
 
   React.useEffect(() => { if (open) void load(); }, [open, load]);
+
+  // Blocs de notes disponibles pour ce client, cochés par défaut.
+  React.useEffect(() => {
+    if (!open || !uid) return;
+    (async () => {
+      try {
+        const t = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/admin/notes?uid=${uid}`, { headers: { Authorization: `Bearer ${t}` } });
+        if (!res.ok) return;
+        const d = await res.json();
+        const jour = (iso?: string | null) =>
+          iso ? new Date(iso).toLocaleDateString("fr-CH", { day: "numeric", month: "long", year: "numeric" }) : "";
+        const out: { cle: string; titre: string; texte: string }[] = [];
+        if (d.conseiller?.texte?.trim()) {
+          out.push({ cle: "conseiller", titre: `Notes du conseiller${d.conseiller.updatedAt ? ` — ${jour(d.conseiller.updatedAt)}` : ""}`, texte: d.conseiller.texte.trim() });
+        }
+        if (d.session?.texte) {
+          out.push({ cle: "session", titre: `Entretien du ${jour(d.session.date)}`, texte: d.session.texte });
+        }
+        if (d.brouillon?.texte) {
+          out.push({ cle: "brouillon", titre: "Entretien en cours", texte: d.brouillon.texte });
+        }
+        setBlocs(out);
+        setInclus(Object.fromEntries(out.map((b) => [b.cle, true])));
+      } catch { /* le dossier imprimera une page réglée vierge */ }
+    })();
+  }, [open, uid]);
 
   // Carte du conseiller CONNECTÉ : la route la déduit du jeton, personne ne peut
   // donc modifier la signature d'un collègue.
@@ -202,28 +229,6 @@ export default function DossierImagesDialog({
     } catch {
       toast.error("Enregistrement impossible");
     }
-  }
-
-  // Les notes s'enregistrent en différé : une frappe ne doit pas provoquer une
-  // écriture par caractère.
-  const notesTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  function onNotesChange(v: string) {
-    setNotes(v);
-    if (!uid) return;
-    if (notesTimer.current) clearTimeout(notesTimer.current);
-    setNotesSaved("saving");
-    notesTimer.current = setTimeout(async () => {
-      try {
-        const res = await authed({
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scope: "client", uid, slots: client, notes: v }),
-        });
-        setNotesSaved(res.ok ? "saved" : "idle");
-      } catch {
-        setNotesSaved("idle");
-      }
-    }, 700);
   }
 
   /** Fige la sélection courante comme jeu maison, pour tous les dossiers. */
@@ -291,7 +296,13 @@ export default function DossierImagesDialog({
         if (!v) continue;
         try { images[key] = { src: await objectUrl(v.path), x: v.x, y: v.y }; } catch { /* emplacement laissé vide */ }
       }
-      await onGenerate(images, notes, card);
+      // Chaque bloc retenu est précédé de son intitulé daté, dans l'ordre
+      // d'affichage : le client sait de quel entretien vient quoi.
+      const texte = blocs
+        .filter((b) => inclus[b.cle])
+        .map((b) => `${b.titre}\n${b.texte}`)
+        .join("\n\n");
+      await onGenerate(images, texte, card);
       onOpenChange(false);
     } finally {
       setGenerating(false);
@@ -602,27 +613,43 @@ export default function DossierImagesDialog({
               </p>
             </div>
 
-            {/* Notes d'entretien — imprimées en page pleine du dossier */}
+            {/* Notes du dossier — sélection, pas saisie */}
             <div>
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-medium">Notes d&apos;entretien</p>
-                <span className="text-[11px] text-muted-foreground">
-                  {notesSaved === "saving" ? "Enregistrement…" : notesSaved === "saved" ? "Enregistré" : ""}
-                </span>
-              </div>
-              <Textarea
-                value={notes}
-                onChange={(e) => onNotesChange(e.target.value)}
-                placeholder="Ce qui a été dit pendant l'entretien, à faire figurer dans le dossier. Laissez vide pour imprimer une page réglée que le client remplira à la main."
-                maxLength={4000}
-                className="min-h-[90px] resize-y text-sm"
-              />
-              <p className="mt-1.5 text-[11px] text-muted-foreground">
-                {notes.trim()
-                  ? "La page « Notes d'entretien » imprimera ce texte."
-                  : "Vide : la page « Notes d'entretien » reste réglée et vierge."}
+              <p className="mb-2 text-sm font-medium">Notes à joindre au dossier</p>
+              {blocs.length === 0 ? (
+                <p className="rounded-md border border-dashed p-4 text-xs text-muted-foreground">
+                  Aucune note pour ce client. Le dossier imprimera une page réglée vierge.
+                  Les notes se rédigent dans la section « Notes du conseiller », en bas de l&apos;écran d&apos;analyse.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {blocs.map((b) => (
+                    <label
+                      key={b.cle}
+                      className="flex cursor-pointer gap-3 rounded-md border p-3 transition hover:bg-muted/40"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!inclus[b.cle]}
+                        onChange={(e) => setInclus((v) => ({ ...v, [b.cle]: e.target.checked }))}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-slate-900"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium">{b.titre}</span>
+                        <span className="mt-0.5 block line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">
+                          {b.texte}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Les blocs cochés s&apos;impriment en page « Notes d&apos;entretien », chacun sous son intitulé daté.
+                Rien de coché : la page reste réglée et vierge.
               </p>
             </div>
+
           </TabsContent>
         </Tabs>
         )}
