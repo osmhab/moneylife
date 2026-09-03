@@ -41,6 +41,13 @@ export function buildSourceDocTitle(planType?: string, institutionName?: string)
     case "LPP_BASE":
     case "LPP_COMPL":
       return hasInst ? `Certificat de caisse de pension - ${inst}` : "Certificat de caisse de pension";
+    // Libre passage : un avoir de 2e pilier « parqué » hors emploi. Sans ces
+    // deux cas, ces documents retombaient sur « Document original » dans le
+    // coffre-fort du client — illisible pour lui, et difficile à retrouver.
+    case "LIBRE_PASSAGE_POLICE":
+      return hasInst ? `Police de libre passage - ${inst}` : "Police de libre passage";
+    case "LIBRE_PASSAGE_COMPTE":
+      return hasInst ? `Compte de libre passage - ${inst}` : "Compte de libre passage";
     case "PILIER_3A_POLICE":
       return hasInst ? `Police 3a ${inst}` : "Police 3a";
     case "PILIER_3A_BANK":
