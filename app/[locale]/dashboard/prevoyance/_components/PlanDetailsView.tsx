@@ -7,7 +7,7 @@ import {
   History, Coins, MapPin, Calendar, Activity, AlertTriangle, Info, Receipt, Trash2, Lock,
   FileText, ExternalLink, CheckCircle2, Loader2, MessageSquareWarning, Phone, Sparkles, Check, RefreshCw
 } from "lucide-react";
-import { Plan } from "app/lib/core/plans"; // 👈 Alias
+import { Plan, isDeuxiemePilier, isLibrePassage } from "app/lib/core/plans"; // 👈 Alias
 import EditAmountDrawer from "./EditAmountDrawer";
 import InfoDrawer from "./InfoDrawer";
 import DocumentUploaderModal from "./DocumentUploaderModal";
@@ -163,7 +163,15 @@ export default function PlanDetailsView({ plan: initialPlan, onClose, isOpen, ad
   }, [targetUid]); 
 
   const planType = plan.type as string; 
-  const isLPP = planType === "LPP_BASE" || !planType;
+  // ⚠️ NE PAS restreindre à "LPP_BASE" : un plan COMPLÉMENTAIRE ou de LIBRE
+  // PASSAGE ne correspondait alors à aucun cas et retombait sur l'affichage
+  // BANCAIRE — titre « compte bancaire », et tout le bloc 2e pilier masqué.
+  // Même règle de classement que l'app iOS (Plan.isDeuxiemePilier).
+  const isLPP = isDeuxiemePilier(planType) || !planType;
+  // Un libre passage est un avoir « parqué » : il porte un MONTANT, pas des
+  // prestations (pas d'employeur cotisant, ni de rente d'invalidité). On masque
+  // donc les sections qui n'ont pas d'objet plutôt que d'afficher des zéros.
+  const estLibrePassage = isLibrePassage(planType);
   const isInsurance = planType === "PILIER_3A_POLICE" || planType === "PILIER_3B";
   const isBank = planType === "PILIER_3A_BANK" || planType === "3A_BANQUE";
   
@@ -900,6 +908,7 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
                   </div>
                 </section>
 
+                {!estLibrePassage && (<>
                 <section className="space-y-3">
                   <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-2">{t("sections.treatment")}</h3>
                   <div className="bg-white rounded-[32px] overflow-hidden shadow-sm border border-slate-50">
@@ -909,6 +918,7 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
                     <DetailRow icon={<Activity />} label={t("labels.insured_risk")} value={formatCHF(d.Enter_lppSalaireAssureRisque)} onClick={getEditAction(t("labels.insured_risk"), d.Enter_lppSalaireAssureRisque, "data.Enter_lppSalaireAssureRisque")} mandatory last />
                   </div>
                 </section>
+                </>)}
 
                 <section className="space-y-3">
                   <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-2">{t("sections.assets")}</h3>
@@ -941,6 +951,7 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
                   </div>
                 </section>
 
+                {!estLibrePassage && (<>
                 <section className="space-y-3">
                   <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-2">{t("sections.projections")}</h3>
                   <div className="bg-white rounded-[32px] overflow-hidden shadow-sm border border-slate-50">
@@ -1104,6 +1115,7 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
                     />
                   </div>
                 </section>
+                </>)}
               </>
             )}
 
