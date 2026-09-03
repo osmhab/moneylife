@@ -128,7 +128,10 @@ export default function SignupForm({
 
       fetch("/api/send-welcome", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+        },
         body: JSON.stringify({ email: cred.user.email, firstName: "Client", locale: locale }),
       }).catch(console.error);
 
@@ -206,7 +209,10 @@ export default function SignupForm({
 
       fetch("/api/send-welcome", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+        },
         body: JSON.stringify({ email: user.email, firstName: user.displayName?.split(" ")[0] || "Client", locale: locale }),
       }).catch(console.error);
 

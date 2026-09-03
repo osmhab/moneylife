@@ -1,11 +1,24 @@
 //app/api/send-offer/route.ts
 import { NextResponse } from "next/server";
 import sgMail from "@sendgrid/mail";
+import { requireInternal } from "@/lib/server/requireInternal";
 
 // Configuration SendGrid
 sgMail.setApiKey(process.env.SENDGRID_API_KEY as string);
 
 export async function POST(req: Request) {
+  // ⚠️ La plus sensible des routes d'e-mail : elle accepte `offerLink`,
+  // `compagnie`, `capital` et `prime`. Sans authentification, n'importe qui
+  // composait un « votre offre 3e pilier est prête » avec le lien de son choix,
+  // expédié depuis un domaine authentifié SendGrid — un hameçonnage à l'en-tête
+  // authentique, sur un produit financier, contre vos propres clients.
+  try {
+    await requireInternal(req);
+  } catch (e: any) {
+    const status = e?.message === "FORBIDDEN" ? 403 : 401;
+    return NextResponse.json({ error: "Accès réservé aux collaborateurs" }, { status });
+  }
+
   try {
     const body = await req.json();
     const { email, firstName, lastName, offerLink, compagnie, capital, prime } = body;

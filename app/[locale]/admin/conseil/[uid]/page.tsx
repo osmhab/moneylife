@@ -392,7 +392,12 @@ export default function AdminConseilPage() {
       if (client?.email) {
         fetch("/api/send-conseil-closed", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            // La route est désormais réservée aux collaborateurs : sans ce
+            // jeton, l'e-mail de clôture ne partirait plus.
+            Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+          },
           body: JSON.stringify({
             email: client.email,
             firstName: clientForm.Enter_prenom || client.firstName || "",

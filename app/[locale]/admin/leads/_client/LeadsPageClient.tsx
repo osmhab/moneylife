@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { db, storage } from "@/lib/firebase";
+import { auth, db, storage } from "@/lib/firebase";
 import { 
   collection, 
   query, 
@@ -123,7 +123,10 @@ export default function LeadsPageClient() {
     try {
       const res = await fetch("/api/send-offer", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+        },
         body: JSON.stringify({
           email: lead.client.email,
           firstName: lead.client.firstName,

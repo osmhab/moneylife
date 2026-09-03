@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import SignaturePositioner, { SignatureArea } from "./SignaturePositioner";
+import { auth } from "@/lib/firebase";
 
 
 // --- MOTEUR ACTUARIEL ---
@@ -465,7 +466,10 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
             // E-mail + notification in-app : créés ENSEMBLE côté serveur.
             await fetch('/api/send-offer-modified', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+                },
                 body: JSON.stringify({
                   clientUid,
                   email: clientInfo?.Enter_email || "Email inconnu",
@@ -486,7 +490,10 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
              // donc invisible pour qui n'ouvre pas son espace).
              await fetch('/api/send-offer-rejected', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+                },
                 body: JSON.stringify({
                   clientUid,
                   email: clientInfo?.Enter_email || "Email inconnu",
@@ -513,7 +520,10 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
 
              await fetch('/api/send-offer-accepted', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+                },
                 body: JSON.stringify({
                   clientUid,
                   email: clientInfo?.Enter_email || "Email inconnu",

@@ -530,7 +530,10 @@ export default function SubscriptionWizardDrawer({ isOpen, onClose, analysisData
       // Seul le TEXTE est traduit ici (next-intl n'existe que côté client).
       fetch('/api/send-offer-confirmation', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+        },
         body: JSON.stringify({
           requestId: docRef.id,
           clientUid: targetUid,

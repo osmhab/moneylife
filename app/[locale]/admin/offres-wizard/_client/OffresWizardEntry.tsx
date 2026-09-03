@@ -394,7 +394,10 @@ export default function OffresWizardEntry() {
       // pour que fermer l'onglet ne puisse plus envoyer l'e-mail sans la notif.
       await fetch('/api/send-offer-ready', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+        },
         body: JSON.stringify({
           clientUid: selectedReq.clientUid,
           email: selectedReq.client?.email,

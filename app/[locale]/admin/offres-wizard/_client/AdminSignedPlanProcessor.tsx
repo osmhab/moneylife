@@ -5,7 +5,7 @@ import { X, ShieldCheck, Landmark, FileText, ExternalLink, CheckCircle2, Loader2
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { db, storage } from "@/lib/firebase";
+import { auth, db, storage } from "@/lib/firebase";
 import { doc, updateDoc, serverTimestamp, onSnapshot, getDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import DocumentUploaderModal from "@/[locale]/dashboard/prevoyance/_components/DocumentUploaderModal"; // 👈 NOUVEL IMPORT
@@ -95,7 +95,10 @@ export default function AdminSignedPlanProcessor({ isOpen, onClose, plan, client
       try {
         const emailRes = await fetch('/api/send-contract-activated', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+          },
           body: JSON.stringify({
             email: clientEmail,
             clientUid,

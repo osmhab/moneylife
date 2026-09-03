@@ -3,8 +3,18 @@ import { NextResponse } from 'next/server';
 import { sendCreditXContractActivatedEmail } from 'lib/mail/creditx-mailer';
 import { authAdmin } from '@/lib/firebase/admin';
 import { notifyClient } from '@/lib/server/notify';
+import { requireInternal } from "@/lib/server/requireInternal";
 
 export async function POST(request: Request) {
+  // Destinataire fourni dans le corps de la requête : sans garde, la route
+  // servait de relais d'e-mail depuis un domaine authentifié SendGrid.
+  try {
+    await requireInternal(request);
+  } catch (e: any) {
+    const status = e?.message === "FORBIDDEN" ? 403 : 401;
+    return NextResponse.json({ error: "Accès réservé aux collaborateurs" }, { status });
+  }
+
   try {
     const body = await request.json();
     // 👈 NOUVEAU : On récupère la locale

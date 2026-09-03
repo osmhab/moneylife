@@ -1,8 +1,20 @@
 import { NextResponse } from 'next/server';
 import { sendCreditXReviewCompletedEmail } from 'lib/mail/creditx-mailer';
 import { notifyClient } from '@/lib/server/notify';
+import { requireInternal } from "@/lib/server/requireInternal";
 
 export async function POST(request: Request) {
+  // Action CONSEILLER malgré l'emplacement de son appelant sous `dashboard/` :
+  // `PlanDetailsView` est partagé entre les deux espaces et écrit ici
+  // `metadata.reviewedBy: adminUid`. Le destinataire venant du corps de la
+  // requête, sans garde la route servait de relais d'e-mail.
+  try {
+    await requireInternal(request);
+  } catch (e: any) {
+    const status = e?.message === "FORBIDDEN" ? 403 : 401;
+    return NextResponse.json({ error: "Accès réservé aux collaborateurs" }, { status });
+  }
+
   try {
     const body = await request.json();
 

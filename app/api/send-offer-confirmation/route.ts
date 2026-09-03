@@ -2,15 +2,28 @@
 import { NextResponse } from 'next/server';
 import { sendCreditXConfirmationEmail, sendCreditXAdminAlert } from 'lib/mail/creditx-mailer';
 import { notifyClient, notifyAdmin } from '@/lib/server/notify';
+import { requireAuth } from "@/lib/server/requireAuth";
 
-export async function POST(request: Request) {   
+export async function POST(request: Request) {
+  // ⚠️ DESTINATAIRE ET IDENTITÉ VIENNENT DU JETON.
+  // La route acceptait `email` et `clientUid` dans le corps, sans
+  // authentification : n'importe qui pouvait expédier une confirmation de
+  // souscription à l'adresse de son choix depuis un domaine authentifié
+  // SendGrid, et déposer une notification dans l'espace d'un autre client.
+  // Un client ne peut désormais souscrire que pour lui-même.
+  let compte: { uid: string; email: string | null };
+  try {
+    compte = await requireAuth(request);
+  } catch {
+    return NextResponse.json({ error: "Authentification requise" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
-    
+
     // Extraction de toutes les données envoyées par le Wizard
-    const { 
-      email, 
-      firstName, 
+    const {
+      firstName,
       lastName, 
       phone, 
       profession, 
@@ -22,9 +35,17 @@ export async function POST(request: Request) {
       sante,      // L'objet avec isSmoker, height, weight, healthOk
       benchmarks,
       details, // L'objet avec deces, ia, lf, company
-      clientUid,
       notification // { title, content, html } — déjà traduits par le composant
     } = body;
+
+    // `email` et `clientUid` ne sont plus lus dans le corps : ils viennent du
+    // compte authentifié, seule source qu'un appelant ne peut pas falsifier.
+    const email = compte.email;
+    const clientUid = compte.uid;
+
+    if (!email) {
+      return NextResponse.json({ error: "Compte sans adresse e-mail" }, { status: 400 });
+    }
 
     // 1. Envoi de l'email de confirmation au Client
     await sendCreditXConfirmationEmail({

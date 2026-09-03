@@ -479,7 +479,10 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
                           const clientData = clientSnap.exists() ? clientSnap.data() : {};
                           await fetch("/api/send-review-completed", {
                             method: "POST",
-                            headers: { "Content-Type": "application/json" },
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+                            },
                             body: JSON.stringify({
                               clientUid: targetUid,
                               email: clientData.Enter_email,
