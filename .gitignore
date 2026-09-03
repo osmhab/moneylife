@@ -33,3 +33,5 @@ app/lib/legacy/functions/node_modules/
 legacy/functions/node_modules/
 
 env.prod.yaml
+# Artefact de compilation TypeScript : change à chaque build, aucun intérêt en historique
+*.tsbuildinfo
