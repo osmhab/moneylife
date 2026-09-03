@@ -20,7 +20,7 @@ import { FieldValue } from "firebase-admin/firestore";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export type AdvisorCard = { nom: string; fonction: string; agence: string };
+export type AdvisorCard = { nom: string; fonction: string; agence: string; telephone: string };
 
 const doc = (uid: string) => `staff/${uid}`;
 const clean = (v: any, max = 80) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -48,6 +48,9 @@ export async function GET(req: NextRequest) {
         nom: clean(d.nom || decoded.name || decoded.email || ""),
         fonction: clean(d.fonction || ""),
         agence: clean(d.agence || ""),
+        // Mobile du collaborateur — sert au « Scan mobile » (lien envoyé par SMS).
+        // Il n'apparaît PAS sur le dossier client : c'est une donnée d'outillage.
+        telephone: clean(d.telephone || ""),
       } as AdvisorCard,
     });
   } catch (e: any) {
@@ -69,6 +72,7 @@ export async function PUT(req: NextRequest) {
       nom: clean(body?.nom),
       fonction: clean(body?.fonction),
       agence: clean(body?.agence),
+      telephone: clean(body?.telephone),
     };
     await db.doc(doc(decoded.uid)).set(
       { ...card, email: decoded.email || null, updatedAt: FieldValue.serverTimestamp() },

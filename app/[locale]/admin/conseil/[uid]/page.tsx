@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
+// Même sélecteur que le CRM : une seule grille de créneaux, une seule règle de rappel.
+import NouveauRendezVousDialog from "@/[locale]/admin/clients/[uid]/_client/NouveauRendezVousDialog";
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
@@ -115,6 +117,15 @@ export default function AdminConseilPage() {
     time: "",
     objectf: "Offres & Signatures"
   });
+
+  // Créneau retenu à l'étape 6, en attente de la clôture de la session.
+  // Rien n'est créé tant que le dossier n'est pas scellé : un entretien
+  // abandonné ne doit laisser ni événement dans l'agenda ni e-mail au client.
+  const [rdvOpen, setRdvOpen] = useState(false);
+  const [rdvChoisi, setRdvChoisi] = useState<{
+    debut: string; fin: string; objectif: string; lieu: string;
+    rappelSms: boolean; rappelDocuments: boolean; quandLisible: string;
+  } | null>(null);
 
   // --- ÉTATS ORBITAUX DE L'ÉTAPE 5 (Toujours avant les returns conditionnels !) ---
   const [rotationAngle, setRotationAngle] = useState<number>(0);
@@ -333,7 +344,9 @@ export default function AdminConseilPage() {
         status: "COMPLETED",
         clientSnapshot: clientForm,
         quickNotesSnapshot: quickNotes,
-        nextRdvPlanifie: nextRdv,
+        nextRdvPlanifie: rdvChoisi
+          ? { date: rdvChoisi.debut.slice(0, 10), time: rdvChoisi.quandLisible, objectf: rdvChoisi.objectif }
+          : nextRdv,
         dateSession: new Date().toLocaleDateString('fr-CH'),
         referralCode: newRefCode
       });
@@ -350,6 +363,30 @@ export default function AdminConseilPage() {
       await deleteDoc(doc(db, "clients", uid as string, "conseils_drafts", "current")).catch(() => {});
       try { localStorage.removeItem(`conseil_draft_${uid as string}`); } catch { /* ignore */ }
       setDraftState("idle");
+
+      // 2c. Le rendez-vous choisi à l'étape 6 devient réel MAINTENANT : agenda du
+      //     conseiller, fiche client, e-mail de confirmation et rappel SMS. C'est
+      //     la même route que le CRM — une seule façon de poser un rendez-vous.
+      if (rdvChoisi) {
+        try {
+          const token = await auth.currentUser?.getIdToken();
+          const res = await fetch(`/api/admin/rdv?uid=${uid}`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify(rdvChoisi),
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            // Le dossier est déjà scellé : on ne le fait pas échouer pour autant,
+            // mais le conseiller doit savoir que le rendez-vous n'est pas posé.
+            toast.error("Rendez-vous non enregistré", {
+              description: j?.message || "Reprenez-le depuis la fiche du client.",
+            });
+          }
+        } catch {
+          toast.error("Rendez-vous non enregistré", { description: "Reprenez-le depuis la fiche du client." });
+        }
+      }
 
       // 3. ENVOI SILENCIEUX DE L'E-MAIL DE CLÔTURE
       if (client?.email) {
@@ -471,7 +508,22 @@ export default function AdminConseilPage() {
 
 
     <div className="min-h-screen w-screen bg-white flex flex-col text-slate-900 font-sans overflow-hidden relative">
-      
+
+      {/* Mode DIFFÉRÉ : le créneau est retenu, pas encore posé (cf. étape 6). */}
+      <NouveauRendezVousDialog
+        open={rdvOpen}
+        onOpenChange={setRdvOpen}
+        uid={uid as string}
+        clientNom={`${clientForm.Enter_prenom || ""} ${clientForm.Enter_nom || ""}`.trim()}
+        differe
+        onChoisi={(choix) => {
+          setRdvChoisi(choix);
+          // On tient à jour l'ancien état : l'e-mail de clôture et le snapshot
+          // de session s'en servent encore.
+          setNextRdv({ date: choix.debut.slice(0, 10), time: choix.quandLisible, objectf: choix.objectif });
+        }}
+      />
+
       {/* BLOC TIROIR NOTES RAPIDES */}
       {isQuickNotesOpen && (
         <div className="fixed top-24 right-8 z-[100] w-80 md:w-96 bg-white border border-slate-200 rounded-3xl shadow-2xl p-5 animate-in slide-in-from-top-4 duration-300">
@@ -1136,28 +1188,46 @@ export default function AdminConseilPage() {
                     <p className="text-base font-bold text-slate-400 mt-1">Sélectionnez la date de remise de vos offres et propositions sur-mesure.</p>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Date du rendez-vous</label>
-                      <input 
-                        type="date" 
-                        value={nextRdv.date} 
-                        onChange={e => setNextRdv({...nextRdv, date: e.target.value})}
-                        className="w-full px-5 py-4 rounded-xl border border-slate-200 bg-slate-50 font-black text-sm outline-none focus:bg-white text-slate-800"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Objectif de l'entretien</label>
-                      <select 
-                        value={nextRdv.objectf} 
-                        onChange={e => setNextRdv({...nextRdv, objectf: e.target.value})}
-                        className="w-full px-5 py-4 rounded-xl border border-slate-200 bg-slate-50 font-black text-sm outline-none focus:bg-white text-slate-800"
+                  {/* Le champ date libre est remplacé par la grille de l'agenda :
+                      on ne peut plus proposer une heure déjà occupée, et l'heure
+                      est enfin saisie (l'ancien formulaire n'avait que la date). */}
+                  <div className="pt-4">
+                    {rdvChoisi ? (
+                      <div className="rounded-2xl border-2 border-slate-900 p-6">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Créneau retenu</p>
+                        <p className="mt-2 text-3xl font-black capitalize text-slate-900">{rdvChoisi.quandLisible}</p>
+                        <p className="mt-2 text-sm font-bold text-slate-500">
+                          {rdvChoisi.objectif}
+                          {rdvChoisi.lieu ? ` · ${rdvChoisi.lieu}` : ""}
+                        </p>
+                        <p className="mt-3 text-xs font-bold text-slate-400">
+                          {rdvChoisi.rappelSms ? "Rappel SMS la veille" : "Sans rappel SMS"}
+                          {" · "}
+                          {rdvChoisi.rappelDocuments ? "rappel documents inclus" : "sans rappel documents"}
+                        </p>
+                        <p className="mt-4 text-xs font-bold text-slate-400">
+                          Il sera créé dans votre agenda et confirmé au client à la clôture du dossier.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setRdvOpen(true)}
+                          className="mt-5 rounded-xl bg-slate-900 px-6 py-3 text-xs font-black uppercase tracking-widest text-white"
+                        >
+                          Changer le créneau
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setRdvOpen(true)}
+                        className="w-full rounded-2xl border-2 border-dashed border-slate-300 px-6 py-12 text-center transition hover:border-slate-900 hover:bg-slate-50"
                       >
-                        <option value="Offres &amp; Signatures">Présentation des Offres &amp; Signatures</option>
-                        <option value="Analyse Approfondie">Complément d'audit de situation</option>
-                        <option value="Suivi Stratégique">Vérification annuelle récursive</option>
-                      </select>
-                    </div>
+                        <span className="block text-lg font-black text-slate-900">Ouvrir mon agenda</span>
+                        <span className="mt-1 block text-sm font-bold text-slate-400">
+                          Choisissez un créneau parmi vos plages libres
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

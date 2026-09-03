@@ -1357,3 +1357,186 @@ export async function sendCreditXAppAvailableEmail(params: {
 
   await sgMail.send({ to: params.to, from, subject: c.subject, html, text: c.subject });
 }
+
+// ── Rendez-vous ────────────────────────────────────────────────
+
+/** "2026-09-04T13:30:00.000Z" → "20260904T133000Z" (format Google/iCalendar). */
+function horodatageIcal(d: Date): string {
+  return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+/**
+ * Fichier .ics joint au message.
+ *
+ * POURQUOI EN PLUS DU LIEN GOOGLE
+ * -------------------------------
+ * Le bouton « Ajouter à mon calendrier » vise Google, qui couvre la majorité des
+ * clients — mais pas ceux sous Apple Calendar ou Outlook, où le lien ouvrirait
+ * un compte Google qu'ils n'ont pas. La pièce jointe, elle, s'ouvre partout :
+ * les deux se complètent plutôt que de faire doublon.
+ */
+function fichierIcs(opts: {
+  uid: string; titre: string; debut: Date; fin: Date; lieu?: string; description?: string;
+}): string {
+  // Les retours à la ligne d'un .ics sont des CRLF — un simple \n casse le fichier
+  // dans Outlook.
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//CreditX//Rendez-vous//FR",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${opts.uid}`,
+    `DTSTAMP:${horodatageIcal(new Date())}`,
+    `DTSTART:${horodatageIcal(opts.debut)}`,
+    `DTEND:${horodatageIcal(opts.fin)}`,
+    `SUMMARY:${opts.titre}`,
+    opts.lieu ? `LOCATION:${opts.lieu}` : "",
+    opts.description ? `DESCRIPTION:${opts.description.replace(/\n/g, "\\n")}` : "",
+    "BEGIN:VALARM",
+    "TRIGGER:-PT24H",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:Rendez-vous CreditX demain",
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].filter(Boolean).join("\r\n");
+}
+
+/**
+ * Domaines authentifiés chez SendGrid (authentification de DOMAINE, pas
+ * d'adresse) : toute adresse qui s'y rattache peut expédier sans vérification
+ * individuelle. C'est ce qui permet d'envoyer AU NOM du conseiller.
+ */
+const DOMAINES_AUTHENTIFIES = ["creditx.ch", "moneylife.ch"];
+
+/**
+ * Expéditeur d'un message de rendez-vous.
+ *
+ * Le client doit voir arriver le message de SON conseiller, pas d'une adresse
+ * générique : c'est plus juste, et surtout une réponse (« je ne peux pas venir »)
+ * atterrit directement chez la bonne personne au lieu d'une boîte partagée.
+ *
+ * Repli si l'adresse du conseiller n'est PAS sur un domaine authentifié : SendGrid
+ * refuserait l'envoi, et un rendez-vous confirmé sans e-mail est pire qu'un e-mail
+ * envoyé depuis l'adresse générique.
+ */
+function expediteurConseiller(email?: string, nom?: string): { email: string; name?: string } {
+  const adresse = String(email || "").trim().toLowerCase();
+  const domaine = adresse.split("@")[1] || "";
+  if (adresse.includes("@") && DOMAINES_AUTHENTIFIES.includes(domaine)) {
+    return { email: adresse, name: nom || undefined };
+  }
+  return { email: process.env.CONTACT_FROM_EMAIL || process.env.SENDGRID_FROM || "no-reply@creditx.ch" };
+}
+
+export async function sendCreditXRendezVousEmail(params: {
+  to: string;
+  prenom: string;
+  debut: Date;
+  fin: Date;
+  /** Libellé long déjà formaté en français, ex. « jeudi 4 septembre 2026 à 14:30 ». */
+  quandLisible: string;
+  conseiller: { nom: string; fonction?: string; agence?: string; email?: string };
+  lieu?: string;
+  objectif?: string;
+  /** Le bloc « pensez à vos documents » n'apparaît que si le rappel est activé. */
+  rappelDocuments: boolean;
+}) {
+  ensureSendgrid();
+
+  const titre = `Rendez-vous de prévoyance — ${params.conseiller.nom}`;
+  const description = [
+    `Rendez-vous de prévoyance avec ${params.conseiller.nom}`,
+    params.objectif ? `Objet : ${params.objectif}` : "",
+    params.lieu ? `Lieu : ${params.lieu}` : "",
+  ].filter(Boolean).join("\n");
+
+  const lienGoogle =
+    "https://calendar.google.com/calendar/render?action=TEMPLATE" +
+    `&text=${encodeURIComponent(titre)}` +
+    `&dates=${horodatageIcal(params.debut)}/${horodatageIcal(params.fin)}` +
+    `&details=${encodeURIComponent(description)}` +
+    (params.lieu ? `&location=${encodeURIComponent(params.lieu)}` : "");
+
+  const signature = [
+    params.conseiller.nom,
+    params.conseiller.fonction,
+    params.conseiller.agence,
+  ].filter(Boolean).map((l) => escapeHtml(String(l))).join("<br/>");
+
+  const blocDocuments = params.rappelDocuments
+    ? `
+      <div style="margin:32px 0; padding:24px; background:#FAFAFA; border-left:3px solid #000000;">
+        <p style="margin:0 0 12px 0; font-weight:800; color:#1A1A1A; font-size:14px; text-transform:uppercase; letter-spacing:0.05em;">
+          À prendre avec vous
+        </p>
+        <ul style="margin:0; padding-left:20px; color:#4A4A4A; font-size:15px; line-height:1.9;">
+          <li>Votre certificat de prévoyance (2<sup>e</sup> pilier)</li>
+          <li>Vos polices et comptes de 3<sup>e</sup> pilier</li>
+          <li>Tout autre document qui vous semble pertinent</li>
+        </ul>
+      </div>`
+    : "";
+
+  const bodyHtml = `
+    <p style="margin:0 0 24px 0;">Bonjour ${escapeHtml(params.prenom)},</p>
+
+    <p style="margin:0 0 24px 0;">
+      Votre rendez-vous de prévoyance est confirmé.
+    </p>
+
+    <div style="margin:32px 0; padding:28px; border:1px solid #1A1A1A;">
+      <p style="margin:0; font-size:22px; font-weight:900; color:#000000; letter-spacing:-0.01em;">
+        ${escapeHtml(params.quandLisible)}
+      </p>
+      ${params.lieu ? `<p style="margin:12px 0 0 0; font-size:15px; color:#4A4A4A;">${escapeHtml(params.lieu)}</p>` : ""}
+      ${params.objectif ? `<p style="margin:12px 0 0 0; font-size:14px; color:#7A7A7A;">${escapeHtml(params.objectif)}</p>` : ""}
+    </div>
+
+    ${blocDocuments}
+
+    <p style="margin:24px 0 0 0;">
+      Avec vous à ce rendez-vous :<br/>
+      <strong style="color:#1A1A1A;">${signature}</strong>
+    </p>
+
+    <p style="margin:24px 0 0 0; font-size:14px; color:#7A7A7A;">
+      Un empêchement ? Répondez simplement à ce message, nous trouverons un autre moment.
+    </p>`;
+
+  const expediteur = expediteurConseiller(params.conseiller.email, params.conseiller.nom);
+
+  await sgMail.send({
+    to: params.to,
+    from: expediteur,
+    // Répondre au message doit joindre le conseiller lui-même — c'est ce que
+    // promet la dernière ligne du corps (« Répondez simplement à ce message »).
+    replyTo: expediteur.email,
+    subject: `Votre rendez-vous — ${params.quandLisible}`,
+    html: renderCreditXShell({
+      title: "Rendez-vous confirmé",
+      bodyHtml,
+      ctaLabel: "Ajouter à mon calendrier",
+      ctaUrl: lienGoogle,
+    }),
+    attachments: [
+      {
+        content: Buffer.from(
+          fichierIcs({
+            uid: `${horodatageIcal(params.debut)}-creditx@creditx.ch`,
+            titre,
+            debut: params.debut,
+            fin: params.fin,
+            lieu: params.lieu,
+            description,
+          }),
+        ).toString("base64"),
+        filename: "rendez-vous-creditx.ics",
+        type: "text/calendar; method=PUBLISH",
+        disposition: "attachment",
+      },
+    ],
+  });
+}
