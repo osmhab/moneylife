@@ -16,7 +16,7 @@ import { computeRetraite } from "./events/retraite";
 import { 
   computeProjections3aBanque, 
   computeProjections3aAssurance, 
-  computeDeathBenefitAssurance 
+  capitalDecesCouvert 
 } from "./3epilier";
 
 /* ===== Types & Helpers ===== */
@@ -92,7 +92,7 @@ function sumFromPlans(plans: any[], category: 'retraite' | 'deces' | 'invalidite
         // Le solde du libre passage est versé au décès → capital (pas de rente de survivant).
         acc.lppCapital += Number(d.valeurRachatActuelle) || Number(d.soldeActuel) || 0;
       } else {
-        acc.priveCapital += isBank ? (Number(d.soldeActuel) || 0) : computeDeathBenefitAssurance(d);
+        acc.priveCapital += isBank ? (Number(d.soldeActuel) || 0) : capitalDecesCouvert(d);
       }
     }
 

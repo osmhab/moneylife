@@ -1,5 +1,6 @@
 //app/[locale]/dashboard/prevoyance/add-bank/page.tsx
 "use client";
+import type { Occurrence } from "@/lib/core/periodicite";
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -29,7 +30,7 @@ export function AddBankPlanView({ onClose, adminUid }: { onClose: () => void, ad
     startDate: "01.01.2026",
     isRegulier: true,
     montantRegulier: 0,
-    occurrence: "mois" as "mois" | "annee",
+    occurrence: "mois" as Occurrence,
     soldeActuel: 0,
     isInvesti: false,
     profil: "equilibre" as "defensif" | "equilibre" | "growth" | "dynamique",
@@ -137,6 +138,7 @@ export function AddBankPlanView({ onClose, adminUid }: { onClose: () => void, ad
                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-2">{t("lbl_frequency")}</span>
                  <select className="bg-transparent font-black text-slate-900 outline-none" value={formData.occurrence} onChange={(e) => setFormData({...formData, occurrence: e.target.value as any})}>
                    <option value="mois">{t("opt_monthly")}</option>
+                   <option value="trimestre">{t("opt_quarterly")}</option>
                    <option value="annee">{t("opt_yearly")}</option>
                  </select>
                </div>

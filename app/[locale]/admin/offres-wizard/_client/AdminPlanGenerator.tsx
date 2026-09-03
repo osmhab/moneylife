@@ -1,5 +1,6 @@
 //app/admin/offres-wizard/_client/AdminPlanGenerator.tsx
 "use client";
+import { montantAnnuel, type Occurrence } from "@/lib/core/periodicite";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { db, storage } from "app/lib/firebase/index"; 
@@ -69,7 +70,7 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
   const [institution, setInstitution] = useState("");
   
   const [primeTotale, setPrimeTotale] = useState("");
-  const [occurrence, setOccurrence] = useState<"mois" | "annee">("mois");
+  const [occurrence, setOccurrence] = useState<Occurrence>("mois");
   const [dateDebut, setDateDebut] = useState("");
   // Echeance de la POLICE (fin du contrat) — a ne pas confondre avec
   // l'expiration de l'OFFRE, qui est une mecanique de dossier.
@@ -308,7 +309,7 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
       const rendementAttendu = isInvesti ? (rendementMap[profil] || 0.035) : 0.005;
 
       const newOfferData = {
-        primeTotaleAnnuelle: occurrence === "mois" ? Number(primeTotale) * 12 : Number(primeTotale),
+        primeTotaleAnnuelle: montantAnnuel(primeTotale, occurrence),
         capitalRetraiteProjete: Number(capitalRetraiteProjete),
         capitalDeces: typeCapitalDeces === "fixe" ? Number(capitalDecesFixe) : 0,
         renteInvalidite: Number(renteInv),
@@ -751,6 +752,7 @@ export default function AdminPlanGenerator({ isOpen, onClose, clientUid, request
                       <div className="bg-slate-50/50 rounded-2xl border border-slate-100 flex items-center justify-center">
                           <select className="font-black text-slate-900 outline-none bg-transparent" value={occurrence} onChange={(e) => setOccurrence(e.target.value as any)}>
                             <option value="mois">/ mois</option>
+                            <option value="trimestre">/ trimestre</option>
                             <option value="annee">/ an</option>
                           </select>
                       </div>

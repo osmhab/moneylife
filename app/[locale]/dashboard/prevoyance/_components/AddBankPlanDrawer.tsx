@@ -1,5 +1,6 @@
 // app/[locale]/dashboard/prevoyance/_components/AddBankPlanDrawer.tsx
 "use client";
+import type { Occurrence } from "@/lib/core/periodicite";
 
 import React, { useState } from "react";
 import { X, Landmark } from "lucide-react";
@@ -15,7 +16,7 @@ interface BankPlanFormData {
   startDate: string;
   isRegulier: boolean;
   montantRegulier: number;
-  occurrence: "mois" | "annee";
+  occurrence: Occurrence;
   soldeActuel: number;
   isInvesti: boolean;
   profil: "defensif" | "equilibre" | "growth" | "dynamique";
@@ -93,6 +94,7 @@ export default function AddBankPlanDrawer({ isOpen, onClose, onAdd }: AddBankPla
                    onChange={(e) => setFormData({...formData, occurrence: e.target.value as any})}
                  >
                    <option value="mois">{t("opt_per_month")}</option>
+                   <option value="trimestre">{t("opt_per_quarter")}</option>
                    <option value="annee">{t("opt_per_year")}</option>
                  </select>
                </div>

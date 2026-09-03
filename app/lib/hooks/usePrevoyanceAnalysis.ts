@@ -6,6 +6,7 @@ import { db, auth } from "@/lib/firebase";
 import { doc, onSnapshot, collection, getDocs } from "firebase/firestore";
 import { predictLog, ProviderModelDoc } from "lib/engines/threeA-engine";
 import { computeSituationAnalysis } from "@/lib/analysis/situation";
+import { montantAnnuel } from "@/lib/core/periodicite";
 import { plafond3aAnnuel } from "@/lib/analysis/plafond3a";
 
 // Helper partagé
@@ -313,9 +314,8 @@ export function usePrevoyanceAnalysis(adminUid?: string, externalPlans?: any[], 
         || parseAmount(d.prime) 
         || 0;
 
-      // On applique STRICTEMENT la fréquence choisie
-      const isAnnuel = d.occurrence === "annee";
-      const primeCalculee = isAnnuel ? montantBase : montantBase * 12;
+      // On applique STRICTEMENT la fréquence choisie (mois / trimestre / année)
+      const primeCalculee = montantAnnuel(montantBase, d.occurrence);
       
       return acc + primeCalculee;
     }, 0);

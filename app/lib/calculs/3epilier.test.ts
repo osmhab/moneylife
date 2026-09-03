@@ -4,6 +4,7 @@ import {
   computeProjections3aBanque,
   computeProjectionsEpargneLibre,
   computeDeathBenefitAssurance,
+  capitalDecesCouvert,
   yearsToMaturity,
   type Data3aAssurance,
   type Data3aBanque,
@@ -150,6 +151,139 @@ describe("computeDeathBenefitAssurance", () => {
   it("sans capital fixe ni date de début → retourne l'épargne", () => {
     const data = makeAssurance({ valeurRachatActuelle: 5_000 });
     expect(computeDeathBenefitAssurance(data)).toBe(5_000);
+  });
+
+  // ── Un `0` SAISI n'est pas une absence de donnée ────────────────────────────
+  // Cas réel : contrat AXA ouvert en 2013, capital décès saisi à 0, prime
+  // 1'293.20/an. Le repli sur la restitution des primes affichait 18'493 —
+  // au conseiller ET au client dans son app — pour un contrat qui n'assure
+  // aucun capital décès.
+  it("capital décès saisi à 0 → 0, sans repli sur la restitution des primes", () => {
+    const data = makeAssurance({
+      capitalDecesFixe: 0,
+      valeurRachatActuelle: 0,
+      primeTotale: 1_293.2,
+      occurrence: "annee",
+      dateDebut: "2013-10-01",
+    });
+    expect(computeDeathBenefitAssurance(data)).toBe(0);
+  });
+
+  it("capital décès saisi à 0 → l'épargne accumulée reste due aux bénéficiaires", () => {
+    const data = makeAssurance({
+      capitalDecesFixe: 0,
+      valeurRachatActuelle: 462,
+      primeTotale: 100,
+      occurrence: "mois",
+      dateDebut: "2020-01-01",
+    });
+    expect(computeDeathBenefitAssurance(data)).toBe(462);
+  });
+
+  it("capital décès ABSENT → la restitution des primes s'applique toujours", () => {
+    const data = makeAssurance({
+      capitalDecesFixe: undefined,
+      valeurRachatActuelle: 0,
+      primeTotale: 1_200,
+      occurrence: "annee",
+      dateDebut: "2024-01-01",
+    });
+    // Le champ n'a jamais été renseigné : le repli reste légitime.
+    expect(computeDeathBenefitAssurance(data)).toBeGreaterThan(0);
+  });
+
+  // ── Choix EXPLICITE de la prestation décès (typeCapitalDeces) ───────────────
+  it("option « restitution des primes » → restitution, même avec un capital fixe saisi", () => {
+    const data = makeAssurance({
+      typeCapitalDeces: "primes",
+      capitalDecesFixe: 0,
+      valeurRachatActuelle: 0,
+      primeTotale: 1_200,
+      occurrence: "annee",
+      dateDebut: "2024-01-01",
+    });
+    expect(computeDeathBenefitAssurance(data)).toBeGreaterThan(0);
+  });
+
+  it("option « montant fixe » à 0 → 0, jamais de restitution", () => {
+    const data = makeAssurance({
+      typeCapitalDeces: "fixe",
+      capitalDecesFixe: 0,
+      valeurRachatActuelle: 0,
+      primeTotale: 1_200,
+      occurrence: "annee",
+      dateDebut: "2013-10-01",
+    });
+    expect(computeDeathBenefitAssurance(data)).toBe(0);
+  });
+
+  it("prime TRIMESTRIELLE → restitution calculée sur 4 versements par an", () => {
+    const trimestriel = makeAssurance({
+      typeCapitalDeces: "primes",
+      valeurRachatActuelle: 0,
+      primeTotale: 300,
+      occurrence: "trimestre",
+      dateDebut: "2020-01-01",
+    });
+    const mensuelEquivalent = makeAssurance({
+      typeCapitalDeces: "primes",
+      valeurRachatActuelle: 0,
+      primeTotale: 100,
+      occurrence: "mois",
+      dateDebut: "2020-01-01",
+    });
+    // 300/trimestre = 100/mois : sans le helper, le trimestriel serait compté ×3.
+    expect(computeDeathBenefitAssurance(trimestriel)).toBe(
+      computeDeathBenefitAssurance(mensuelEquivalent),
+    );
+  });
+});
+
+describe("capitalDecesCouvert — ce qui compte dans la lacune décès", () => {
+  it("choix « restitution des primes » → la restitution entre dans la couverture", () => {
+    const data = makeAssurance({
+      typeCapitalDeces: "primes",
+      capitalDecesFixe: 0,
+      valeurRachatActuelle: 0,
+      primeTotale: 1_200,
+      occurrence: "annee",
+      dateDebut: "2020-01-01",
+    });
+    expect(capitalDecesCouvert(data)).toBe(computeDeathBenefitAssurance(data));
+    expect(capitalDecesCouvert(data)).toBeGreaterThan(0);
+  });
+
+  it("capital fixe saisi → c'est lui qui compte", () => {
+    expect(capitalDecesCouvert(makeAssurance({ capitalDecesFixe: 50_000 }))).toBe(50_000);
+  });
+
+  // Le garde-fou central : sans choix explicite, une fiche muette ne doit JAMAIS
+  // réduire la lacune décès du client via la restitution.
+  it("aucun choix + capital à 0 → 0, malgré des primes versées depuis 2013", () => {
+    const data = makeAssurance({
+      capitalDecesFixe: 0,
+      valeurRachatActuelle: 0,
+      primeTotale: 1_293.2,
+      occurrence: "annee",
+      dateDebut: "2013-10-01",
+    });
+    expect(capitalDecesCouvert(data)).toBe(0);
+  });
+});
+
+describe("périodicité trimestrielle — projections", () => {
+  it("300/trimestre projette comme 100/mois (et non comme 300/mois)", () => {
+    const base = { valeurRachatActuelle: 0, isInvesti: false, isLibere: false } as const;
+    const trimestriel = makeAssurance({ ...base, primeEpargne: 300, occurrence: "trimestre" });
+    const mensuel = makeAssurance({ ...base, primeEpargne: 100, occurrence: "mois" });
+    const faux = makeAssurance({ ...base, primeEpargne: 300, occurrence: "mois" });
+
+    expect(computeProjections3aAssurance(trimestriel, 40)).toBe(
+      computeProjections3aAssurance(mensuel, 40),
+    );
+    expect(computeProjections3aAssurance(trimestriel, 40)).not.toBe(
+      computeProjections3aAssurance(faux, 40),
+    );
   });
 });
 

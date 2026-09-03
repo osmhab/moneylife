@@ -1,6 +1,7 @@
 // app/lib/calculs/3epilier.ts
 
 import { parseFlexibleDate } from "@/lib/core/dates";
+import { montantAnnuel, montantMensuel, type Occurrence } from "@/lib/core/periodicite";
 
 /**
  * Interface pour les données brutes issues du formulaire 3a Banque
@@ -9,7 +10,7 @@ export interface Data3aBanque {
   soldeActuel: number;
   isRegulier: boolean;
   montantRegulier?: number;
-  occurrence?: "mois" | "annee";
+  occurrence?: Occurrence;
   isInvesti: boolean;
   profil?: "defensif" | "equilibre" | "growth" | "dynamique";
   startDate?: string;
@@ -30,6 +31,18 @@ export interface Data3aAssurance extends Data3aBanque {
   capitalDecesFixe: number;
   hasMandatGestion: boolean;
   isLibere?: boolean;
+  /**
+   * Nature de la prestation décès du contrat — choix EXPLICITE du conseiller :
+   *   - `"fixe"`   : un capital garanti, porté par `capitalDecesFixe`
+   *                  (0 admis = le contrat n'assure aucun capital décès) ;
+   *   - `"primes"` : restitution des primes versées, calculée.
+   *
+   * Absent sur les fiches antérieures : on retombe alors sur `capitalDecesFixe`.
+   * Sans ce champ, le moteur devait DEVINER l'intention à partir de
+   * `capitalDecesFixe > 0` — c'est ce qui faisait afficher une restitution à
+   * cinq chiffres sur des contrats explicitement sans capital décès.
+   */
+  typeCapitalDeces?: "fixe" | "primes";
   /**
    * Projection du capital retraite telle qu'AFFICHÉE PAR L'ASSUREUR
    * (relevée sur l'offre avant signature). Saisie manuelle et optionnelle.
@@ -96,8 +109,7 @@ export function computeProjections3aBanque(data: Data3aBanque, clientAge: number
   const n = Math.max(0, 65 - clientAge);
   if (n === 0) return Math.round(soldeActuel);
 
-  const isAnnuel = occurrence === "annee";
-  const P = isRegulier ? (isAnnuel ? montantRegulier : montantRegulier * 12) : 0;
+  const P = isRegulier ? montantAnnuel(montantRegulier, occurrence) : 0;
   const capExistant = soldeActuel * Math.pow(1 + r, n);
   const epargneFuture = r <= 0 ? P * n : P * ((Math.pow(1 + r, n) - 1) / r);
 
@@ -143,8 +155,7 @@ export function computeProjectionsEpargneLibre(
       : Math.max(0, 65 - clientAge);
   if (n === 0) return Math.round(soldeActuel);
 
-  const isAnnuel = occurrence === "annee";
-  const P = isRegulier ? (isAnnuel ? montantRegulier : montantRegulier * 12) : 0;
+  const P = isRegulier ? montantAnnuel(montantRegulier, occurrence) : 0;
   const capExistant = soldeActuel * Math.pow(1 + r, n);
   const epargneFuture = r <= 0 ? P * n : P * ((Math.pow(1 + r, n) - 1) / r);
 
@@ -168,38 +179,93 @@ export function computeProjections3aAssurance(data: Data3aAssurance, clientAge: 
   const n = yearsToMaturity(data.dateEcheance, clientAge);
   if (n === 0) return Math.round(valeurRachatActuelle);
 
-  const isAnnuel = occurrence === "annee";
-  const P = isLibere ? 0 : (isAnnuel ? primeEpargne : primeEpargne * 12);
+  const P = isLibere ? 0 : montantAnnuel(primeEpargne, occurrence);
   const capExistant = valeurRachatActuelle * Math.pow(1 + r, n);
   const epargneFuture = r <= 0 ? P * n : P * ((Math.pow(1 + r, n) - 1) / r);
 
   return Math.round(capExistant + epargneFuture);
 }
 
+/** Une valeur a-t-elle été SAISIE ? `0` est une saisie ; `undefined`/`null`/`""` non. */
+function estRenseigne(v: unknown): boolean {
+  return v !== null && v !== undefined && v !== "" && Number.isFinite(Number(v));
+}
+
+/** Restitution des primes versées depuis le début du contrat, majorée de 10 %. */
+function restitutionDesPrimes(data: Data3aAssurance, epargneAujourdhui: number): number | null {
+  if (!data.dateDebut || !(data.primeTotale > 0)) return null;
+
+  const start = new Date(data.dateDebut);
+  const now = new Date();
+  const diffYears = now.getFullYear() - start.getFullYear();
+  const diffMonths = now.getMonth() - start.getMonth();
+  const nbMois = (diffYears * 12) + diffMonths + 1;
+  if (!(nbMois > 0)) return null;
+
+  const pMensuelle = montantMensuel(data.primeTotale, data.occurrence);
+  return Math.max(epargneAujourdhui, Math.round(pMensuelle * nbMois * 1.10));
+}
+
+/**
+ * Capital versé aux bénéficiaires au décès du preneur.
+ *
+ * ORDRE DE PRIORITÉ
+ * -----------------
+ * 1. `typeCapitalDeces` — le choix EXPLICITE du conseiller. `"primes"` demande la
+ *    restitution, `"fixe"` renvoie au montant garanti.
+ * 2. `capitalDecesFixe` s'il est SAISI, **0 compris** : 0 signifie « ce contrat
+ *    n'assure aucun capital décès », et non « on ne sait pas ».
+ * 3. Restitution des primes, uniquement si RIEN n'a été renseigné (fiche ancienne
+ *    ou pas encore complétée).
+ *
+ * POURQUOI CET ORDRE
+ * ------------------
+ * L'ancien test `capitalDecesFixe && > 0` ne distinguait pas un champ absent d'un
+ * 0 saisi, et enchaînait sur la restitution : un contrat explicitement sans
+ * capital décès affichait un montant à cinq chiffres, au conseiller comme au
+ * client dans son app (`dashboard/prevoyance/page.tsx` somme cette valeur). Le
+ * moteur DEVINAIT une intention que le générateur d'offre écrivait déjà noir sur
+ * blanc dans `typeCapitalDeces` sans que personne ne la lise. C'est aussi la
+ * règle `??` plutôt que `||` du manuel : un 0 légitime ne s'écrase pas.
+ */
 export function computeDeathBenefitAssurance(data: Data3aAssurance): number {
   const epargneAujourdhui = data.valeurRachatActuelle || 0;
   if (data.isLibere) return Math.round(epargneAujourdhui);
 
-  if (data.capitalDecesFixe && data.capitalDecesFixe > 0) {
-    return Math.max(epargneAujourdhui, data.capitalDecesFixe);
+  // 1. Choix explicite du conseiller.
+  if (data.typeCapitalDeces === "primes") {
+    return restitutionDesPrimes(data, epargneAujourdhui) ?? Math.round(epargneAujourdhui);
+  }
+  if (data.typeCapitalDeces === "fixe") {
+    return Math.round(Math.max(epargneAujourdhui, Number(data.capitalDecesFixe) || 0));
   }
 
-  if (data.dateDebut && data.primeTotale > 0) {
-    const start = new Date(data.dateDebut);
-    const now = new Date();
-    const diffYears = now.getFullYear() - start.getFullYear();
-    const diffMonths = now.getMonth() - start.getMonth();
-    const nbMois = (diffYears * 12) + diffMonths + 1;
+  // 2. Pas de choix enregistré : le montant saisi fait foi, 0 compris.
+  if (estRenseigne(data.capitalDecesFixe)) {
+    // Au décès, les bénéficiaires touchent au moins l'épargne déjà accumulée.
+    return Math.round(Math.max(epargneAujourdhui, Number(data.capitalDecesFixe)));
+  }
 
-    if (nbMois > 0) {
-      const isAnnuel = data.occurrence === "annee";
-      const pMensuelle = isAnnuel ? data.primeTotale / 12 : data.primeTotale;
-      const capitalFormule = (pMensuelle * nbMois) * 1.10;
-      return Math.max(epargneAujourdhui, Math.round(capitalFormule));
-    }
+  // 3. Rien de renseigné : ancien repli.
+  {
+    const r = restitutionDesPrimes(data, epargneAujourdhui);
+    if (r !== null) return r;
   }
 
   return Math.round(epargneAujourdhui);
+}
+
+/**
+ * Capital décès RETENU DANS LA COUVERTURE (celle qui pilote la lacune décès).
+ *
+ * La restitution des primes n'y entre que sur un choix EXPLICITE `"primes"`.
+ * La compter aussi dans le repli — celui des fiches où rien n'est renseigné —
+ * réintroduirait les montants fantômes : un contrat sans capital décès assuré
+ * réduirait la lacune du client d'un montant que personne ne lui a garanti.
+ */
+export function capitalDecesCouvert(data: Data3aAssurance): number {
+  if (data.typeCapitalDeces === "primes") return computeDeathBenefitAssurance(data);
+  return Number(data.capitalDecesFixe) || Number((data as any).capitalDeces) || 0;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -208,14 +274,14 @@ export function computeDeathBenefitAssurance(data: Data3aAssurance): number {
 
 export function computeTotalVersements3a(data: Data3aBanque | Data3aAssurance, clientAge: number): number {
   const n = Math.max(0, 65 - clientAge);
-  const isAnnuel = data.occurrence === "annee";
-  
   if ("primeTotale" in data) {
     const soldeBase = (data as Data3aAssurance).valeurRachatActuelle || 0;
-    const P = (data as Data3aAssurance).isLibere ? 0 : (isAnnuel ? (data as Data3aAssurance).primeTotale : (data as Data3aAssurance).primeTotale * 12);
+    const P = (data as Data3aAssurance).isLibere
+      ? 0
+      : montantAnnuel((data as Data3aAssurance).primeTotale, data.occurrence);
     return Math.round(soldeBase + (P * n));
-  } 
-  const P = data.isRegulier ? (isAnnuel ? (data.montantRegulier || 0) : (data.montantRegulier || 0) * 12) : 0;
+  }
+  const P = data.isRegulier ? montantAnnuel(data.montantRegulier, data.occurrence) : 0;
   return Math.round((data.soldeActuel || 0) + (P * n));
 }
 
@@ -314,8 +380,7 @@ export function compareInsuranceWithOffer(
   const n = Math.max(0, 65 - clientAge);
 
   // --- 1. LES PRIMES (COÛT) ---
-  const isAnnuel = dataCurrent.occurrence === "annee";
-  const primeActuelleAnnuelle = isAnnuel ? dataCurrent.primeTotale : dataCurrent.primeTotale * 12;
+  const primeActuelleAnnuelle = montantAnnuel(dataCurrent.primeTotale, dataCurrent.occurrence);
   const economieAnnuelle = primeActuelleAnnuelle - newOffer.primeTotaleAnnuelle;
 
   // --- 2. L'ÉPARGNE (RETRAITE) ---

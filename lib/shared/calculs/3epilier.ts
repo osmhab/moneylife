@@ -1,5 +1,6 @@
 // lib/shared/calculs/3epilier.ts
 
+import { montantAnnuel, montantMensuel } from "../core/periodicite";
 import type {
   Config_3e_Pilier,
   Config_3e_ClientSnapshot,
@@ -161,7 +162,7 @@ export function computeProjections3aBanque(data: any, clientAge: number): number
   const n = Math.max(0, 65 - clientAge);
   if (n <= 0) return Math.round(soldeActuel);
 
-  const P = isRegulier ? (occurrence === "mois" ? montantRegulier * 12 : montantRegulier) : 0;
+  const P = isRegulier ? montantAnnuel(montantRegulier, occurrence) : 0;
   const capExistant = soldeActuel * Math.pow(1 + r, n);
   const epargneFuture = r <= 0 ? P * n : P * ((Math.pow(1 + r, n) - 1) / r);
 
@@ -220,7 +221,7 @@ export function computeProjections3aAssurance(data: any, clientAge: number): num
   const n = yearsToMaturity(d.dateEcheance, clientAge);
   if (n === 0) return Math.round(valeurRachatActuelle);
 
-  const P = isLibere ? 0 : (occurrence === "annee" ? primeEpargne : primeEpargne * 12);
+  const P = isLibere ? 0 : montantAnnuel(primeEpargne, occurrence);
   const capExistant = valeurRachatActuelle * Math.pow(1 + r, n);
   const epargneFuture = r <= 0 ? P * n : P * ((Math.pow(1 + r, n) - 1) / r);
 
@@ -230,32 +231,60 @@ export function computeProjections3aAssurance(data: any, clientAge: number): num
 /**
  * Capital Décès pour une Assurance
  */
+// ⚠️ Miroir de `app/lib/calculs/3epilier.ts`, qui porte l'explication complète
+// de l'ordre de priorité. Cette copie alimente la Cloud Function.
+function restitutionDesPrimes(d: any, epargneAujourdhui: number): number | null {
+  if (!d.dateDebut || !(Number(d.primeTotale) > 0)) return null;
+
+  const parts = d.dateDebut.includes('.') ? d.dateDebut.split('.') : d.dateDebut.split('-');
+  const start = parts.length === 3 ? new Date(Number(parts[0].length === 4 ? parts[0] : parts[2]), Number(parts[1]) - 1, Number(parts[0].length === 4 ? parts[2] : parts[0])) : new Date(d.dateDebut);
+  const now = new Date();
+  const diffMonths = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
+  if (!(diffMonths > 0)) return null;
+
+  const pMensuelle = montantMensuel(d.primeTotale, d.occurrence);
+  return Math.max(epargneAujourdhui, Math.round((pMensuelle * diffMonths) * 1.10));
+}
+
 export function computeDeathBenefitAssurance(data: any): number {
   const d = data || {};
-
-  // 1. PRIORITÉ : Valeur enregistrée dans Firestore
-  if (Number(d.capitalDecesCalcule) > 0) return Math.round(Number(d.capitalDecesCalcule));
 
   const epargneAujourdhui = Number(d.valeurRachatActuelle) || 0;
   if (d.isLibere) return Math.round(epargneAujourdhui);
 
-  // 2. Capital fixe
-  if (d.capitalDecesFixe && Number(d.capitalDecesFixe) > 0) {
-    return Math.max(epargneAujourdhui, Number(d.capitalDecesFixe));
+  // 1. Choix EXPLICITE du conseiller sur la prestation décès du contrat.
+  if (d.typeCapitalDeces === "primes") {
+    return restitutionDesPrimes(d, epargneAujourdhui) ?? Math.round(epargneAujourdhui);
+  }
+  if (d.typeCapitalDeces === "fixe") {
+    return Math.round(Math.max(epargneAujourdhui, Number(d.capitalDecesFixe) || 0));
   }
 
-  // 3. Restitution des primes + 10%
-  if (d.dateDebut && Number(d.primeTotale) > 0) {
-    const parts = d.dateDebut.includes('.') ? d.dateDebut.split('.') : d.dateDebut.split('-');
-    const start = parts.length === 3 ? new Date(Number(parts[0].length === 4 ? parts[0] : parts[2]), Number(parts[1]) - 1, Number(parts[0].length === 4 ? parts[2] : parts[0])) : new Date(d.dateDebut);
-    const now = new Date();
-    const diffMonths = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1;
-
-    if (diffMonths > 0) {
-      const pMensuelle = d.occurrence === "annee" ? Number(d.primeTotale) / 12 : Number(d.primeTotale);
-      return Math.max(epargneAujourdhui, Math.round((pMensuelle * diffMonths) * 1.10));
-    }
+  // 2. Pas de choix enregistré : le capital SAISI fait foi, `0` compris.
+  //    `0` veut dire « aucun capital décès assuré », pas « valeur inconnue ».
+  //    Ce test passe AVANT `capitalDecesCalcule` : une valeur recalculée et
+  //    stockée hier ne doit pas survivre à une saisie d'aujourd'hui.
+  const fixe = d.capitalDecesFixe;
+  if (fixe !== null && fixe !== undefined && fixe !== "" && Number.isFinite(Number(fixe))) {
+    return Math.round(Math.max(epargneAujourdhui, Number(fixe)));
   }
+
+  // 3. Valeur enregistrée dans Firestore (contrats dont le capital n'est pas saisi)
+  if (Number(d.capitalDecesCalcule) > 0) return Math.round(Number(d.capitalDecesCalcule));
+
+  // 4. Rien de renseigné : ancien repli sur la restitution des primes.
+  const r = restitutionDesPrimes(d, epargneAujourdhui);
+  if (r !== null) return r;
 
   return Math.round(epargneAujourdhui);
+}
+/**
+ * Capital décès RETENU DANS LA COUVERTURE (celle qui pilote la lacune décès).
+ * ⚠️ Miroir de `app/lib/calculs/3epilier.ts`, qui porte l'explication complète :
+ * la restitution n'entre dans la couverture que sur le choix EXPLICITE
+ * `"primes"` — jamais via le repli des fiches non renseignées.
+ */
+export function capitalDecesCouvert(d: any): number {
+  if (d?.typeCapitalDeces === "primes") return computeDeathBenefitAssurance(d);
+  return Number(d?.capitalDecesFixe) || Number(d?.capitalDeces) || 0;
 }

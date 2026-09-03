@@ -58,6 +58,7 @@ export default function EditAmountDrawer({ isOpen, onClose, planId, fieldPath, l
     } else if (fieldPath === "data.occurrence") {
       return [
         { label: t("opt_monthly"), value: "mois" },
+        { label: t("opt_quarterly"), value: "trimestre" },
         { label: t("opt_yearly"), value: "annee" }
       ];
     } else if (fieldPath === "data.typeContrat") {

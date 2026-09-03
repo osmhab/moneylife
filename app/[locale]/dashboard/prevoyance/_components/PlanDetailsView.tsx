@@ -120,7 +120,11 @@ export default function PlanDetailsView({ plan: initialPlan, onClose, isOpen, ad
     { id: "growth", label: t("options.growth") },
     { id: "dynamique", label: t("options.dynamic") }
   ], [t]);
-  const OPTIONS_FREQUENCE = useMemo(() => [{ id: "mois", label: t("options.monthly") }, { id: "annee", label: t("options.yearly") }], [t]);
+  const OPTIONS_FREQUENCE = useMemo(() => [{ id: "mois", label: t("options.monthly") }, { id: "trimestre", label: t("options.quarterly") }, { id: "annee", label: t("options.yearly") }], [t]);
+  // Périodicité affichée. Trois branches explicites : un `!== "annee" ? mensuel`
+  // afficherait « Mensuel » sur une prime trimestrielle.
+  const freqLabel = (o?: string) => o === "annee" ? t("options.yearly") : o === "trimestre" ? t("options.quarterly") : t("options.monthly");
+  const primeLabel = (o?: string) => o === "annee" ? t("pending.prime_annual") : o === "trimestre" ? t("pending.prime_quarterly") : t("pending.prime_monthly");
   const OPTIONS_TYPE_CONTRAT = useMemo(() => [{ id: "3a", label: t("options.pil_3a") }, { id: "3b", label: t("options.pil_3b") }], [t]);
   const OPTIONS_DECES = useMemo(() => [{ id: "fixe", label: t("options.death_fixed") }, { id: "primes", label: t("options.death_refund") }], [t]);
 
@@ -647,7 +651,7 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
 
               <div className="grid grid-cols-2 gap-4 border-t border-white/10 pt-6 relative z-10">
                  <div>
-                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">{d.occurrence === 'annee' ? t("pending.prime_annual") : t("pending.prime_monthly")}</p>
+                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">{primeLabel(d.occurrence)}</p>
                    <p className="text-3xl font-black tracking-tighter text-white">{formatCHF(d.primeTotale || d.montantRegulier)}</p>
                  </div>
                  <div>
@@ -811,8 +815,8 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
                     {/* Échéance : pilote l'horizon de projection (yearsToMaturity).
                         Marquée obligatoire — sans elle le moteur suppose 65 ans. */}
                     <DetailRow icon={<Calendar />} label={t("labels.end_date")} value={formatDateDisplay(d.dateEcheance)} onClick={getEditAction(t("labels.end_date"), d.dateEcheance, "data.dateEcheance")} mandatory />
-                    <DetailRow icon={<Wallet />} label={t("labels.total_premium")} value={formatCHF(d.primeTotale)} sub={d.occurrence === 'mois' ? t("options.monthly") : t("options.yearly")} onClick={getEditAction(t("labels.total_premium"), d.primeTotale, "data.primeTotale")} mandatory />
-                    <DetailRow icon={<History />} label={t("labels.frequency")} value={d.occurrence === 'annee' ? t("options.yearly") : t("options.monthly")} onClick={getEditAction(t("labels.frequency"), d.occurrence, "data.occurrence", "select", OPTIONS_FREQUENCE)} />
+                    <DetailRow icon={<Wallet />} label={t("labels.total_premium")} value={formatCHF(d.primeTotale)} sub={freqLabel(d.occurrence)} onClick={getEditAction(t("labels.total_premium"), d.primeTotale, "data.primeTotale")} mandatory />
+                    <DetailRow icon={<History />} label={t("labels.frequency")} value={freqLabel(d.occurrence)} onClick={getEditAction(t("labels.frequency"), d.occurrence, "data.occurrence", "select", OPTIONS_FREQUENCE)} />
                     <DetailRow icon={<Coins />} label={t("labels.savings_part")} value={formatCHF(d.primeEpargne)} onClick={getEditAction(t("labels.savings_part"), d.primeEpargne, "data.primeEpargne")} />
                     <DetailRow icon={<TrendingUp />} label={t("labels.surrender_value")} value={formatCHF(d.valeurRachatActuelle)} onClick={getEditAction(t("labels.surrender_value"), d.valeurRachatActuelle, "data.valeurRachatActuelle")} mandatory />
                     <DetailRow icon={<Sparkles />} label={t("labels.insurer_projection")} value={d.projectionAssureur ? formatCHF(d.projectionAssureur) : null} sub={t("labels.insurer_projection_hint")} onClick={getEditAction(t("labels.insurer_projection"), d.projectionAssureur, "data.projectionAssureur")} last />
@@ -862,7 +866,7 @@ const getEditAction = (label: string, value: any, fieldPath: string, type?: stri
                     {d.isRegulier && (
                       <>
                         <DetailRow icon={<Coins />} label={t("labels.amount")} value={formatCHF(d.montantRegulier)} onClick={getEditAction(t("labels.amount"), d.montantRegulier, "data.montantRegulier")} />
-                        <DetailRow icon={<Calendar />} label={t("labels.frequency")} value={d.occurrence === 'annee' ? t("options.yearly") : t("options.monthly")} onClick={getEditAction(t("labels.frequency"), d.occurrence, "data.occurrence", "select", OPTIONS_FREQUENCE)} last />
+                        <DetailRow icon={<Calendar />} label={t("labels.frequency")} value={freqLabel(d.occurrence)} onClick={getEditAction(t("labels.frequency"), d.occurrence, "data.occurrence", "select", OPTIONS_FREQUENCE)} last />
                       </>
                     )}
                   </div>

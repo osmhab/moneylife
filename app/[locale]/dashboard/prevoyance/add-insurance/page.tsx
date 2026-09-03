@@ -1,5 +1,6 @@
 //app/[locale]/dashboard/prevoyance/add-insurance/page.tsx
 "use client";
+import type { Occurrence } from "@/lib/core/periodicite";
 
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -66,7 +67,7 @@ export function AddInsurancePlanView({ onClose, adminUid, replacePlanId }: { onC
     dateEcheance: "",
     primeTotale: 0,
     primeEpargne: 0,
-    occurrence: "mois" as "mois" | "annee",
+    occurrence: "mois" as Occurrence,
     valeurRachatActuelle: 0,
     projectionAssureur: 0,
     isInvesti: false,
@@ -475,6 +476,7 @@ export function AddInsurancePlanView({ onClose, adminUid, replacePlanId }: { onC
                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">{t("lbl_frequency")}</span>
                        <select className="bg-transparent font-black text-slate-900 outline-none" value={formData.occurrence} onChange={(e) => setFormData({...formData, occurrence: e.target.value as any})}>
                          <option value="mois">{t("opt_monthly")}</option>
+                         <option value="trimestre">{t("opt_quarterly")}</option>
                          <option value="annee">{t("opt_yearly")}</option>
                        </select>
                     </div>

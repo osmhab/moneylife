@@ -5,6 +5,8 @@
 // NB : ne contient PAS le pricing ML (threeA-engine) — c'est une couche séparée.
 
 import { plafond3aAnnuel } from "./plafond3a";
+import { montantAnnuel } from "../core/periodicite";
+import { capitalDecesCouvert } from "../calculs/3epilier";
 import { isDeuxiemePilier, isDeuxiemePilierActif } from "../core/plans";
 
 type AnyObj = Record<string, any>;
@@ -326,7 +328,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
         renteIG: acc.renteIG + (isCashLike ? 0 : (parseAmount(d.renteInvalidite) || parseAmount(d.renteIG) || 0)),
         capitalDeces: acc.capitalDeces + (isCashLike
           ? (parseAmount(d.soldeActuel) || 0)
-          : (parseAmount(d.capitalDecesFixe) || parseAmount(d.capitalDeces) || 0)),
+          : capitalDecesCouvert(d as any)),
       };
     },
     { renteIG: 0, capitalDeces: 0 }
@@ -520,7 +522,7 @@ export function computeSituationAnalysis(input: SituationInput): SituationAnalys
       parseAmount(d.primeAnnuelle) ||
       parseAmount(d.prime) ||
       0;
-    return acc + (d.occurrence === "annee" ? base : base * 12);
+    return acc + montantAnnuel(base, d.occurrence);
   }, 0);
 
   // Plafond 3a : petit (affilié LPP) ou grand (20% du salaire, max) si non affilié.
