@@ -134,8 +134,7 @@ export default function SignupForm({
 
       await fetch("/api/auth/set-uid", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: cred.user.uid }),
+        headers: { Authorization: `Bearer ${await auth.currentUser?.getIdToken()}` },
       });
 
       try { localStorage.setItem("ml_clientDocPath", `clients/${cred.user.uid}`); } catch {}
@@ -213,8 +212,7 @@ export default function SignupForm({
 
       await fetch("/api/auth/set-uid", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: user.uid }),
+        headers: { Authorization: `Bearer ${await auth.currentUser?.getIdToken()}` },
       });
 
       try { localStorage.setItem("ml_clientDocPath", `clients/${user.uid}`); } catch {}
@@ -235,8 +233,7 @@ export default function SignupForm({
       if (u) {
         await fetch("/api/auth/set-uid", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ uid: u.uid }),
+          headers: { Authorization: `Bearer ${await auth.currentUser?.getIdToken()}` },
         });
         try { localStorage.setItem("ml_clientDocPath", `clients/${u.uid}`); } catch {}
         router.replace(nextParam || "/dashboard/prevoyance");

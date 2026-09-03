@@ -1,45 +1,48 @@
 // app/api/auth/set-uid/route.ts
+//
+// Pose un cookie d'identité après une connexion Firebase, pour que les Server
+// Components sachent qui est connecté.
+//
+// ⚠️ L'IDENTITÉ VIENT DU JETON, PAS DU CORPS DE LA REQUÊTE
+// --------------------------------------------------------
+// Cette route acceptait auparavant un `uid` fourni par l'appelant et le posait
+// tel quel en cookie httpOnly. N'importe qui pouvait donc se faire délivrer un
+// cookie portant l'identité d'un autre. Rien ne lisait ce cookie, donc rien
+// n'était exploitable — mais sa docstring invitait explicitement les Server
+// Components à s'y fier. C'était une arme chargée posée sur la table.
+//
+// Le jeton Firebase est désormais vérifié côté serveur, et le cookie porte
+// l'uid QUE GOOGLE CONFIRME. Un cookie posé ici est donc digne de confiance,
+// ce qui était la promesse implicite de son existence.
+
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { authAdmin } from "@/lib/firebase/admin";
 
-/**
- * Ce petit endpoint pose un cookie "uid" après un login Firebase côté client.
- * Il permet aux pages Server Components (comme /analyse/certificat-lpp)
- * de connaître quel utilisateur est connecté.
- *
- * Utilisation côté client :
- *   const uid = auth.currentUser?.uid;
- *   await fetch("/api/auth/set-uid", {
- *     method: "POST",
- *     headers: { "Content-Type": "application/json" },
- *     body: JSON.stringify({ uid }),
- *   });
- */
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const { uid } = await req.json();
-
-    if (!uid || typeof uid !== "string") {
-      return NextResponse.json({ error: "uid manquant" }, { status: 400 });
+    const authz = req.headers.get("authorization") || "";
+    const token = authz.startsWith("Bearer ") ? authz.slice(7) : null;
+    if (!token) {
+      return NextResponse.json({ error: "Jeton manquant" }, { status: 401 });
     }
 
-    // Crée le cookie sécurisé
+    const decoded = await authAdmin.verifyIdToken(token);
+
     const jar = await cookies();
-    jar.set("uid", uid, {
-      httpOnly: true, // invisible au JS client
+    jar.set("uid", decoded.uid, {
+      httpOnly: true,          // invisible au JS client
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      path: "/", // disponible sur tout le site
-      maxAge: 60 * 60 * 24 * 7, // 7 jours
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
     });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    console.error("[/api/auth/set-uid] error:", e);
-    return NextResponse.json(
-      { error: e?.message ?? "Unexpected error" },
-      { status: 500 }
-    );
+    console.error("[/api/auth/set-uid]", e?.message || e);
+    return NextResponse.json({ error: "Jeton invalide" }, { status: 401 });
   }
 }

@@ -91,8 +91,10 @@ export default function LoginForm({
 
       await fetch("/api/auth/set-uid", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+        },
       });
 
       try { localStorage.setItem("ml_clientDocPath", `clients/${uid}`); } catch {}
@@ -123,8 +125,10 @@ export default function LoginForm({
 
       await fetch("/api/auth/set-uid", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+        },
       });
 
       try { localStorage.setItem("ml_clientDocPath", `clients/${uid}`); } catch {}

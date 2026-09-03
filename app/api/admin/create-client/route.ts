@@ -2,8 +2,20 @@ import { NextResponse } from "next/server";
 // Chemins relatifs infaillibles vers tes fichiers lib
 import { authAdmin, db } from "../../../lib/firebase/admin"; 
 import { sendCreditXNewAccountEmail } from "lib/mail/creditx-mailer";
+import { requireInternal } from "@/lib/server/requireInternal";
 
 export async function POST(req: Request) {
+// ⚠️ Cette route était ENTIÈREMENT OUVERTE : aucun contrôle de jeton. En
+// production, un POST anonyme atteignait la logique métier (vérifié : HTTP 400
+// « paramètres manquants » au lieu de 401). N'importe qui connaissant l'URL
+// pouvait donc s'en servir. La garde est désormais la première instruction.
+  try {
+    await requireInternal(req);
+  } catch (e: any) {
+    const status = e?.message === "FORBIDDEN" ? 403 : 401;
+    return NextResponse.json({ error: "Accès réservé aux collaborateurs" }, { status });
+  }
+
   try {
     const body = await req.json();
     const { firstName, lastName, email, phone } = body;

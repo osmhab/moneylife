@@ -6,8 +6,9 @@
 // routes /api/admin/clients/* (qui ré-implémentent le même helper en local) ;
 // on centralise ici pour les nouvelles routes de l'outil conseiller.
 //
-// ⚠️ Ne PAS utiliser le pattern de /api/admin/clients/overview (qui vérifie
-// juste le token sans check interne — n'importe quel compte y passe).
+// ⚠️ Vérifier le seul jeton NE SUFFIT PAS : un compte client authentifié passe.
+// /api/admin/clients/overview a longtemps eu ce défaut ; elle utilise désormais
+// cette garde. Toute nouvelle route de l'outil conseiller doit faire de même.
 
 import { authAdmin } from "@/lib/firebase/admin";
 

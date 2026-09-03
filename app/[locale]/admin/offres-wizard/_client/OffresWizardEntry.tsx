@@ -67,7 +67,10 @@ export default function OffresWizardEntry() {
       // On appelle notre nouvelle API serveur
       const response = await fetch("/api/admin/create-client", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+        },
         body: JSON.stringify(newClient),
       });
 
@@ -1799,7 +1802,10 @@ function SendRequestReminderButton({ clientUid, requestId, hasBeenReminded }: { 
     try {
       const res = await fetch("/api/admin/remind-request", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+        },
         body: JSON.stringify({ clientUid, requestId }),
       });
 
@@ -1847,7 +1853,10 @@ function SendReminderButton({ clientUid, planId, hasBeenReminded }: { clientUid:
     try {
       const res = await fetch("/api/admin/remind-offer", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await auth.currentUser?.getIdToken()}`,
+        },
         body: JSON.stringify({ clientUid, planId }),
       });
 
