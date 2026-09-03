@@ -12,6 +12,7 @@ import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
   Users,
+  FileText,
   LayoutDashboard,
   PhoneCall,
   Gift,
@@ -23,6 +24,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
+  UserRound,
 } from "lucide-react";
 import { AdminSubnavProvider, useAdminSubnavState } from "./adminSubnav";
 
@@ -35,6 +37,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/admin/clients", label: "CRM Clients", icon: Users },
+  { href: "/admin/analyses", label: "Analyses", icon: FileText },
   { href: "/admin/offres-wizard", label: "Offres-Wizard", icon: LayoutDashboard },
   { href: "/admin/leads", label: "Leads & rappels", icon: PhoneCall },
   { href: "/admin/parrainage", label: "Parrainage", icon: Gift },
@@ -43,6 +46,8 @@ const NAV: NavItem[] = [
   { href: "/admin/recrutement", label: "Recrutement", icon: Briefcase },
   { href: "/admin/translations", label: "Traductions", icon: Languages },
   { href: "/admin/notifications", label: "Alertes back-office", icon: Bell, badgeKey: "alerts" },
+  // En dernier : réglage personnel, consulté rarement, à l'écart du travail quotidien.
+  { href: "/admin/mon-profil", label: "Mon profil", icon: UserRound },
 ];
 
 export default function AdminChrome({ children }: { children: React.ReactNode }) {

@@ -18,7 +18,7 @@
 import * as React from "react";
 import { auth } from "@/lib/firebase";
 import { toast } from "sonner";
-import { Loader2, Upload, Trash2, Check, ImageOff, Printer } from "lucide-react";
+import { Loader2, Upload, Trash2, Check, ImageOff, Printer, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -54,7 +54,7 @@ const SLOTS: { key: Slot; label: string; page: string; ratio: number; brief: str
 
 type LibItem = { path: string; name: string; size: number; updated: string | null };
 /** Signature imprimée sur la couverture — propre à chaque conseiller. */
-type AdvisorCard = { nom: string; fonction: string; agence: string };
+type AdvisorCard = { nom: string; fonction: string; agence: string; telephone: string };
 /** Affectation : le fichier retenu et son recadrage, en pourcentage sur chaque axe. */
 type SlotValue = { path: string; x: number; y: number };
 
@@ -69,10 +69,12 @@ export default function DossierImagesDialog({
   onOpenChange: (v: boolean) => void;
   uid?: string;
   /** Reçoit les URL d'objet prêtes à être passées à react-pdf. */
+  /** `archiver` : true = le dossier est établi et versé à l'historique, définitif. */
   onGenerate: (
     images: Partial<Record<Slot, { src: string; x: number; y: number }>>,
     notes: string,
     advisor: AdvisorCard,
+    archiver: boolean,
   ) => void | Promise<void>;
 }) {
   const [loading, setLoading] = React.useState(true);
@@ -89,7 +91,7 @@ export default function DossierImagesDialog({
   const [inclus, setInclus] = React.useState<Record<string, boolean>>({});
   /** Le paramétrage (bibliothèque, jeu maison) est réservé au propriétaire. */
   const [canManage, setCanManage] = React.useState(false);
-  const [card, setCard] = React.useState<AdvisorCard>({ nom: "", fonction: "", agence: "" });
+  const [card, setCard] = React.useState<AdvisorCard>({ nom: "", fonction: "", agence: "", telephone: "" });
   const [cardSaved, setCardSaved] = React.useState<"idle" | "saving" | "saved">("idle");
 
   // Cache path → URL d'objet : une même image sert la vignette de la
@@ -287,7 +289,7 @@ export default function DossierImagesDialog({
     }
   }
 
-  async function generate() {
+  async function generate(archiver: boolean) {
     setGenerating(true);
     try {
       const images: Partial<Record<Slot, { src: string; x: number; y: number }>> = {};
@@ -302,7 +304,7 @@ export default function DossierImagesDialog({
         .filter((b) => inclus[b.cle])
         .map((b) => `${b.titre}\n${b.texte}`)
         .join("\n\n");
-      await onGenerate(images, texte, card);
+      await onGenerate(images, texte, card, archiver);
       onOpenChange(false);
     } finally {
       setGenerating(false);
@@ -360,7 +362,7 @@ export default function DossierImagesDialog({
           <DialogTitle>Préparer le dossier</DialogTitle>
           <p className="text-sm text-muted-foreground">
             {remplis} emplacement{remplis > 1 ? "s" : ""} sur {SLOTS.length} rempli{remplis > 1 ? "s" : ""}.
-            Un emplacement vide affiche son cahier des charges dans le PDF.
+            « Aperçu » ne conserve rien ; « Établir le dossier » l&apos;archive définitivement en lecture seule.
           </p>
         </DialogHeader>
 
@@ -611,6 +613,21 @@ export default function DossierImagesDialog({
               <p className="mt-1.5 text-[11px] text-muted-foreground">
                 Apparaît sur la couverture, sous « Votre conseiller ». Une ligne vide est omise.
               </p>
+
+              {/* Le mobile ne figure PAS sur le dossier : c'est une donnée
+                  d'outillage, utilisée pour vous envoyer le lien de scan. */}
+              <div className="mt-3">
+                <Input
+                  value={card.telephone}
+                  onChange={(e) => onCardChange({ telephone: e.target.value })}
+                  placeholder="079 123 45 67"
+                  inputMode="tel"
+                  className="h-8 text-sm"
+                />
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  Votre mobile — reçoit le lien « Scan mobile ». N&apos;apparaît pas sur le dossier.
+                </p>
+              </div>
             </div>
 
             {/* Notes du dossier — sélection, pas saisie */}
@@ -661,10 +678,23 @@ export default function DossierImagesDialog({
               Définir comme jeu maison
             </Button>
           ) : <span />}
-          <Button onClick={generate} disabled={generating || loading} className="gap-2">
-            {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-            Générer le dossier
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Deux gestes distincts : on regarde autant qu'on veut, on n'établit
+                qu'une fois. Seul « Établir » verse une pièce à l'historique. */}
+            <Button
+              variant="outline"
+              onClick={() => generate(false)}
+              disabled={generating || loading}
+              className="gap-2"
+            >
+              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+              Aperçu
+            </Button>
+            <Button onClick={() => generate(true)} disabled={generating || loading} className="gap-2">
+              <Printer className="h-4 w-4" />
+              Établir le dossier
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

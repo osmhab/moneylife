@@ -23,11 +23,13 @@ import {
   Lock,
   Gift,
   StickyNote,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 
 // Import du composant de transfert
 import { TransferToolDialog } from "./TransferToolDialog";
+import NouveauRendezVousDialog from "./NouveauRendezVousDialog";
 
 type OverviewPayload = {
   ok: boolean;
@@ -45,6 +47,9 @@ type OverviewPayload = {
     address?: string;    
     npa?: string;        
     localite?: string;   
+    email?: string;
+    /** Code 0-5 — cf. Enter_EtatCivil. `null` = non renseigné (0 = Célibataire). */
+    etatCivil?: number | null;
     updatedAt: number | null;
   };
 };
@@ -66,6 +71,20 @@ const REF_STATUS_LABELS: Record<string, string> = {
   EXPIRED: "Expiré",
   CANCELLED: "Annulé",
 };
+/** Codes de `Enter_etatCivil` (0-5), cf. app/lib/core/types.ts. */
+const ETAT_CIVIL_LABELS: Record<number, string> = {
+  0: "Célibataire",
+  1: "Marié·e",
+  2: "Divorcé·e",
+  3: "Partenariat enregistré",
+  4: "Concubinage",
+  5: "Veuf·ve",
+};
+/** `?? null` en amont : 0 est un état civil valide, pas une absence de donnée. */
+function etatCivilLabel(code?: number | null): string {
+  return code === null || code === undefined ? "—" : ETAT_CIVIL_LABELS[code] || "—";
+}
+
 function refStatusLabel(s: string): string {
   return REF_STATUS_LABELS[s] || s;
 }
@@ -120,8 +139,42 @@ export default function AdminClientOverviewClient() {
   // État Dialog
   const [transferOpen, setTransferOpen] = useState(false);
 
+  // Rendez-vous à venir du client (agenda du conseiller + fiche Firestore).
+  const [rdvOpen, setRdvOpen] = useState(false);
+  const [rendezvous, setRendezvous] = useState<{ id: string; debut: string; objectif: string; lieu: string; conseiller: any; rappelSms: boolean }[]>([]);
+
+  const fetchRendezvous = async () => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      const res = await fetch(`/api/admin/rdv?uid=${uid}&avenir=1`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      setRendezvous((await res.json()).rendezvous || []);
+    } catch { /* la carte est informative : son absence ne bloque pas l'aperçu */ }
+  };
+
+  const annulerRdv = async (id: string) => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/admin/rdv?uid=${uid}&id=${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error();
+      setRendezvous((l) => l.filter((r) => r.id !== id));
+      toast("Rendez-vous annulé", { description: "Retiré de votre agenda Google également." });
+    } catch {
+      toast("Annulation impossible");
+    }
+  };
+
   // Masque la zone confidentielle conseiller quand l'écran fait face au client.
-  const [hidePrivate, setHidePrivate] = useState(false);
+  // MASQUÉ PAR DÉFAUT : l'aperçu est montré au client pendant l'entretien, donc
+  // le cas sûr doit être celui qui ne demande aucun geste. Afficher se décide,
+  // masquer ne doit pas s'oublier.
+  const [hidePrivate, setHidePrivate] = useState(true);
 
   const fetchOverview = async () => {
     try {
@@ -301,6 +354,7 @@ export default function AdminClientOverviewClient() {
     fetchMeta();
     fetchSignedDocs();
     fetchReferral();
+    fetchRendezvous();
   }, [uid]);
 
   const dp = data?.donneesPersonnelles;
@@ -436,6 +490,28 @@ export default function AdminClientOverviewClient() {
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Naissance</div>
                   <div className="mt-0.5 text-sm font-semibold text-slate-900">{dp?.birthdate || "—"}</div>
                 </div>
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">État civil</div>
+                  <div className="mt-0.5 text-sm font-semibold text-slate-900">{etatCivilLabel(dp?.etatCivil)}</div>
+                </div>
+                <div className="col-span-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">E-mail</div>
+                  <div className="mt-0.5 truncate text-sm font-semibold text-slate-900" title={dp?.email || clientEmail || ""}>
+                    {dp?.email || clientEmail || "—"}
+                  </div>
+                </div>
+                <div className="col-span-2 sm:col-span-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Adresse postale</div>
+                  {dp?.address || dp?.npa || dp?.localite ? (
+                    <div className="mt-0.5 text-sm font-semibold leading-snug text-slate-900">
+                      {/* Deux lignes, comme sur une enveloppe — pas « rue, npa, localité » en enfilade. */}
+                      {dp?.address ? <div>{dp.address}</div> : null}
+                      <div>{[dp?.npa, dp?.localite].filter(Boolean).join(" ") || null}</div>
+                    </div>
+                  ) : (
+                    <div className="mt-0.5 text-sm font-semibold text-slate-900">—</div>
+                  )}
+                </div>
               </div>
               <div className="flex flex-col gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-xs text-slate-400">
@@ -445,6 +521,71 @@ export default function AdminClientOverviewClient() {
                   <Button size="sm" className="rounded-xl">Éditer <ArrowRight className="h-4 w-4 ml-2" /></Button>
                 </Link>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* CARTE : RENDEZ-VOUS À VENIR
+              Emplacement réservé — la gestion des rendez-vous arrive ensuite.
+              La carte est affichée dès maintenant (et non masquée jusqu'à ce que
+              la fonctionnalité existe) pour que l'aperçu 360 ait sa forme
+              définitive : rien ne se déplacera sous les yeux du conseiller. */}
+          <Card className="rounded-3xl border-slate-200 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between text-base">
+                <span className="inline-flex items-center gap-2.5">
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+                    <CalendarClock className="h-4 w-4" />
+                  </span>
+                  <span className="font-bold text-slate-900">Rendez-vous à venir</span>
+                </span>
+                {rendezvous.length > 0 && (
+                  <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-600">
+                    {rendezvous.length}
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {rendezvous.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center">
+                  <CalendarClock className="mx-auto mb-2 h-6 w-6 text-slate-300" />
+                  <p className="text-sm font-semibold text-slate-600">Aucun rendez-vous à venir</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Fixez-en un depuis votre agenda, en voyant vos plages libres.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {rendezvous.map((r) => (
+                    <div key={r.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold capitalize text-slate-900">
+                          {new Intl.DateTimeFormat("fr-CH", {
+                            timeZone: "Europe/Zurich", weekday: "long", day: "numeric",
+                            month: "long", hour: "2-digit", minute: "2-digit", hour12: false,
+                          }).format(new Date(r.debut))}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {[r.objectif, r.lieu, r.conseiller?.nom].filter(Boolean).join(" · ")}
+                          {r.rappelSms ? " · rappel SMS la veille" : ""}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs text-slate-400 hover:text-red-600"
+                        onClick={() => annulerRdv(r.id)}
+                      >
+                        Annuler
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Button className="mt-4 w-full rounded-xl" onClick={() => setRdvOpen(true)}>
+                <CalendarClock className="mr-2 h-4 w-4" /> Nouveau rendez-vous
+              </Button>
             </CardContent>
           </Card>
 
@@ -534,7 +675,7 @@ export default function AdminClientOverviewClient() {
               </span>
               <span className="flex flex-col">
                 <span className="font-bold text-slate-900">Espace conseiller</span>
-                <span className="text-xs font-normal text-amber-600">Confidentiel — ne pas montrer au client</span>
+                <span className="text-xs font-normal text-amber-600">Confidentiel</span>
               </span>
             </span>
             <Button
@@ -625,6 +766,16 @@ export default function AdminClientOverviewClient() {
           )}
         </CardContent>
       </Card>
+
+      {/* Hors du bloc `dp &&` : on doit pouvoir fixer un rendez-vous même si les
+          données personnelles ne sont pas encore remplies. */}
+      <NouveauRendezVousDialog
+        open={rdvOpen}
+        onOpenChange={setRdvOpen}
+        uid={uid}
+        clientNom={`${dp?.firstName || ""} ${dp?.lastName || ""}`.trim()}
+        onCree={fetchRendezvous}
+      />
 
       {/* DIALOG TRANSFERT */}
       {dp && (

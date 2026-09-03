@@ -8,10 +8,13 @@
 
 import * as React from "react";
 import { usePathname } from "next/navigation";
+import { toast } from "sonner";
 import { auth, db, storage } from "@/lib/firebase";
 import { collection, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { computeProjections3aAssurance, computeDeathBenefitAssurance } from "@/lib/calculs/3epilier";
+import { computeProjections3aAssurance, computeDeathBenefitAssurance, capitalDecesCouvert } from "@/lib/calculs/3epilier";
+import { buildSourceDocTitle } from "@/lib/core/documentTypes";
+import { assemblerDocument } from "@/lib/core/assemblerDocument";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,9 +30,21 @@ import {
 } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import DossierImagesDialog from "./DossierImagesDialog";
 import NotesConseillerSection from "./NotesConseillerSection";
-import { Calculator, Loader2, Plus, Trash2, AlertTriangle, ShieldCheck, ScanLine, Printer, RotateCcw, SlidersHorizontal } from "lucide-react";
+import DossiersEtablisBand from "./DossiersEtablisBand";
+import DocumentsClientBand from "./DocumentsClientBand";
+import { Calculator, Loader2, Plus, Trash2, AlertTriangle, ShieldCheck, ScanLine, Printer, RotateCcw, SlidersHorizontal, Smartphone } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { usePublishAdminSubnav } from "@/[locale]/admin/_components/adminSubnav";
 
@@ -83,6 +98,52 @@ export default function AdminClientAnalysePrevoyanceClient() {
   const [lppEstimation, setLppEstimation] = React.useState<AnyObj | null>(null);
   const [detailRentes, setDetailRentes] = React.useState<AnyObj | null>(null);
   const [projections, setProjections] = React.useState<AnyObj | null>(null);
+
+  // ── « Est-ce une nouvelle analyse ? » ────────────────────────────────────
+  // La liste « En cours » ne se remplit plus toute seule : elle n'affiche que
+  // les analyses que le conseiller a déclarées ici. On ne pose la question que
+  // s'il n'y en a pas déjà une d'ouverte pour ce client.
+  const [demandeOuverture, setDemandeOuverture] = React.useState(false);
+
+  /** Un « non » vaut pour la session : consulter une fiche ne doit pas devenir un interrogatoire. */
+  const cleRefus = uid ? `analyse-refusee:${uid}` : "";
+
+  React.useEffect(() => {
+    if (!uid) return;
+    let annule = false;
+    (async () => {
+      try {
+        if (sessionStorage.getItem(cleRefus)) return;
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
+        const res = await fetch(`/api/admin/analyse/en-cours?uid=${uid}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const { active } = await res.json();
+        if (!annule && !active) setDemandeOuverture(true);
+      } catch { /* la question est un confort : son absence ne bloque pas l'écran */ }
+    })();
+    return () => { annule = true; };
+  }, [uid, cleRefus]);
+
+  async function ouvrirAnalyse() {
+    setDemandeOuverture(false);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      await fetch(`/api/admin/analyse/en-cours?uid=${uid}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      setError("L'analyse n'a pas pu être ajoutée à la liste des analyses en cours.");
+    }
+  }
+
+  function refuserAnalyse() {
+    setDemandeOuverture(false);
+    try { sessionStorage.setItem(cleRefus, "1"); } catch { /* navigation privée */ }
+  }
   const [pdfBusy, setPdfBusy] = React.useState(false);
   // Le bouton « Dossier PDF » ouvre d'abord le choix des images ; la génération
   // n'a lieu qu'une fois les emplacements validés.
@@ -203,6 +264,18 @@ export default function AdminClientAnalysePrevoyanceClient() {
         isManualEntry: !p._scanned,
         sourceFile: p._sourceFile ?? null,
         sourceFileUrl: p._sourceFileUrl ?? null,
+        // Classification du document source — MÊME règle déterministe que le
+        // parcours client (`buildSourceDocTitle`). Sans elle, un document scanné
+        // par le conseiller apparaissait bien dans le coffre du client, mais
+        // sous un libellé générique : le classement était fait d'un côté
+        // seulement. On ne pose ces champs que pour un vrai scan ; une saisie
+        // manuelle n'a pas de document source à nommer.
+        ...(p._scanned && p._sourceFileUrl
+          ? {
+              sourceDocType: sourceDocTypePour(pp.type),
+              sourceDocTitle: buildSourceDocTitle(pp.type, pp.institutionName || pp.label || ""),
+            }
+          : {}),
       },
     } as any);
     setPlans((ps) => [...ps, { ...pp, id: refDoc.id }]);
@@ -288,6 +361,14 @@ export default function AdminClientAnalysePrevoyanceClient() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Analyse impossible");
       setAnalysis(data.analysis);
+      // Marque le travail pour que l'analyse remonte dans « En cours ». Sans
+      // attendre ni bloquer : c'est un confort de suivi, pas une condition.
+      if (uid) {
+        void fetch(`/api/admin/analyse/touch?uid=${uid}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      }
       setLppEstimation(data.lppEstimation || null);
       setDetailRentes(data.detailRentes || null);
       setProjections(data.projections || null);
@@ -339,7 +420,7 @@ export default function AdminClientAnalysePrevoyanceClient() {
   }
 
   // Génère le dossier en VRAI PDF (react-pdf, importé à la volée) et l'ouvre dans un nouvel onglet.
-  async function openPdf(images: Record<string, any> = {}, notes = "", advisor: any = null) {
+  async function openPdf(images: Record<string, any> = {}, notes = "", advisor: any = null, archiver = false) {
     if (!analysis) return;
     setPdfBusy(true);
     setError(null);
@@ -356,6 +437,37 @@ export default function AdminClientAnalysePrevoyanceClient() {
       const blob = await pdf(
         <DossierPDF client={client} plans={plans} analysis={analysis} advisor={advisorName} today={today} images={images} notes={notes} />,
       ).toBlob();
+      // Archivage AVANT ouverture : si le dépôt échoue, le conseiller l'apprend
+      // au lieu de croire le dossier établi parce que le PDF s'est affiché.
+      if (archiver) {
+        const fd = new FormData();
+        fd.append("file", blob, "dossier.pdf");
+        fd.append("clientUid", uid || "");
+        fd.append("meta", JSON.stringify({
+          clientNom: `${client.Enter_prenom || ""} ${client.Enter_nom || ""}`.trim(),
+          conseiller: advisor?.nom ? advisor : null,
+          score: Math.round(Number(analysis?.totalScore) || 0),
+          nbPlans: plans.length,
+          lacunes: {
+            retraite: Math.round(Number(analysis?.retraite?.lacune) || 0),
+            invaliditeMaladie: Math.round(Number(analysis?.invaliditeMaladie?.lacune) || 0),
+            invaliditeAccident: Math.round(Number(analysis?.invaliditeAccident?.lacune) || 0),
+            deces: Math.round(Number(analysis?.deces?.lacune) || 0),
+          },
+        }));
+        const res = await fetch("/api/admin/dossiers", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${await auth.currentUser?.getIdToken()}` },
+          body: fd,
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => null);
+          setError(d?.error || "Le dossier n'a pas pu être archivé.");
+          return;
+        }
+        toast.success("Dossier établi et archivé");
+      }
+
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -382,10 +494,145 @@ export default function AdminClientAnalysePrevoyanceClient() {
 
   // Archive le document scanné dans le coffre-fort (Storage) → conservé + consultable, comme l'app.
   // (Multi-pages : on archive la 1re page/fichier ; l'assemblage PDF reste une amélioration future.)
+  // ── Scan mobile ────────────────────────────────────────────────────────────
+  // Le collaborateur reçoit un lien par SMS, photographie le document avec son
+  // téléphone, et les images arrivent ici. Elles repassent ensuite par le MÊME
+  // `scanFiles` que le dépôt depuis l'ordinateur : aucune branche parallèle,
+  // donc aucun risque que les deux chemins divergent.
+  const [scanMobile, setScanMobile] = React.useState<{ token: string; type: string; numero: string; recues: number } | null>(null);
+
+  // Numéro absent : on le demande ICI plutôt que de renvoyer le conseiller vers
+  // la fiche, enfouie dans le dialogue « Préparer le dossier » — lui-même
+  // inaccessible tant qu'aucune analyse n'a tourné. Le champ doit être là où le
+  // besoin apparaît, pas là où la donnée est rangée.
+  const [demandeMobile, setDemandeMobile] = React.useState<null | "lpp" | "insurance" | "bank">(null);
+  const [mobileSaisi, setMobileSaisi] = React.useState("");
+  const [mobileEnCours, setMobileEnCours] = React.useState(false);
+
+  async function lancerScanMobile(type: "lpp" | "insurance" | "bank") {
+    setError(null);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/admin/scan-mobile?uid=${uid}&type=${type}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        if (j?.error === "NUMERO_MANQUANT") { setDemandeMobile(type); return; }
+        setError(j?.message || j?.error || "Scan mobile indisponible");
+        return;
+      }
+      setScanMobile({ token: j.token, type, numero: j.numeroMasque || "", recues: 0 });
+    } catch {
+      setError("Scan mobile indisponible");
+    }
+  }
+
+  /**
+   * Ferme une session de scan mobile. Le serveur en profite pour supprimer les
+   * photos individuelles : elles n'ont servi qu'au transport, seul le PDF
+   * assemblé est conservé.
+   */
+  async function fermerScanMobile(token: string, abandon = false) {
+    try {
+      const jeton = await auth.currentUser?.getIdToken();
+      await fetch(`/api/admin/scan-mobile?token=${token}${abandon ? "&abandon=1" : ""}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${jeton}` },
+      });
+    } catch { /* la session expirera d'elle-même */ }
+  }
+
+  async function enregistrerMobile() {
+    const type = demandeMobile;
+    if (!type || !mobileSaisi.trim()) return;
+    setMobileEnCours(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const entetes = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+      // La fiche est relue AVANT d'écrire : le PUT réécrit les quatre champs, un
+      // envoi partiel effacerait nom, fonction et agence.
+      const actuelle = await (await fetch("/api/admin/advisor-card", { headers: entetes })).json();
+      const res = await fetch("/api/admin/advisor-card", {
+        method: "PUT",
+        headers: entetes,
+        body: JSON.stringify({ ...(actuelle?.card || {}), telephone: mobileSaisi.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      setDemandeMobile(null);
+      setMobileSaisi("");
+      await lancerScanMobile(type);
+    } catch {
+      setError("Enregistrement du mobile impossible");
+    } finally {
+      setMobileEnCours(false);
+    }
+  }
+
+  // Attente des photos. On interroge plutôt qu'on n'écoute : la session vit dans
+  // une collection racine que les règles Firestore n'ouvrent pas au navigateur,
+  // et le passage par la route serveur évite d'avoir à les élargir.
+  React.useEffect(() => {
+    if (!scanMobile) return;
+    let arrete = false;
+
+    const timer = setInterval(async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/admin/scan-mobile?token=${scanMobile.token}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const j = await res.json();
+        if (arrete) return;
+
+        // Le compteur renseigne le conseiller pendant qu'il photographie.
+        setScanMobile((v) => (v && v.recues !== j.fichiers?.length ? { ...v, recues: j.fichiers?.length || 0 } : v));
+
+        // ⚠️ On attend la CLÔTURE, pas la première photo. Un certificat de
+        // prévoyance fait souvent plusieurs pages, et l'appareil photo n'en
+        // prend qu'une à la fois : partir sur la première fermait la session et
+        // le deuxième cliché tombait sur « lien expiré ».
+        if (!j.termine || !j.fichiers?.length) return;
+
+        arrete = true;
+        clearInterval(timer);
+
+        // Les photos deviennent de vrais File : la suite ne fait aucune
+        // différence avec un dépôt depuis l'ordinateur.
+        const fichiers: File[] = [];
+        for (const f of j.fichiers) {
+          const blob = await (await fetch(f.url)).blob();
+          fichiers.push(new File([blob], f.nom || "photo.jpg", { type: f.type || "image/jpeg" }));
+        }
+
+        setScanMobile(null);
+
+        // ⚠️ Le scan D'ABORD, la clôture ENSUITE. Fermer avant reviendrait à
+        // supprimer les photos alors que le plan n'existe pas encore : un scan
+        // qui échoue emporterait les pages avec lui. Le serveur revérifie de son
+        // côté que le document est bien archivé avant de supprimer quoi que ce
+        // soit — la garantie ne repose donc pas sur cet ordre seul.
+        if (scanMobile.type === "lpp") await scanLpp(fichiers);
+        else if (scanMobile.type === "insurance") await scanInsurance(fichiers);
+        else await scanBank(fichiers);
+
+        await fermerScanMobile(scanMobile.token);
+      } catch { /* on retentera au tour suivant */ }
+    }, 3000);
+
+    return () => { arrete = true; clearInterval(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanMobile]);
+
   async function archiveScan(files: File[], kind: string): Promise<string | null> {
     if (!uid || !files.length) return null;
     try {
-      const f = files[0];
+      // TOUTES les pages, réunies en un seul document. Auparavant seul `files[0]`
+      // était archivé : un certificat de trois pages arrivait amputé de deux dans
+      // le coffre-fort du client et dans l'app iOS, sans que rien ne le signale.
+      const f = await assemblerDocument(files, kind);
       const safe = (f.name || `${kind}.pdf`).replace(/[^\w.\-]+/g, "_");
       const r = storageRef(storage, `clients/${uid}/documents/scans/${Date.now()}_${safe}`);
       await uploadBytes(r, f);
@@ -451,6 +698,11 @@ export default function AdminClientAnalysePrevoyanceClient() {
           valeurRachatActuelle: d.valeurRachatActuelle,
           projectionAssureur: d.projectionAssureur,
           capitalDecesFixe: d.capitalDecesFixe,
+          // Repris seulement si l'IA l'a effectivement lu : sinon on laisse le
+          // champ absent plutôt que de forcer un choix que personne n'a fait.
+          ...(d.typeCapitalDeces === "primes" || d.typeCapitalDeces === "fixe"
+            ? { typeCapitalDeces: d.typeCapitalDeces }
+            : {}),
           renteInvalidite: d.renteInvalidite,
           primeTotale: d.primeTotale,
           primeEpargne: d.primeEpargne,
@@ -529,11 +781,87 @@ export default function AdminClientAnalysePrevoyanceClient() {
 
   return (
     <div className="space-y-5">
+      {/* Rien n'entre dans « Analyses en cours » sans cette réponse. */}
+      <AlertDialog open={demandeOuverture} onOpenChange={(o) => { if (!o) refuserAnalyse(); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Créer une nouvelle analyse ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Elle apparaîtra dans « Analyses en cours » pour que vous puissiez la reprendre.
+              Répondez non pour consulter cette fiche sans rien ajouter à la liste.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={refuserAnalyse}>Non, je consulte</AlertDialogCancel>
+            <AlertDialogAction onClick={ouvrirAnalyse}>Oui, nouvelle analyse</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <DossiersEtablisBand uid={uid} />
+
+      <AlertDialog open={!!demandeMobile} onOpenChange={(o) => { if (!o) setDemandeMobile(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Votre numéro de mobile</AlertDialogTitle>
+            <AlertDialogDescription>
+              C&apos;est sur ce téléphone que vous recevrez le lien pour photographier les
+              documents. Enregistré une seule fois, il n&apos;apparaît pas sur le dossier client.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            autoFocus
+            inputMode="tel"
+            placeholder="079 123 45 67"
+            value={mobileSaisi}
+            onChange={(e) => setMobileSaisi(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void enregistrerMobile(); }}
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={mobileEnCours}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(ev) => { ev.preventDefault(); void enregistrerMobile(); }}
+              disabled={mobileEnCours || !mobileSaisi.trim()}
+            >
+              {mobileEnCours ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enregistrer et envoyer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <DocumentsClientBand uid={uid} />
+
+      {/* Attente des photos : l'écran doit dire ce qu'il se passe, sinon le
+          conseiller ne sait pas si le SMS est parti ni ce qu'il doit faire. */}
+      {scanMobile && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+          <Smartphone className="h-4 w-4 shrink-0 text-blue-600" />
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="font-semibold text-blue-900">Lien envoyé au {scanMobile.numero}</p>
+            <p className="text-xs text-blue-700">
+              {scanMobile.recues > 0
+                ? `${scanMobile.recues} page${scanMobile.recues > 1 ? "s" : ""} reçue${scanMobile.recues > 1 ? "s" : ""} — le scan démarrera quand vous aurez terminé sur le téléphone.`
+                : "Photographiez le document depuis votre téléphone — le scan démarrera ici tout seul."}
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-blue-700"
+            onClick={() => { void fermerScanMobile(scanMobile.token, true); setScanMobile(null); }}
+          >
+            Annuler
+          </Button>
+        </div>
+      )}
+
       <DossierImagesDialog
         open={imagesOpen}
         onOpenChange={setImagesOpen}
         uid={uid}
-        onGenerate={(images, notes, advisor) => openPdf(images as Record<string, any>, notes, advisor)}
+        onGenerate={(images, notes, advisor, archiver) =>
+          openPdf(images as Record<string, any>, notes, advisor, archiver)
+        }
       />
 
       {/* En-tête pilier + action */}
@@ -631,6 +959,7 @@ export default function AdminClientAnalysePrevoyanceClient() {
                   <span className="text-xs font-medium text-muted-foreground">2e pilier — caisses &amp; libre passage</span>
                   <div className="flex items-center gap-1.5">
                     <ScanButton label="Scanner" busy={scanning === "lpp"} onFiles={scanLpp} />
+                    <ScanMobileButton onClick={() => lancerScanMobile("lpp")} />
                     <Button variant="outline" size="sm" onClick={addLpp}>
                       <Plus className="h-4 w-4 mr-1" /> Ajouter
                     </Button>
@@ -747,6 +1076,7 @@ export default function AdminClientAnalysePrevoyanceClient() {
               <div className="flex flex-wrap items-center justify-end gap-1.5">
                 <ScanButton label="Police" busy={scanning === "ins"} onFiles={scanInsurance} />
                 <ScanButton label="Relevé" busy={scanning === "bank"} onFiles={scanBank} />
+                <ScanMobileButton onClick={() => lancerScanMobile("insurance")} />
                 <Button variant="outline" size="sm" onClick={addPilier3}>
                   <Plus className="h-4 w-4 mr-1" /> Ajouter
                 </Button>
@@ -985,6 +1315,7 @@ function PilierEpargneCard({
             onChange={(e) => onData("occurrence", e.target.value)}
           >
             <option value="mois">/ mois</option>
+            <option value="trimestre">/ trimestre</option>
             <option value="annee">/ an</option>
           </select>
         </div>
@@ -1331,11 +1662,38 @@ function Pilier3Card({
             {num("projectionAssureur", "Capital projeté 65")}
           </div>
 
-          {/* Capital décès (éventuellement croissant) */}
+          {/* Prestation décès — choix EXPLICITE du conseiller.
+              Sans ce champ, le moteur devait déduire l'intention de
+              `capitalDecesFixe > 0` et affichait une restitution des primes sur
+              des contrats explicitement sans capital décès. */}
           <div className="grid grid-cols-2 gap-2">
-            {num("capitalDecesFixe", "Capital décès actuel")}
-            {num("capitalDecesAugmentation", "Augmentation annuelle")}
+            <Field label="Prestation décès">
+              <select
+                className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+                value={d.typeCapitalDeces || "fixe"}
+                onChange={(e) => onData("typeCapitalDeces", e.target.value)}
+              >
+                <option value="fixe">Capital fixe</option>
+                <option value="primes">Restitution des primes</option>
+              </select>
+            </Field>
+            {(d.typeCapitalDeces || "fixe") === "fixe" ? (
+              num("capitalDecesFixe", "Capital décès actuel")
+            ) : (
+              <Field label="Capital décès">
+                <div className="flex h-9 items-center rounded-md border border-dashed border-input px-2 text-sm text-muted-foreground">
+                  {chf(computeDeathBenefitAssurance(d as any))} · calculé
+                </div>
+              </Field>
+            )}
           </div>
+
+          {/* Le capital croissant n'a de sens que sur un capital fixe. */}
+          {(d.typeCapitalDeces || "fixe") === "fixe" && (
+            <div className="grid grid-cols-2 gap-2">
+              {num("capitalDecesAugmentation", "Augmentation annuelle")}
+            </div>
+          )}
 
           {/* Rente incapacité de gain + délai d'attente */}
           <div className="grid grid-cols-2 gap-2">
@@ -1398,6 +1756,7 @@ function Pilier3Card({
             onChange={(e) => onData("occurrence", e.target.value)}
           >
             <option value="mois">/ mois</option>
+            <option value="trimestre">/ trimestre</option>
             <option value="annee">/ an</option>
           </select>
         </div>
@@ -1419,6 +1778,27 @@ function Pilier3Card({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Type de document du coffre-fort correspondant à un type de plan.
+ * Les libellés viennent de la taxonomie canonique (`DOCUMENT_TYPES`) : ils sont
+ * stockés en clair, et doivent correspondre au caractère près pour que le
+ * filtrage du coffre les regroupe correctement.
+ */
+function sourceDocTypePour(planType?: string): string {
+  if (!planType) return "Autre";
+  if (planType.startsWith("LPP") || planType.startsWith("LIBRE_PASSAGE")) return "Certificat LPP";
+  if (planType.startsWith("PILIER_3")) return "Police 3e pilier";
+  return "Autre";
+}
+
+function ScanMobileButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button variant="outline" size="sm" onClick={onClick} title="Recevoir un lien par SMS pour photographier le document">
+      <Smartphone className="h-4 w-4 mr-1" /> Scan mobile
+    </Button>
   );
 }
 
@@ -1732,12 +2112,12 @@ function planCapitalForMatrix(p: AnyObj, matrixKey: string): number {
       // comme le moteur (matrices.ts) et l'app iOS. Ne PAS prendre une seule composante.
       return (Number(d[`Enter_CapitalPlusRente${s}`]) || 0) + (Number(d[`Enter_CapitalDecesIndependant${s}`]) || 0);
     }
-    // 3a banque / cash : solde restitué au décès. 3a/3b assurance : capital décès GARANTI saisi
-    // (`capitalDecesFixe`) — MÊME source que la carte de risque (`situation.ts`) et l'app iOS.
-    // La restitution des primes (computeDeathBenefitAssurance) n'entre PAS dans la couverture
-    // garantie qui pilote la lacune → on ne la met pas dans le graphique non plus (cohérence).
+    // 3a banque / cash : solde restitué au décès. 3a/3b assurance : `capitalDecesCouvert`
+    // — MÊME source que la carte de risque (`situation.ts`), la Cloud Function
+    // (`matrices.ts`) et l'app iOS. La restitution des primes n'y entre que sur le
+    // choix EXPLICITE « primes », jamais via le repli des fiches non renseignées.
     if (p.type === "PILIER_3A_BANK" || p.type === "3A_BANQUE") return Number(d.soldeActuel) || 0;
-    return Number(d.capitalDecesFixe) || Number(d.capitalDeces) || 0;
+    return capitalDecesCouvert(d as any);
   }
   return 0; // invalidité : pas de capital one-shot par plan
 }

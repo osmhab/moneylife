@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
-import { db, authAdmin } from "@/lib/firebase/admin";
+import { db } from "@/lib/firebase/admin";
+import { requireInternal } from "@/lib/server/requireInternal";
 
 export async function GET(req: Request) {
   try {
-    // 1. Vérification de l'authentification admin
-    const authz = req.headers.get("authorization") || "";
-    const token = authz.startsWith("Bearer ") ? authz.slice(7) : null;
-    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    await authAdmin.verifyIdToken(token);
+    // 1. Garde COLLABORATEUR.
+    // Cette route se contentait de vérifier que le jeton était valide : n'importe
+    // quel compte client authentifié pouvait donc lire la fiche de n'importe quel
+    // autre client. `requireInternal.ts` la citait même en contre-exemple. Le
+    // payload transportant désormais l'e-mail et l'état civil, la garde devenait
+    // indispensable.
+    try {
+      await requireInternal(req);
+    } catch (e: any) {
+      const status = e?.message === "FORBIDDEN" ? 403 : 401;
+      return NextResponse.json({ error: "Accès réservé aux collaborateurs" }, { status });
+    }
 
     // 2. Récupération de l'UID dans l'URL
     const { searchParams } = new URL(req.url);
@@ -43,6 +50,12 @@ export async function GET(req: Request) {
         firstName: dpData?.Enter_prenom || mainData?.firstName || "",
         lastName: dpData?.Enter_nom || mainData?.lastName || "",
         birthdate: dpData?.Enter_dateNaissance || "",
+
+        // E-mail : le compte Auth fait foi ; à défaut, celui saisi au dossier.
+        email: mainData?.email || dpData?.Enter_email || "",
+        // État civil : code 0-5 (cf. Enter_EtatCivil). `?? null` et non `|| null` —
+        // 0 est « Célibataire », une valeur légitime qu'un `||` effacerait.
+        etatCivil: dpData?.Enter_etatCivil ?? null,
         
         // ON AJOUTE LES CHAMPS D'ADRESSE ICI
         address: dpData?.Enter_adresse || "",

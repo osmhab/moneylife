@@ -236,6 +236,17 @@ service cloud.firestore {
     }
 
     // ===============================
+    // 📄 DOSSIERS D'ANALYSE ÉTABLIS
+    // ===============================
+    // Pièces remises aux clients, archivées telles quelles. SERVEUR UNIQUEMENT
+    // dans les deux sens (l'Admin SDK contourne ces règles) : la lecture passe
+    // par /api/admin/dossiers, l'écriture n'existe qu'à l'établissement. Refus
+    // total ici — un dossier remis ne se modifie pas depuis un navigateur.
+    match /dossiers/{dossierId} {
+      allow read, write: if false;
+    }
+
+    // ===============================
     // PAR DÉFAUT
     // ===============================
     match /{document=**} {

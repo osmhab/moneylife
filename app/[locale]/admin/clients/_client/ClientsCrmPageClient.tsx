@@ -50,6 +50,8 @@ import {
   Copy,
   Mail,
   X,
+  Clock,
+  ChevronRight,
 } from "lucide-react";
 
 type ClientRow = {
@@ -90,6 +92,29 @@ function formatDateTs(ts?: number) {
   } catch {
     return "";
   }
+}
+
+type RecentClient = { clientUid: string; clientNom: string; viewedAt: string | null };
+
+/**
+ * Ancienneté lisible d'une consultation. On reste en relatif jusqu'à une semaine
+ * (« hier », « lundi ») : sur une liste de reprise, « il y a 2 h » situe mieux
+ * qu'un horodatage complet. Au-delà, la date absolue redevient plus parlante.
+ */
+function ancienneteConsultation(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+
+  const minutes = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (minutes < 1) return "à l'instant";
+  if (minutes < 60) return `il y a ${minutes} min`;
+  if (minutes < 60 * 24) return `il y a ${Math.floor(minutes / 60)} h`;
+
+  const jours = Math.floor(minutes / (60 * 24));
+  if (jours === 1) return "hier";
+  if (jours < 7) return d.toLocaleDateString("fr-CH", { weekday: "long" });
+  return d.toLocaleDateString("fr-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 async function copyToClipboard(text: string) {
@@ -433,6 +458,27 @@ export default function ClientsCrmPageClient() {
   }, [items, hasDP, status]);
 
   const total = filtered.length;
+  // Historique de consultation du conseiller (cf. /api/admin/clients/recent).
+  const [recents, setRecents] = useState<RecentClient[]>([]);
+  const [recentsTous, setRecentsTous] = useState(false);
+
+  useEffect(() => {
+    let annule = false;
+    (async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
+        const res = await fetch("/api/admin/clients/recent", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!annule) setRecents(json.clients || []);
+      } catch { /* l'historique est un confort : son absence ne bloque pas la recherche */ }
+    })();
+    return () => { annule = true; };
+  }, []);
+
   const isSearching = qDebounced.trim().length > 0;
 
   const statusBadge = (s?: string) => {
@@ -497,7 +543,7 @@ export default function ClientsCrmPageClient() {
         {/* En-tête du dashboard conseiller */}
         <div className="mb-6 flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Tableau de bord</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
             <p className="text-sm text-slate-400">Recherchez un client ou ouvrez un dossier.</p>
           </div>
           <Button
@@ -536,7 +582,55 @@ export default function ClientsCrmPageClient() {
           </div>
         </div>
 
-      {!isSearching && (
+      {/* Au repos : l'historique de consultation prend la place de l'encart vide.
+          Tant qu'aucune fiche n'a été ouverte, on garde l'invitation à chercher. */}
+      {!isSearching && recents.length > 0 && (
+        <Card className="mt-6 rounded-3xl border-slate-200 shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <div className="mb-1 flex items-center gap-2 px-2">
+              <Clock className="h-4 w-4 text-slate-400" />
+              <span className="text-sm font-semibold text-slate-700">Consultés récemment</span>
+              <span className="text-xs text-slate-400">({recents.length})</span>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {(recentsTous ? recents : recents.slice(0, 5)).map((r) => (
+                <Link
+                  key={r.clientUid}
+                  href={`/${locale}/admin/clients/${r.clientUid}`}
+                  className="flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-slate-50"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                    {(r.clientNom || "?").slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+                    {r.clientNom || r.clientUid.slice(0, 10)}
+                  </span>
+                  <span className="shrink-0 text-xs text-slate-400">
+                    {ancienneteConsultation(r.viewedAt)}
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+                </Link>
+              ))}
+            </div>
+
+            {recents.length > 5 && (
+              <div className="pt-2 text-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-slate-500"
+                  onClick={() => setRecentsTous((v) => !v)}
+                >
+                  {recentsTous ? "Réduire" : `Voir plus (${recents.length - 5})`}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {!isSearching && recents.length === 0 && (
         <div className="mt-6 rounded-3xl border border-dashed border-slate-200 bg-white/50 p-10 text-center">
           <span className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-500">
             <Search className="h-6 w-6" />

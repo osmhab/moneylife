@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,6 +18,23 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+
+/**
+ * Enregistre l'ouverture d'une fiche dans l'historique du conseiller.
+ * `keepalive` : la requête aboutit même si l'on quitte la page aussitôt.
+ */
+async function marquerConsultation(uid: string, nom: string) {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return;
+    await fetch(`/api/admin/clients/recent?uid=${encodeURIComponent(uid)}`, {
+      method: "POST",
+      keepalive: true,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ nom }),
+    });
+  } catch { /* silencieux : voir le commentaire au point d'appel */ }
+}
 
 function isActive(pathname: string, href: string) {
   // active si exact match, ou si la route commence par href (sauf pour overview)
@@ -86,6 +103,11 @@ export default function AdminClientShell({
             status: (c.status || "").toString(),
             age: computeAge(dp.Enter_dateNaissance),
           });
+          // Trace de consultation pour le tableau de bord (« Consultés récemment »).
+          // Accrochée ICI parce que le nom vient d'être résolu : la liste s'affiche
+          // ensuite sans relire une fiche par ligne. Volontairement silencieuse —
+          // un confort de navigation ne doit jamais casser l'ouverture d'un dossier.
+          void marquerConsultation(uid, fullName);
         }
       } catch {
         if (!cancelled) setHeader(null);

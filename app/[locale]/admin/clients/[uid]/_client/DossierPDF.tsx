@@ -52,7 +52,7 @@ function planRows(p: AnyObj, kind: "lpp" | "3a" | "ep"): [string, string][] {
     const cd = N(d.Enter_CapitalPlusRenteMal) + N(d.Enter_CapitalDecesIndependantMal);
     if (cd) rows.push(["Capital décès", chf(cd)]);
   } else if (kind === "3a" && !isBank(p.type)) {
-    if (N(d.primeTotale)) rows.push(["Prime", `${chf(d.primeTotale)} / ${d.occurrence === "annee" ? "an" : "mois"}`]);
+    if (N(d.primeTotale)) rows.push(["Prime", `${chf(d.primeTotale)} / ${d.occurrence === "annee" ? "an" : d.occurrence === "trimestre" ? "trimestre" : "mois"}`]);
     if (N(d.renteInvalidite)) rows.push(["Rente d'invalidité", `${chf(d.renteInvalidite)} / an`]);
     if (N(d.capitalDecesFixe)) rows.push(["Capital décès", chf(d.capitalDecesFixe)]);
   } else if (N(d.soldeActuel)) rows.push(["Solde actuel", chf(d.soldeActuel)]);
