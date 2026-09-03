@@ -14,7 +14,10 @@ import type { ClientData, Legal_Settings } from "@/lib/core/types";
 
 /** ClientData est entièrement optionnel : on ne renseigne que les champs testés. */
 function client(over: Partial<ClientData> = {}): ClientData {
-  return { ...over };
+  // Fixture volontairement PARTIELLE : les fonctions testées ne lisent qu'une
+  // poignée de champs. Les remplir tous (90+) noierait ce que chaque test
+  // vérifie réellement. Le cast assume ce choix plutôt que de le masquer.
+  return { ...over } as ClientData;
 }
 
 /** Paramètres légaux 2025 (valeurs réelles), surchargeables. */

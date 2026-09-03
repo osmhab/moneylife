@@ -15,7 +15,8 @@ const benchmark = (provider: string) => ({
 });
 
 function baseSituation(overrides: Partial<SituationAnalysis> = {}): SituationAnalysis {
-  const card = { besoin: 0, couverture: 0, lacune: 0, score: 0 };
+  // Fixture volontairement PARTIELLE — cf. commentaire des fixtures `client`.
+  const card = { besoin: 0, couverture: 0, lacune: 0, score: 0, layers: [] };
   return {
     totalScore: 50,
     salaireMensuel: 8000,
@@ -27,7 +28,7 @@ function baseSituation(overrides: Partial<SituationAnalysis> = {}): SituationAna
     deces: { ...card },
     fiscal: { investi3aAnnuel: 0, plafond3a: 7258, pourcentUtilise: 0, gainFiscalAnnuel: 0, tauxMarginal: 0.25 },
     ...overrides,
-  };
+  } as SituationAnalysis;
 }
 
 const wizard = (o: Partial<New3aWizard> = {}): New3aWizard => ({
@@ -51,9 +52,9 @@ describe("calculatePredictedRate", () => {
 describe("deriveTargets", () => {
   it("prend la pire lacune invalidité (maladie/accident) et arrondit le décès au millier", () => {
     const s = baseSituation({
-      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1200, score: 0 },
-      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 1800, score: 0 },
-      deces: { besoin: 0, couverture: 0, lacune: 47600, score: 0 },
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1200, score: 0, layers: [] },
+      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 1800, score: 0, layers: [] },
+      deces: { besoin: 0, couverture: 0, lacune: 47600, score: 0, layers: [] },
       capManquantRetraite: 90000,
     });
     const t = deriveTargets(s);
@@ -64,16 +65,16 @@ describe("deriveTargets", () => {
 
   it("plancher rente IG : lacune positive < 250/mois (3'000/an) → 250/mois", () => {
     const s = baseSituation({
-      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 180, score: 0 }, // 2'160/an
-      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 120, score: 0 },
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 180, score: 0, layers: [] }, // 2'160/an
+      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 120, score: 0, layers: [] },
     });
     expect(deriveTargets(s).maladie).toBe(250);
   });
 
   it("plancher rente IG : lacune ≥ 250/mois inchangée ; lacune nulle reste 0", () => {
     const above = baseSituation({
-      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 300, score: 0 }, // 3'600/an
-      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 0, score: 0 },
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 300, score: 0, layers: [] }, // 3'600/an
+      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 0, score: 0, layers: [] },
     });
     expect(deriveTargets(above).maladie).toBe(300);
 
@@ -85,8 +86,8 @@ describe("deriveTargets", () => {
 describe("computeNew3aOffer", () => {
   it("active invalidité/décès selon les objectifs, épargne+libération toujours actives", () => {
     const s = baseSituation({
-      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 0 },
-      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0 },
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 0, layers: [] },
+      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0, layers: [] },
     });
     const offre = computeNew3aOffer({
       wizard: wizard({ objective: ["protection_income"] }),
@@ -145,9 +146,9 @@ describe("computeNew3aOffer", () => {
   it("fillGap active AUSSI les couvertures risque ciblées à lacune (pas que l'épargne)", () => {
     const s = baseSituation({
       capManquantRetraite: 100000,
-      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 30 },
-      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 1000, score: 30 },
-      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 40 },
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 30, layers: [] },
+      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 1000, score: 30, layers: [] },
+      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 40, layers: [] },
     });
     const o = computeNew3aOffer({
       wizard: wizard({ objective: ["protection_income", "protection_family"], monthlyBudget: 100 }),
@@ -161,7 +162,7 @@ describe("computeNew3aOffer", () => {
   it("respecte les overrides d'édition (toggle décès off + prime d'épargne éditée)", () => {
     const s = baseSituation({
       capManquantRetraite: 100000,
-      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0 },
+      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0, layers: [] },
     });
     const base = computeNew3aOffer({
       wizard: wizard({ objective: ["protection_family"] }),
@@ -236,8 +237,8 @@ describe("best-of-breed provider selection", () => {
   it("computeNew3aOffer : providers best-of-breed PAR produit (mix d'assureurs)", () => {
     const s = baseSituation({
       capManquantRetraite: 100000,
-      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 0 },
-      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0 },
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 0, layers: [] },
+      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0, layers: [] },
     });
     const o = computeNew3aOffer({
       wizard: wizard({ objective: ["protection_income", "protection_family"] }),
@@ -251,7 +252,7 @@ describe("best-of-breed provider selection", () => {
 
   it("computeNew3aOffer : sans benchmark → providers 'Sur mesure'", () => {
     const o = computeNew3aOffer({
-      wizard: wizard(), situation: baseSituation({ deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0 } }),
+      wizard: wizard(), situation: baseSituation({ deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0, layers: [] } }),
       clientAge: 40, clientGender: "M", benchmarks: [],
     });
     expect(o.providers.dec).toBe("Sur mesure");
@@ -261,8 +262,8 @@ describe("best-of-breed provider selection", () => {
   it("comparaison : sur ces données l'ÉCLATÉ gagne + une libération PAR contrat", () => {
     const s = baseSituation({
       capManquantRetraite: 100000,
-      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 0 },
-      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0 },
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 0, layers: [] },
+      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 0, layers: [] },
     });
     const o = computeNew3aOffer({
       wizard: wizard({ objective: ["protection_income", "protection_family"] }),
@@ -292,9 +293,9 @@ describe("best-of-breed provider selection", () => {
 describe("allocateBudget (slider recommandation)", () => {
   const situ = () => baseSituation({
     capManquantRetraite: 100000,
-    invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 20 },
-    invaliditeAccident: { besoin: 0, couverture: 0, lacune: 1000, score: 20 },
-    deces: { besoin: 0, couverture: 0, lacune: 100000, score: 60 },
+    invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 20, layers: [] },
+    invaliditeAccident: { besoin: 0, couverture: 0, lacune: 1000, score: 20, layers: [] },
+    deces: { besoin: 0, couverture: 0, lacune: 100000, score: 60, layers: [] },
   });
   const wiz = wizard({ objective: ["protection_income", "protection_family"] });
   const alloc = (budget: number) => allocateBudget({
@@ -323,9 +324,9 @@ describe("allocateBudget (slider recommandation)", () => {
   it("priorité inversée : si le DÉCÈS a la plus grosse lacune, il passe d'abord", () => {
     const s = baseSituation({
       capManquantRetraite: 100000,
-      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 70 },
-      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 1000, score: 70 },
-      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 15 },
+      invaliditeMaladie: { besoin: 0, couverture: 0, lacune: 1000, score: 70, layers: [] },
+      invaliditeAccident: { besoin: 0, couverture: 0, lacune: 1000, score: 70, layers: [] },
+      deces: { besoin: 0, couverture: 0, lacune: 100000, score: 15, layers: [] },
     });
     const a = allocateBudget({ situation: s, wizard: wizard({ objective: ["protection_income", "protection_family"] }), clientAge: 40, clientGender: "M", benchmarks: [benchmark("A")], budget: 65 });
     expect(a.selDec).toBe(true);

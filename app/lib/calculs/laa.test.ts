@@ -10,7 +10,10 @@ import {
 import type { ClientData, Legal_Settings } from "@/lib/core/types";
 
 function client(over: Partial<ClientData> = {}): ClientData {
-  return { ...over };
+  // Fixture volontairement PARTIELLE : les fonctions testées ne lisent qu'une
+  // poignée de champs. Les remplir tous (90+) noierait ce que chaque test
+  // vérifie réellement. Le cast assume ce choix plutôt que de le masquer.
+  return { ...over } as ClientData;
 }
 
 function legal(over: Partial<Legal_Settings> = {}): Legal_Settings {
