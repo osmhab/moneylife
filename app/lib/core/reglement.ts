@@ -51,6 +51,15 @@ export interface ReglePourcentage extends RegleCitee {
   pourcentage: number | null;
   base: string | null;
   conditions?: string | null;
+  /**
+   * Durée de vie commune exigée d'un partenaire NON MARIÉ, en années.
+   *
+   * Champ à part, et non déduit de `conditions` : le texte d'un règlement
+   * regorge de durées qui n'ont rien à voir (« 20 ans plus jeune que l'assuré »
+   * est une différence d'ÂGE). Les confondre revient à exiger vingt ans de vie
+   * commune et à supprimer la rente d'un couple qui y a droit.
+   */
+  dureeViecommuneAns?: number | null;
 }
 
 export interface BlocRegles {

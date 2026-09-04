@@ -62,6 +62,15 @@ Le même montant peut être dû dans des cas très différents. Distingue :
 Attention : l'article qui fixe le MONTANT et celui qui pose la CONDITION sont
 souvent distincts. Lis les deux avant de conclure.
 
+LE PARTENAIRE NON MARIÉ
+"dureeViecommuneAns" = le nombre d'années de MÉNAGE COMMUN exigées d'un
+partenaire non marié pour avoir droit à la rente (souvent 2 ou 5). N'y mets
+RIEN d'autre : un règlement est plein de durées qui n'ont aucun rapport — une
+différence d'âge (« plus de 20 ans plus jeune que l'assuré »), un délai de
+carence, une durée de mariage. Si aucune durée de ménage commun n'est exigée
+ou si elle n'est pas indiquée, mets null. Une valeur erronée ici supprime la
+rente de survivant d'un couple qui y a droit.
+
 NOMMER LES ANNEXES
 "nom" doit être le NOM DU PLAN tel qu'il est imprimé dans l'annexe — par exemple
 "Plan ex-PAT BVG", "Plans cadres" — et JAMAIS le numéro seul ("Annexe n° 8").
@@ -82,7 +91,7 @@ BLOC = {
    "base":string|null,"limiteHeritiersLegaux":number|null,
    "avantRetraiteUniquement":boolean|null,"article":string|null,"citation":string|null},
  "capitalDecesSupplementaire": {"pourcentageSalaire":number|null,"conditions":string|null,"article":string|null,"citation":string|null},
- "rentePartenaire": {"pourcentage":number|null,"base":string|null,"conditions":string|null,"article":string|null,"citation":string|null},
+ "rentePartenaire": {"pourcentage":number|null,"base":string|null,"dureeViecommuneAns":number|null,"conditions":string|null,"article":string|null,"citation":string|null},
  "renteInvalidite": {"pourcentage":number|null,"base":string|null,"conditions":string|null,"article":string|null,"citation":string|null},
  "renteOrphelin": {"pourcentage":number|null,"base":string|null,"conditions":string|null,"article":string|null,"citation":string|null}
 }`;

@@ -30,7 +30,8 @@ export type NotificationCategory =
   | "LPP"
   | "PREVOYANCE";
 
-export type NotificationType = "success" | "error";
+/** « warning » : un rappel, ni une réussite ni une erreur (l'app l'affiche en message). */
+export type NotificationType = "success" | "error" | "warning";
 
 export interface NotifyClientInput {
   /** Identifiant du client. Si absent, il est résolu depuis `email`. */
@@ -43,6 +44,12 @@ export interface NotifyClientInput {
   html?: string;
   category: NotificationCategory;
   type?: NotificationType;
+  /**
+   * Marqueur TECHNIQUE, jamais affiché : sert à ne pas réécrire deux fois la
+   * même notification. La catégorie, elle, est visible par le client et doit
+   * rester lisible — d'où ce champ séparé.
+   */
+  sujet?: string;
   /** Deep link web, ex. `/dashboard/prevoyance?tab=prive`. */
   actionUrl?: string;
 }
@@ -85,6 +92,7 @@ export async function notifyClient(input: NotifyClientInput): Promise<void> {
     };
     // Champs optionnels : ne pas écrire `undefined` (Firestore le refuse).
     if (input.html) doc.html = input.html;
+    if (input.sujet) doc.sujet = input.sujet;
     if (input.actionUrl) doc.actionUrl = input.actionUrl;
 
     await db.collection("clients").doc(uid).collection("notifications").add(doc);

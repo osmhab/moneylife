@@ -18,11 +18,16 @@ import { db } from "app/lib/firebase/admin";
 import admin from "firebase-admin";
 import {
   memeCaisse, blocApplicable, appliquerCapitalDeces, montantCertificatCapitalDeces,
-  type Reglement,
+  type Reglement, type BlocRegles,
 } from "app/lib/core/reglement";
 import { evaluerPrestationsLPP, type SituationClient } from "app/lib/core/eligibilite";
+import { doitAlerterClause, nomPartenaire, type ClauseBeneficiaire } from "app/lib/core/concubinage";
+import { notifyClient } from "app/lib/server/notify";
 
 const TYPES_CAISSE = ["LPP_BASE", "LPP_COMPL", "LPP"];
+
+/** Marqueur technique de la notification de clause bénéficiaire (anti-doublon). */
+const SUJET_CLAUSE = "clause-beneficiaire";
 
 export interface PlanQualifie {
   id: string;
@@ -57,6 +62,12 @@ export async function lireSituation(clientUid: string): Promise<SituationClient>
     // saisie ne doit pas ouvrir un droit à une rente d'orphelin.
     nombreEnfants: enfants ? enfants.filter((e: Record<string, unknown>) => !!e?.Enter_dateNaissance).length : null,
     statutProfessionnel: typeof d.Enter_statutProfessionnel === "number" ? d.Enter_statutProfessionnel : null,
+    // Concubinage : la rente de partenaire dépend d'une démarche du client.
+    concubinageDepuis: typeof d.Enter_concubinageDepuis === "number" ? d.Enter_concubinageDepuis : null,
+    clauseBeneficiaire: (d.Enter_partenaireClauseBeneficiaire as ClauseBeneficiaire) ?? null,
+    rappelMasque: d.Enter_partenaireClauseRappelMasque === true,
+    partenairePrenom: (d.Enter_spousePrenom as string) ?? null,
+    partenaireNom: (d.Enter_spouseNom as string) ?? null,
   };
 }
 
@@ -125,6 +136,10 @@ export async function qualifierPlans(
 
   const verifies: PlanQualifie[] = [];
   const aVerifier: PlanQualifie[] = [];
+  // Retenus pour le rappel de clause bénéficiaire : il s'adresse au client,
+  // pas au plan, et doit nommer sa caisse.
+  let dernierBloc: BlocRegles | null = null;
+  const caisses: string[] = [];
 
   for (const doc of docs) {
     const plan = doc.data() as Record<string, any>;
@@ -137,6 +152,8 @@ export async function qualifierPlans(
       ? appliquerCapitalDeces(montantCertificatCapitalDeces(data), bloc)
       : { patch: {}, notes: [], automatique: false };
     const prestations = evaluerPrestationsLPP(situation, bloc);
+    if (bloc) dernierBloc = bloc;
+    if (plan.institutionName) caisses.push(String(plan.institutionName));
 
     const maj: Record<string, unknown> = {
       "metadata.reglementApplique": admin.firestore.FieldValue.serverTimestamp(),
@@ -160,7 +177,44 @@ export async function qualifierPlans(
     });
   }
 
+  await rappelerClauseBeneficiaire(clientUid, situation, dernierBloc, caisses);
+
   return { plansVerifies: verifies, plansAVerifier: aVerifier };
+}
+
+/**
+ * Prévient le client que son partenaire n'est peut-être pas reconnu par sa
+ * caisse — le seul cas où une prestation dépend d'une démarche qu'il doit
+ * faire lui-même.
+ *
+ * On n'écrit qu'UNE notification, et seulement si aucune n'est déjà en attente :
+ * répéter le même message chaque fois qu'un plan est requalifié transformerait
+ * une information utile en bruit, et le client cesserait de nous lire.
+ */
+async function rappelerClauseBeneficiaire(
+  clientUid: string,
+  situation: SituationClient,
+  bloc: BlocRegles | null,
+  caisses: string[],
+): Promise<void> {
+  if (!doitAlerterClause(situation, bloc)) return;
+
+  const dejaEnvoyee = await db.collection("clients").doc(clientUid).collection("notifications")
+    .where("sujet", "==", SUJET_CLAUSE).limit(1).get();
+  if (!dejaEnvoyee.empty) return;
+
+  const partenaire = nomPartenaire(situation);
+  const caisse = caisses[0] ?? "";
+  await notifyClient({
+    uid: clientUid,
+    category: "PREVOYANCE",
+    sujet: SUJET_CLAUSE,
+    type: "warning",
+    title: "Votre partenaire est-il reconnu par votre caisse de pension ?",
+    content: partenaire
+      ? `Sans désignation écrite, ${partenaire} pourrait ne rien percevoir de votre 2e pilier${caisse ? ` (${caisse})` : ""}.`
+      : `Sans désignation écrite, votre partenaire pourrait ne rien percevoir de votre 2e pilier${caisse ? ` (${caisse})` : ""}.`,
+  });
 }
 
 /**

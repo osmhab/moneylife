@@ -23,6 +23,7 @@
 
 import type { BlocRegles } from "./reglement";
 import { caseCapitalDeces, estSourcee } from "./reglement";
+import { droitPartenaireConcubinage, type SituationConcubinage } from "./concubinage";
 
 /** État civil : index Firestore (cf. ENUM_EtatCivil). */
 const CELIBATAIRE = 0, MARIE = 1, DIVORCE = 2, PARTENARIAT = 3, CONCUBINAGE = 4, VEUF = 5;
@@ -42,7 +43,7 @@ export interface PrestationEvaluee {
   source: "situation" | "reglement";
 }
 
-export interface SituationClient {
+export interface SituationClient extends SituationConcubinage {
   etatCivil?: number | null;
   /** Nombre d'enfants à charge (rente d'orphelin / d'enfant). */
   nombreEnfants?: number | null;
@@ -60,17 +61,17 @@ export interface SituationClient {
  * désignation écrite), d'où un verdict qui appelle une vérification plutôt
  * qu'un oui ou un non tranché à tort.
  */
-export function droitRenteConjoint(situation: SituationClient): PrestationEvaluee {
+export function droitRenteConjoint(situation: SituationClient, bloc?: BlocRegles | null): PrestationEvaluee {
   const e = situation.etatCivil;
   if (e === MARIE || e === PARTENARIAT) {
     return { cle: "renteConjoint", verdict: "OUI", motif: "Marié·e ou lié·e par un partenariat enregistré.", source: "situation" };
   }
   if (e === CONCUBINAGE) {
-    return {
-      cle: "renteConjoint", verdict: "A_VERIFIER",
-      motif: "Concubinage : la rente dépend des conditions de la caisse (durée de vie commune, désignation écrite).",
-      source: "situation",
-    };
+    // Seul cas où la prestation dépend d'une DÉMARCHE du client : désignation
+    // écrite auprès de la caisse, et durée minimale de vie commune. Détaillé
+    // dans `concubinage.ts`.
+    const r = droitPartenaireConcubinage(situation, bloc);
+    return { cle: "renteConjoint", verdict: r.verdict, motif: r.motif, source: bloc ? "reglement" : "situation" };
   }
   if (e === VEUF || e === DIVORCE || e === CELIBATAIRE) {
     return { cle: "renteConjoint", verdict: "NON", motif: "Aucun conjoint ni partenaire enregistré.", source: "situation" };
@@ -132,7 +133,7 @@ export function droitCapitalDeces(situation: SituationClient, bloc?: BlocRegles 
     };
   }
 
-  const conjoint = droitRenteConjoint(situation);
+  const conjoint = droitRenteConjoint(situation, bloc);
   const cible = caseCapitalDeces(regle!.verse);
   const article = regle!.article ?? "";
 
@@ -192,7 +193,7 @@ export function evaluerPrestationsLPP(
     { cle: "renteVieillesse", verdict: "OUI", motif: "Tout assuré actif constitue un avoir de vieillesse.", source: "situation" },
     { cle: "renteInvalidite", verdict: "OUI", motif: "Couverture d'invalidité acquise dès l'affiliation.", source: "situation" },
     droitPrestationsEnfants(situation, "renteEnfantInvalide"),
-    droitRenteConjoint(situation),
+    droitRenteConjoint(situation, bloc),
     droitPrestationsEnfants(situation, "renteOrphelin"),
     droitCapitalDeces(situation, bloc),
     droitPrestationsAccident(situation, "renteDecesAccident"),
