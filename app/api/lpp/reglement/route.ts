@@ -88,6 +88,13 @@ typique : « … d'au moins cinq ans OU le partenaire doit subvenir à l'entreti
 d'un ou plusieurs enfants communs »). Ce « ou » est décisif : l'ignorer refuse
 la rente à un couple récent avec enfants.
 
+N'INVENTE PAS D'ANNEXE
+Beaucoup de règlements n'en comportent aucune : les montants sont alors renvoyés
+à un « plan de prévoyance » distinct, et les variantes de couverture (« de
+base », « élargie ») ne sont PAS des annexes. Dans ce cas, "annexes" doit être
+un tableau VIDE. Une annexe inventée fait appliquer à un assuré des règles qui
+ne le concernent pas.
+
 NOMMER LES ANNEXES
 "nom" doit être le NOM DU PLAN tel qu'il est imprimé dans l'annexe — par exemple
 "Plan ex-PAT BVG", "Plans cadres" — et JAMAIS le numéro seul ("Annexe n° 8").

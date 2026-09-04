@@ -128,11 +128,18 @@ export function memeCaisse(a?: string | null, b?: string | null): boolean {
   const nb = normaliserCaisse(b || "");
   if (!na || !nb) return false;
   if (na === nb) return true;
-  // Un certificat abrège souvent (« Aevum » pour « Aevum Fondation de Prévoyance »).
-  // On n'accepte l'inclusion qu'au-delà de 4 caractères : « pk » ou « cp » seuls
-  // rapprocheraient n'importe quelles caisses.
+  // Un certificat abrège souvent : « AXA » pour « AXA Fondation LPP Suisse
+  // romande », « Aevum » pour « Aevum Fondation de Prévoyance ».
+  //
+  // Le seuil est à TROIS caractères, et il a coûté cher à trouver : à quatre,
+  // « AXA » — le nom imprimé sur des certificats réels — ne se rattachait à
+  // aucun règlement, en silence. À deux, « PK » ou « CP » rapprocheraient des
+  // caisses sans rapport et appliqueraient à un assuré les règles d'une autre.
+  //
+  // L'espace exigé après le préfixe impose une frontière de MOT : « axa » ne
+  // s'accroche pas à « axalp ».
   const [court, long] = na.length <= nb.length ? [na, nb] : [nb, na];
-  return court.length >= 4 && long.startsWith(court + " ");
+  return court.length >= 3 && long.startsWith(court + " ");
 }
 
 /**
@@ -246,9 +253,19 @@ export interface ResultatApplication {
 export function appliquerCapitalDeces(
   montantCertificat: number | null | undefined,
   bloc: BlocRegles,
+  /** Données du plan, pour détecter un certificat qui distingue déjà. */
+  data?: Record<string, unknown>,
 ): ResultatApplication {
   const regle = bloc.capitalDeces;
   const notes: string[] = [];
+
+  if (data && certificatDistingueDeuxCapitaux(data)) {
+    return {
+      patch: {},
+      notes: ["Le certificat distingue déjà deux capitaux décès : montants conservés tels quels."],
+      automatique: false,
+    };
+  }
 
   if (!estSourcee(regle)) {
     return { patch: {}, notes: ["Le règlement ne cite aucune règle de capital décès : plan inchangé."], automatique: false };
@@ -331,6 +348,26 @@ export const STATUT_REGLEMENT_DEFAUT: StatutReglement = "NON_VERIFIE";
  * (certificats AXA). Le reclasser reviendrait à le confondre avec le capital
  * conditionnel, et fausserait une parité conseiller/client déjà auditée.
  */
+/**
+ * Le certificat distingue-t-il DÉJÀ deux capitaux décès conditionnels ?
+ *
+ * Certains certificats (AXA 2026) portent plusieurs capitaux distincts : un dû
+ * en plus de la rente, un autre dû seulement à défaut de rente. Quand les deux
+ * sont renseignés et différents, le document a déjà tranché — mieux que nous.
+ * Reclasser reviendrait alors à en écraser un, c'est-à-dire à faire disparaître
+ * une couverture réelle. Dans ce cas on ne touche à rien.
+ */
+export function certificatDistingueDeuxCapitaux(data: Record<string, unknown>): boolean {
+  const lire = (c: string) => {
+    const v = data?.[c];
+    const n = typeof v === "string" ? Number(v.replace(/['\s]/g, "")) : v;
+    return typeof n === "number" && isFinite(n) && n > 0 ? n : null;
+  };
+  const plus = lire("Enter_CapitalPlusRenteMal") ?? lire("Enter_CapitalPlusRente");
+  const aucune = lire("Enter_CapitalAucuneRenteMal") ?? lire("Enter_CapitalAucuneRente");
+  return plus != null && aucune != null && plus !== aucune;
+}
+
 export function montantCertificatCapitalDeces(data: Record<string, unknown>): number | null {
   const champs = [
     "Enter_CapitalPlusRenteMal", "Enter_CapitalAucuneRenteMal",

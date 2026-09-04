@@ -149,7 +149,7 @@ export async function qualifierPlans(
     const data = (plan.data ?? {}) as Record<string, any>;
     const bloc = reglement ? blocApplicable(reglement, data.Enter_nomPlan ?? data.Enter_plan ?? null) : null;
     const { patch, notes, automatique } = bloc
-      ? appliquerCapitalDeces(montantCertificatCapitalDeces(data), bloc)
+      ? appliquerCapitalDeces(montantCertificatCapitalDeces(data), bloc, data)
       : { patch: {}, notes: [], automatique: false };
     const prestations = evaluerPrestationsLPP(situation, bloc);
     if (bloc) dernierBloc = bloc;

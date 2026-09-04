@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   normaliserCaisse, memeCaisse, cleReglement,
   blocApplicable, trouverAnnexe, caseCapitalDeces, estSourcee,
-  appliquerCapitalDeces, montantCertificatCapitalDeces,
+  appliquerCapitalDeces, montantCertificatCapitalDeces, certificatDistingueDeuxCapitaux,
   type Reglement, type BlocRegles,
 } from "./reglement";
 
@@ -72,6 +72,18 @@ describe("identité d'une caisse", () => {
   it("ne confond pas deux caisses différentes", () => {
     expect(memeCaisse("Aevum Fondation de Prévoyance", "Publica")).toBe(false);
     expect(memeCaisse("Profond", "Proparis")).toBe(false);
+  });
+
+  it("rattache « AXA », tel qu'imprimé sur un certificat réel", () => {
+    // Cas vécu : le certificat porte institutionName = "AXA" et le règlement
+    // « AXA Fondation LPP Suisse romande, Winterthur ». Avec un seuil à quatre
+    // caractères, le plan du client n'était rattaché à RIEN, sans un mot.
+    expect(memeCaisse("AXA", "AXA Fondation LPP Suisse romande, Winterthur")).toBe(true);
+  });
+
+  it("ne s'accroche pas à un nom qui commence pareil", () => {
+    // La frontière de mot évite « axa » ↔ « Axalp ».
+    expect(memeCaisse("AXA", "Axalp Vorsorge")).toBe(false);
   });
 
   it("ne rapproche pas deux caisses sur une abréviation trop courte", () => {
@@ -205,6 +217,35 @@ describe("routage du capital décès", () => {
     const r = appliquerCapitalDeces(19662.05, aucun);
     expect(r.patch.Enter_CapitalAucuneRenteMal).toBe(0);
     expect(r.patch.Enter_CapitalPlusRenteMal).toBe(0);
+  });
+});
+
+describe("certificat qui distingue déjà deux capitaux", () => {
+  it("le détecte quand les deux cases portent des montants DIFFÉRENTS", () => {
+    expect(certificatDistingueDeuxCapitaux({
+      Enter_CapitalPlusRenteMal: 100000, Enter_CapitalAucuneRenteMal: 432000,
+    })).toBe(true);
+  });
+
+  it("ne le voit pas quand c'est le même montant recopié", () => {
+    expect(certificatDistingueDeuxCapitaux({
+      Enter_CapitalPlusRenteMal: 432000, Enter_CapitalAucuneRenteMal: 432000,
+    })).toBe(false);
+  });
+
+  it("ne le voit pas quand une seule case est remplie", () => {
+    expect(certificatDistingueDeuxCapitaux({ Enter_CapitalPlusRenteMal: 432000 })).toBe(false);
+    expect(certificatDistingueDeuxCapitaux({})).toBe(false);
+  });
+
+  it("NE RECLASSE RIEN quand le certificat a déjà tranché", () => {
+    // Le document distingue mieux que nous : reclasser écraserait l'un des deux
+    // capitaux, donc ferait disparaître une couverture réelle du client.
+    const donnees = { Enter_CapitalPlusRenteMal: 100000, Enter_CapitalAucuneRenteMal: 432000 };
+    const r = appliquerCapitalDeces(100000, blocApplicable(AEVUM, "Plan B"), donnees);
+    expect(r.patch).toEqual({});
+    expect(r.automatique).toBe(false);
+    expect(r.notes[0]).toContain("conservés");
   });
 });
 
