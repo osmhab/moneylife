@@ -236,6 +236,24 @@ service cloud.firestore {
     }
 
     // ===============================
+    // 📖 RÈGLEMENTS DE CAISSE DE PENSION (bibliothèque partagée)
+    // ===============================
+    // Les RÈGLES extraites d'un règlement — pas le document lui-même, qui reste
+    // dans le coffre-fort privé de celui qui l'a scanné. Un règlement n'est pas
+    // une donnée personnelle : c'est le même texte pour tous les employés de la
+    // caisse, d'où la lecture ouverte à tout utilisateur connecté (le deuxième
+    // assuré d'une caisse déjà connue est vérifié sans rien rescanner).
+    //
+    // ÉCRITURE INTERDITE depuis un navigateur : seule la route serveur
+    // /api/lpp/reglement écrit ici, via l'Admin SDK qui contourne ces règles.
+    // Une règle falsifiée depuis un client fausserait la prévoyance de TOUS les
+    // assurés de la caisse d'un seul coup, pas seulement celle de l'auteur.
+    match /reglements/{cle} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ===============================
     // 📄 DOSSIERS D'ANALYSE ÉTABLIS
     // ===============================
     // Pièces remises aux clients, archivées telles quelles. SERVEUR UNIQUEMENT
