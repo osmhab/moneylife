@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "app/lib/firebase/admin";
+import admin from "firebase-admin";
 import { requireInternal } from "app/lib/server/requireInternal";
 import { ingererReglement } from "app/lib/server/ingererReglement";
 import type { FichierIA } from "app/lib/server/analyseIA";
@@ -44,6 +45,13 @@ export async function GET(req: NextRequest) {
       clients: (r.scannePar ?? []).length,
       misAJourLe: r.misAJourLe?.toDate?.()?.toISOString() ?? null,
       capitalDeces: r.general?.capitalDeces?.verse ?? null,
+      // Renseignés par un collaborateur — c'est ce qui rend le règlement
+      // surveillable. Sans `pageUrl`, l'agent ne fait rien.
+      caisseNomComplet: r.caisseNomComplet ?? null,
+      pageUrl: r.pageUrl ?? null,
+      dateEdition: r.dateEdition ?? null,
+      dernierPassage: r.dernierPassage?.toDate?.()?.toISOString() ?? null,
+      derniereErreur: r.derniereErreur ?? null,
     };
   }).sort((a, b) => a.caisse.localeCompare(b.caisse));
 
@@ -70,6 +78,14 @@ export async function POST(req: NextRequest) {
     const files = form.getAll("file").filter((f): f is File => f instanceof File);
     if (files.length === 0) return NextResponse.json({ error: "Aucun fichier" }, { status: 400 });
 
+    // Page d'où le document a été téléchargé : c'est elle que l'agent
+    // reviendra consulter. Un collaborateur qui la note une fois évite à la
+    // machine de chercher — et d'aller chercher n'importe où.
+    const pageUrl = String(form.get("pageUrl") ?? "").trim();
+    if (pageUrl && !/^https?:\/\//i.test(pageUrl)) {
+      return NextResponse.json({ error: "L'adresse doit commencer par http:// ou https://" }, { status: 400 });
+    }
+
     const fichiers: FichierIA[] = await Promise.all(files.map(async (f) => ({
       mimeType: f.type || "application/pdf",
       base64: Buffer.from(await f.arrayBuffer()).toString("base64"),
@@ -79,6 +95,10 @@ export async function POST(req: NextRequest) {
     // toucher au dossier de qui que ce soit. Les plans des clients concernés
     // seront qualifiés à leur prochain scan de certificat.
     const r = await ingererReglement(fichiers, { source: "admin", auteur: interne.uid });
+
+    if (pageUrl && r.cle) {
+      await db.collection("reglements").doc(r.cle).set({ pageUrl }, { merge: true });
+    }
 
     if (r.statut === "PAS_UN_REGLEMENT") {
       return NextResponse.json(
@@ -91,4 +111,46 @@ export async function POST(req: NextRequest) {
     console.error("[admin/reglements] échec", e);
     return NextResponse.json({ error: "L'analyse a échoué" }, { status: 500 });
   }
+}
+
+/**
+ * Complète la fiche d'un règlement : nom complet de la caisse, page d'origine,
+ * date d'édition.
+ *
+ * Ces champs ne s'extraient pas du document de façon fiable — la page d'origine
+ * n'y figure pas du tout — et ce sont eux qui rendent le règlement surveillable.
+ * C'est donc un travail humain, fait une fois par caisse.
+ */
+export async function PATCH(req: NextRequest) {
+  try { await requireInternal(req); } catch {
+    return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const cle = String(body?.cle ?? "").trim();
+  if (!cle) return NextResponse.json({ error: "Clé manquante" }, { status: 400 });
+
+  const maj: Record<string, unknown> = {};
+  if (typeof body.caisseNomComplet === "string") maj.caisseNomComplet = body.caisseNomComplet.trim();
+  if (typeof body.dateEdition === "string") maj.dateEdition = body.dateEdition.trim();
+
+  if (typeof body.pageUrl === "string") {
+    const url = body.pageUrl.trim();
+    // Uniquement http(s) : l'agent ira sur cette adresse, une saisie
+    // malheureuse ne doit pas l'envoyer vers un schéma exotique.
+    if (url && !/^https?:\/\//i.test(url)) {
+      return NextResponse.json({ error: "L'adresse doit commencer par http:// ou https://" }, { status: 400 });
+    }
+    maj.pageUrl = url || null;
+    // Nouvelle adresse : on remet le règlement en tête de file de la veille.
+    maj.dernierPassage = admin.firestore.FieldValue.delete();
+    maj.derniereErreur = admin.firestore.FieldValue.delete();
+  }
+
+  if (Object.keys(maj).length === 0) {
+    return NextResponse.json({ error: "Rien à modifier" }, { status: 400 });
+  }
+
+  await db.collection("reglements").doc(cle).set(maj, { merge: true });
+  return NextResponse.json({ ok: true });
 }

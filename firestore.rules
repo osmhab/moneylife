@@ -236,16 +236,11 @@ service cloud.firestore {
     }
 
     // ===============================
-    // 🛰️ REGISTRE DES CAISSES & JOURNAL DE VEILLE
+    // 🛰️ JOURNAL DE VEILLE
     // ===============================
-    // Le registre dit quels sites l'agent de veille visite, le journal garde la
-    // trace de ce qu'il a rapporté. SERVEUR UNIQUEMENT dans les deux sens : la
-    // lecture passe par /api/admin/*, protégée par requireInternal. Rien ici ne
-    // concerne un client, et une URL modifiable depuis un navigateur enverrait
-    // notre agent où bon lui semble.
-    match /caisses_registre/{cle} {
-      allow read, write: if false;
-    }
+    // Trace de ce que l'agent et le back-office ont ingéré. SERVEUR UNIQUEMENT
+    // dans les deux sens : la lecture passe par /api/admin/reglements, protégée
+    // par requireInternal. Rien ici ne concerne un client.
     match /reglements_journal/{ligneId} {
       allow read, write: if false;
     }
