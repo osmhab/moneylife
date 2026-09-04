@@ -26,10 +26,9 @@ import { db, bucket } from "app/lib/firebase/admin";
 import admin from "firebase-admin";
 import { requireAuth } from "app/lib/server/requireAuth";
 import { MULTILINGUAL_PREAMBLE } from "app/lib/core/multilingual";
-import {
-  cleReglement, memeCaisse, blocApplicable, appliquerCapitalDeces,
-  montantCertificatCapitalDeces, type Reglement,
-} from "app/lib/core/reglement";
+import { cleReglement, type Reglement } from "app/lib/core/reglement";
+import { qualifierPlans } from "app/lib/server/appliquerReglement";
+import { envoyerPush } from "app/lib/server/push";
 
 export const maxDuration = 300;   // 53 pages à analyser : bien au-delà du défaut
 
@@ -223,7 +222,20 @@ export async function POST(req: NextRequest) {
     );
 
     // 2. Application aux plans 2e pilier de CE client relevant de cette caisse.
-    const resultat = await appliquerAuxPlans(clientUid, reglement, pdfUrl);
+    const resultat = await qualifierPlans(clientUid, reglement, { pdfUrl });
+
+    // 3. L'analyse dure ~1 minute et tourne en arrière-plan : le client a pu
+    //    fermer l'app. La notification est le seul moyen qu'il apprenne que
+    //    c'est terminé sans y revenir de lui-même.
+    const verifies = resultat.plansVerifies.length;
+    await envoyerPush(
+      clientUid,
+      "Règlement analysé",
+      verifies > 0
+        ? `${nomCaisse} : ${verifies} plan${verifies > 1 ? "s" : ""} de 2e pilier revérifié${verifies > 1 ? "s" : ""}.`
+        : `${nomCaisse} : règlement enregistré dans votre coffre-fort.`,
+      { type: "reglement", cle },
+    );
 
     return NextResponse.json({
       ok: true,
@@ -237,47 +249,4 @@ export async function POST(req: NextRequest) {
     console.error("[reglement] échec", e);
     return NextResponse.json({ error: "L'analyse a échoué" }, { status: 500 });
   }
-}
-
-/**
- * Reclasse les montants des plans 2e pilier relevant de cette caisse.
- *
- * On ne CHANGE PAS les montants du certificat : on corrige la case, c'est-à-dire
- * la condition à laquelle ils sont dus. Un plan dont la règle demande l'avis d'un
- * conseiller reste « non vérifié » — annoncer « vérifié » sans l'être serait pire
- * que de ne rien annoncer.
- */
-async function appliquerAuxPlans(clientUid: string, reglement: Reglement, pdfUrl: string | null) {
-  const snap = await db.collection("clients").doc(clientUid).collection("plans").get();
-  const misAJour: { id: string; institution: string; notes: string[] }[] = [];
-  const aVerifier: { id: string; institution: string; notes: string[] }[] = [];
-
-  for (const doc of snap.docs) {
-    const plan = doc.data() as Record<string, any>;
-    const type = String(plan.type ?? "").toUpperCase();
-    if (!["LPP_BASE", "LPP_COMPL", "LPP"].includes(type)) continue;
-    if (!memeCaisse(plan.institutionName, reglement.caisse)) continue;
-
-    const data = (plan.data ?? {}) as Record<string, any>;
-    const bloc = blocApplicable(reglement, data.Enter_nomPlan ?? data.Enter_plan ?? null);
-    const { patch, notes, automatique } = appliquerCapitalDeces(montantCertificatCapitalDeces(data), bloc);
-
-    const maj: Record<string, unknown> = {
-      "metadata.reglementCle": reglement.cle,
-      "metadata.reglementCaisse": reglement.caisse,
-      "metadata.reglementNotes": notes,
-      "metadata.reglementApplique": admin.firestore.FieldValue.serverTimestamp(),
-      // ⚠️ Distinct de `reviewStatus` (Contrôle Expert payant par un conseiller).
-      "metadata.reglementStatut": automatique ? "VERIFIE" : "NON_VERIFIE",
-    };
-    if (pdfUrl) maj["metadata.reglementUrl"] = pdfUrl;
-    for (const [k, v] of Object.entries(patch)) maj[`data.${k}`] = v;
-
-    await doc.ref.update(maj);
-    (automatique ? misAJour : aVerifier).push({
-      id: doc.id, institution: String(plan.institutionName ?? ""), notes,
-    });
-  }
-
-  return { plansVerifies: misAJour, plansAVerifier: aVerifier };
 }
