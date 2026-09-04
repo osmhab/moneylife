@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "app/lib/firebase/admin";
 import { requireAuth } from "app/lib/server/requireAuth";
+import { isInternalDecoded } from "app/lib/server/requireInternal";
 import { qualifierDepuisBibliotheque } from "app/lib/server/appliquerReglement";
 
 export async function POST(req: NextRequest) {
@@ -37,8 +38,11 @@ export async function POST(req: NextRequest) {
     const demande = String(body?.uid ?? "").trim();
     let clientUid = uid;
     if (demande && demande !== uid) {
-      const estAdmin = !!email && (email.endsWith("@creditx.ch") || email.endsWith("@moneylife.ch"));
-      if (!estAdmin) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+      // Même définition qu'ailleurs : domaine interne OU UID inscrit. Vérifier
+      // le seul domaine excluait les collaborateurs identifiés par leur UID.
+      if (!isInternalDecoded({ uid, email })) {
+        return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+      }
       clientUid = demande;
     }
 

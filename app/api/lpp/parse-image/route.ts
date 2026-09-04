@@ -16,7 +16,7 @@ import { MULTILINGUAL_PREAMBLE, MULTILINGUAL_LPP_GLOSSARY } from "@/lib/core/mul
 
 const TEXT_FIELDS = [
   "Enter_anneeCertificat", "Enter_prenom", "Enter_nom", "Enter_noAVS",
-  "Enter_dateNaissance", "Enter_adresseCaisse", "Enter_employeur", "Enter_adresseEmployeur",
+  "Enter_dateNaissance", "Enter_adresseCaisse", "Enter_employeur", "Enter_adresseEmployeur", "Enter_nomCaisseComplet",
 ];
 
 const FINANCIAL_FIELDS = [
@@ -116,6 +116,13 @@ ${MULTILINGUAL_PREAMBLE}
 1. IDENTIFICATION : Détermine l'institution exacte parmi : ${Object.keys(INSTITUTION_RULES).join(", ")}. Si non listée, applique les règles de "AUTRE".
 2. Ne laisse jamais les salaires/taux d'activité vides si l'info est présente (synonymes : "Traitement assuré", "Taux d'occupation").
 3. RENTES INVALIDITÉ (MIRRORING) : sauf règle contraire de l'institution, si aucune distinction Maladie/Accident n'est visible, duplique la même valeur dans les deux.
+4. NOM DE LA CAISSE, TEL QU'IMPRIMÉ ("Enter_nomCaisseComplet") : recopie
+   l'intitulé complet de l'institution figurant sur le document, SANS le
+   raccourcir et SANS le ramener à la liste ci-dessus. Beaucoup de fondations
+   gèrent PLUSIEURS caisses distinctes — « Caisse ouverte CPO » et « Caisse
+   fermée CPF » chez CPVAL, par exemple — qui ont chacune leur règlement et
+   leurs prestations. Réduire les deux à « CPVAL » rend impossible de savoir
+   quelles règles s'appliquent à cet assuré.
 
 🔎 CLASSIFICATION DU DOCUMENT (champ "documentSubtype", OBLIGATOIRE) — choisis EXACTEMENT une des 3 FAMILLES. NE cherche PAS à distinguer « base » vs « complémentaire » (décidé ailleurs par le contexte) :
 - "CAISSE" : certificat d'une CAISSE DE PENSION rattachée à un EMPLOYEUR (cotisations employé + employeur en cours, avoir de vieillesse, taux de conversion, rentes). Plan de base OU complémentaire/surobligatoire/cadres → dans les DEUX cas c'est "CAISSE".

@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { bucket } from "app/lib/firebase/admin";
 import { requireAuth } from "app/lib/server/requireAuth";
+import { isInternalDecoded } from "app/lib/server/requireInternal";
 import { ingererReglement } from "app/lib/server/ingererReglement";
 import { envoyerPush } from "app/lib/server/push";
 import type { FichierIA } from "app/lib/server/analyseIA";
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
 
-  const estAdmin = !!email && (email.endsWith("@creditx.ch") || email.endsWith("@moneylife.ch"));
+  const estAdmin = isInternalDecoded({ uid, email });
 
   try {
     // DEUX FORMES D'ENVOI : l'app poste les pages en multipart, l'outil

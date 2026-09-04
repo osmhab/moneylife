@@ -327,3 +327,31 @@ describe("millésimes", () => {
     expect(estPlusRecent("01.01.2026", null)).toBe(true);
   });
 });
+
+describe("fondations à plusieurs caisses", () => {
+  const CPO = "Caisse de prévoyance du Canton du Valais – Caisse de prévoyance ouverte (CPO)";
+  const CPF = "Caisse de prévoyance du Canton du Valais – Caisse de prévoyance fermée (CPF)";
+
+  it("rattache l'extrait imprimé sur le certificat au règlement complet", () => {
+    // Cas réel : quatre clients CPVAL, dont le certificat imprime « Caisse
+    // ouverte CPO ». Ni égalité ni préfixe — et pourtant la même caisse.
+    expect(memeCaisse("Caisse ouverte CPO", CPO)).toBe(true);
+  });
+
+  it("NE confond PAS la caisse ouverte et la caisse fermée", () => {
+    // Deux caisses distinctes, deux règlements, deux jeux de prestations :
+    // appliquer le mauvais fausserait l'analyse de l'assuré.
+    expect(memeCaisse("Caisse ouverte CPO", CPF)).toBe(false);
+    expect(memeCaisse("Caisse fermée CPF", CPO)).toBe(false);
+  });
+
+  it("exige DEUX mots distinctifs, pas un seul", () => {
+    // « ouverte » seul rapprocherait deux fondations sans rapport.
+    expect(memeCaisse("Caisse ouverte", CPO)).toBe(false);
+    expect(memeCaisse("prévoyance", CPO)).toBe(false);
+  });
+
+  it("ne rapproche pas deux caisses par leurs mots banals", () => {
+    expect(memeCaisse("Caisse de prévoyance suisse", CPO)).toBe(false);
+  });
+});

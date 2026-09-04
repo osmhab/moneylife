@@ -139,7 +139,39 @@ export function memeCaisse(a?: string | null, b?: string | null): boolean {
   // L'espace exigé après le préfixe impose une frontière de MOT : « axa » ne
   // s'accroche pas à « axalp ».
   const [court, long] = na.length <= nb.length ? [na, nb] : [nb, na];
-  return court.length >= 3 && long.startsWith(court + " ");
+  if (court.length >= 3 && long.startsWith(court + " ")) return true;
+
+  // Reste le cas des fondations à PLUSIEURS caisses. Le certificat imprime
+  // « Caisse ouverte CPO » là où le règlement s'intitule « Caisse de prévoyance
+  // du Canton du Valais – Caisse de prévoyance ouverte (CPO) » : ni égalité, ni
+  // préfixe, et pourtant la même caisse. Le nom court est ici un EXTRAIT du
+  // long.
+  //
+  // On l'accepte quand TOUS ses mots distinctifs figurent dans le long, et
+  // qu'il y en a au moins deux. Un seul ne suffirait pas — « ouverte » à lui
+  // seul rapprocherait deux fondations sans rapport ; « ouverte » ET « cpo »
+  // ne désignent qu'une caisse.
+  return motsDistinctifsInclus(court, long);
+}
+
+/**
+ * Mots trop répandus pour distinguer une caisse d'une autre.
+ *
+ * Presque toutes les institutions les portent : s'en contenter rapprocherait
+ * n'importe quelles deux caisses.
+ */
+const MOTS_BANALS = new Set([
+  "caisse", "prevoyance", "pension", "pensionskasse", "vorsorge", "previdenza",
+  "suisse", "schweiz", "svizzera", "romande", "lpp", "bvg", "professionnelle",
+  "institution", "collective", "commune", "personnel", "employes", "certificat",
+]);
+
+/** Les mots distinctifs du nom court figurent-ils tous dans le long ? */
+function motsDistinctifsInclus(court: string, long: string): boolean {
+  const motsLong = new Set(long.split(" "));
+  const distinctifs = court.split(" ").filter((m) => m.length >= 2 && !MOTS_BANALS.has(m));
+  if (distinctifs.length < 2) return false;
+  return distinctifs.every((m) => motsLong.has(m));
 }
 
 /**

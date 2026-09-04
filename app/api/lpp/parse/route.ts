@@ -14,7 +14,7 @@ const CLASSIFICATION_KEYS = ["documentType", "suggestedTags", "keywords"];
 
 const TEXT_FIELDS = [
   "Enter_anneeCertificat", "Enter_prenom", "Enter_nom", "Enter_noAVS", 
-  "Enter_dateNaissance", "Enter_adresseCaisse", "Enter_employeur", "Enter_adresseEmployeur"
+  "Enter_dateNaissance", "Enter_adresseCaisse", "Enter_nomCaisseComplet", "Enter_employeur", "Enter_adresseEmployeur"
 ];
 
 // Filet de sécurité si une chaîne passe encore à travers les mailles du filet

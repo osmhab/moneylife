@@ -144,9 +144,13 @@ export async function qualifierPlans(
   for (const doc of docs) {
     const plan = doc.data() as Record<string, any>;
     if (!TYPES_CAISSE.includes(String(plan.type ?? "").toUpperCase())) continue;
-    if (reglement && !memeCaisse(plan.institutionName, reglement.caisse)) continue;
-
     const data = (plan.data ?? {}) as Record<string, any>;
+    // Le scan ramène `institutionName` à une liste fermée (« CPVAL »), ce qui
+    // perd les fondations gérant PLUSIEURS caisses — CPVAL en a deux, ouverte
+    // et fermée, aux règlements différents. Le nom tel qu'imprimé, quand le
+    // scan l'a relevé, désigne la bonne ; il passe donc en premier.
+    const nomCaisse = String(data.Enter_nomCaisseComplet ?? "").trim() || plan.institutionName;
+    if (reglement && !memeCaisse(nomCaisse, reglement.caisse)) continue;
     const bloc = reglement ? blocApplicable(reglement, data.Enter_nomPlan ?? data.Enter_plan ?? null) : null;
     const { patch, notes, automatique } = bloc
       ? appliquerCapitalDeces(montantCertificatCapitalDeces(data), bloc, data)
@@ -236,7 +240,8 @@ export async function qualifierDepuisBibliotheque(
   // Même sans règlement connu, on évalue le droit aux prestations : c'est la
   // situation du client, pas le règlement, qui écarte une rente d'orphelin chez
   // quelqu'un sans enfant.
-  const reglement = await reglementConnuPour(plan.institutionName);
+  const nomImprime = String((plan.data ?? {}).Enter_nomCaisseComplet ?? "").trim();
+  const reglement = await reglementConnuPour(nomImprime || plan.institutionName);
   const r = await qualifierPlans(clientUid, reglement, { planId });
   return { ...r, reglement };
 }
