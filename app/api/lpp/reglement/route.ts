@@ -63,12 +63,20 @@ Le même montant peut être dû dans des cas très différents. Distingue :
 Attention : l'article qui fixe le MONTANT et celui qui pose la CONDITION sont
 souvent distincts. Lis les deux avant de conclure.
 
+NOMMER LES ANNEXES
+"nom" doit être le NOM DU PLAN tel qu'il est imprimé dans l'annexe — par exemple
+"Plan ex-PAT BVG", "Plans cadres" — et JAMAIS le numéro seul ("Annexe n° 8").
+C'est par ce nom qu'un assuré est rattaché à son annexe : un numéro ne
+correspond à rien sur son certificat, et le rattachement échouerait en silence.
+Mets le numéro dans "numero", et dans "sappliqueA" la population visée, reprise
+du texte.
+
 Réponds en JSON strict :
 {
  "caisse": {"nom":string,"enVigueurAu":string|null,"langue":string|null},
  "plansDetectes": [string],
  "general": BLOC,
- "annexes": [{"nom":string,"sappliqueA":string,"surcharges":BLOC}]
+ "annexes": [{"nom":string,"numero":string|null,"sappliqueA":string,"surcharges":BLOC}]
 }
 BLOC = {
  "capitalDeces": {"verse":"TOUJOURS"|"SI_AUCUNE_RENTE_PARTENAIRE"|"REDUIT_DU_FINANCEMENT_RENTE"|"NON_PREVU"|null,
@@ -95,30 +103,63 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
 
-  try {
-    const { allPaths } = await req.json().catch(() => ({}));
-    const paths: string[] = Array.isArray(allPaths) ? allPaths.filter((p) => typeof p === "string") : [];
-    if (paths.length === 0) {
-      return NextResponse.json({ error: "Aucune page fournie" }, { status: 400 });
-    }
+  const estAdmin = !!email && (email.endsWith("@creditx.ch") || email.endsWith("@moneylife.ch"));
 
-    // Le propriétaire du document est déduit du CHEMIN, jamais du corps de la
-    // requête : sinon n'importe qui écrirait dans le dossier d'un autre.
-    const clientUid = paths[0].split("/")[1];
-    const estAdmin = !!email && (email.endsWith("@creditx.ch") || email.endsWith("@moneylife.ch"));
-    if (uid !== clientUid && !estAdmin) {
-      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+  try {
+    // DEUX FORMES D'ENVOI, parce que les deux appelants diffèrent :
+    //  · l'app iOS poste les pages en multipart (comme /api/lpp/parse-image) ;
+    //  · l'outil conseiller passe des chemins Storage déjà téléversés.
+    let parts: { inlineData: { mimeType: string; data: string } }[] = [];
+    let clientUid = uid;
+    // Adresse du PDF déjà rangé dans le coffre-fort par l'app. Posée sur les
+    // plans concernés pour que leur fiche rouvre le règlement directement.
+    let pdfUrl: string | null = null;
+
+    if ((req.headers.get("content-type") || "").includes("multipart/form-data")) {
+      const form = await req.formData();
+      const files = form.getAll("file").filter((f): f is File => f instanceof File);
+      if (files.length === 0) return NextResponse.json({ error: "Aucune page fournie" }, { status: 400 });
+
+      // Un conseiller peut scanner POUR un client ; un client, jamais pour un autre.
+      const demande = String(form.get("uid") ?? "").trim();
+      if (demande && demande !== uid) {
+        if (!estAdmin) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+        clientUid = demande;
+      }
+
+      const url = String(form.get("pdfUrl") ?? "").trim();
+      // Uniquement une adresse de notre propre stockage : un lien fourni par
+      // l'appelant se retrouverait affiché au client, donc jamais n'importe lequel.
+      if (/^https:\/\/(firebasestorage\.googleapis\.com|storage\.googleapis\.com)\//.test(url)) pdfUrl = url;
+
+      parts = await Promise.all(files.map(async (f) => ({
+        inlineData: {
+          mimeType: f.type || "application/pdf",
+          data: Buffer.from(await f.arrayBuffer()).toString("base64"),
+        },
+      })));
+    } else {
+      const { allPaths } = await req.json().catch(() => ({}));
+      const paths: string[] = Array.isArray(allPaths) ? allPaths.filter((p) => typeof p === "string") : [];
+      if (paths.length === 0) return NextResponse.json({ error: "Aucune page fournie" }, { status: 400 });
+
+      // Le propriétaire est déduit du CHEMIN, jamais du corps de la requête :
+      // sinon n'importe qui ferait écrire dans le dossier d'un autre.
+      clientUid = paths[0].split("/")[1];
+      if (uid !== clientUid && !estAdmin) {
+        return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+      }
+
+      parts = await Promise.all(paths.map(async (p) => {
+        const [buffer] = await bucket.file(p).download();
+        const ext = p.split(".").pop()?.toLowerCase();
+        const mimeType = ext === "pdf" ? "application/pdf" : `image/${ext === "jpg" ? "jpeg" : ext}`;
+        return { inlineData: { mimeType, data: buffer.toString("base64") } };
+      }));
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "Analyse indisponible" }, { status: 503 });
-
-    const parts = await Promise.all(paths.map(async (p) => {
-      const [buffer] = await bucket.file(p).download();
-      const ext = p.split(".").pop()?.toLowerCase();
-      const mimeType = ext === "pdf" ? "application/pdf" : `image/${ext === "jpg" ? "jpeg" : ext}`;
-      return { inlineData: { mimeType, data: buffer.toString("base64") } };
-    }));
 
     const rep = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -182,7 +223,7 @@ export async function POST(req: NextRequest) {
     );
 
     // 2. Application aux plans 2e pilier de CE client relevant de cette caisse.
-    const resultat = await appliquerAuxPlans(clientUid, reglement);
+    const resultat = await appliquerAuxPlans(clientUid, reglement, pdfUrl);
 
     return NextResponse.json({
       ok: true,
@@ -206,7 +247,7 @@ export async function POST(req: NextRequest) {
  * conseiller reste « non vérifié » — annoncer « vérifié » sans l'être serait pire
  * que de ne rien annoncer.
  */
-async function appliquerAuxPlans(clientUid: string, reglement: Reglement) {
+async function appliquerAuxPlans(clientUid: string, reglement: Reglement, pdfUrl: string | null) {
   const snap = await db.collection("clients").doc(clientUid).collection("plans").get();
   const misAJour: { id: string; institution: string; notes: string[] }[] = [];
   const aVerifier: { id: string; institution: string; notes: string[] }[] = [];
@@ -229,6 +270,7 @@ async function appliquerAuxPlans(clientUid: string, reglement: Reglement) {
       // ⚠️ Distinct de `reviewStatus` (Contrôle Expert payant par un conseiller).
       "metadata.reglementStatut": automatique ? "VERIFIE" : "NON_VERIFIE",
     };
+    if (pdfUrl) maj["metadata.reglementUrl"] = pdfUrl;
     for (const [k, v] of Object.entries(patch)) maj[`data.${k}`] = v;
 
     await doc.ref.update(maj);

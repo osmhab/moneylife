@@ -111,6 +111,27 @@ describe("quelles règles s'appliquent à ce plan", () => {
     expect(bloc.renteOrphelin?.pourcentage).toBe(0.2);          // conservé
   });
 
+  it("rattache même quand l'IA nomme l'annexe par son NUMÉRO", () => {
+    // Vu en conditions réelles : une exécution rend « Plan ex-PAT BVG », une
+    // autre « Annexe no 8 ». Un numéro ne figure pas sur le certificat de
+    // l'assuré — sans repli sur `sappliqueA`, le rattachement échouerait en
+    // silence et l'assuré se verrait appliquer la règle générale.
+    const parNumero: Reglement = {
+      ...AEVUM,
+      annexes: [{
+        nom: "Annexe no 8",
+        sappliqueA: "Plan ex-PAT BVG : assurés préalablement assurés auprès de PAT BVG",
+        surcharges: AEVUM.annexes[0].surcharges,
+      }],
+    };
+    expect(blocApplicable(parNumero, "Plan ex-PAT BVG").capitalDeces?.verse).toBe("TOUJOURS");
+  });
+
+  it("ne rattache pas sur un nom de plan trop court", () => {
+    // « B » seul rapprocherait n'importe quelle annexe.
+    expect(trouverAnnexe(AEVUM, "B")).toBeNull();
+  });
+
   it("trouve l'annexe par correspondance de nom", () => {
     expect(trouverAnnexe(AEVUM, "ex-PAT BVG")?.nom).toBe("Plan ex-PAT BVG");
     expect(trouverAnnexe(AEVUM, "Plan B")).toBeNull();

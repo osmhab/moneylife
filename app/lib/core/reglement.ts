@@ -62,7 +62,10 @@ export interface BlocRegles {
 }
 
 export interface AnnexeRegles {
+  /** NOM DU PLAN visé (« Plan ex-PAT BVG »), pas le numéro d'annexe. */
   nom: string;
+  /** Numéro de l'annexe, pour la traçabilité (« Annexe n° 8 »). */
+  numero?: string | null;
   sappliqueA: string;
   /** Ne contient QUE ce que l'annexe surcharge ; le reste retombe sur le général. */
   surcharges: Partial<BlocRegles>;
@@ -151,13 +154,23 @@ export function blocApplicable(reglement: Reglement, nomPlan?: string | null): B
   return fusionne;
 }
 
-/** Annexe visant ce plan, par correspondance de nom. */
+/**
+ * Annexe visant ce plan.
+ *
+ * On cherche aussi dans `sappliqueA` : l'IA nomme parfois l'annexe par son
+ * NUMÉRO (« Annexe n° 8 ») au lieu du nom du plan. Un numéro ne figure pas sur
+ * le certificat de l'assuré — s'en tenir au seul champ `nom` ferait échouer le
+ * rattachement EN SILENCE, et l'assuré se verrait appliquer la règle générale à
+ * la place de la sienne.
+ */
 export function trouverAnnexe(reglement: Reglement, nomPlan?: string | null): AnnexeRegles | null {
   const cible = normaliserCaisse(nomPlan || "");
-  if (!cible) return null;
+  if (cible.length < 3) return null;         // « B » seul rapprocherait n'importe quoi
   for (const a of reglement.annexes || []) {
-    const nom = normaliserCaisse(a.nom);
-    if (nom && (nom.includes(cible) || cible.includes(nom))) return a;
+    for (const champ of [a.nom, a.sappliqueA]) {
+      const t = normaliserCaisse(champ || "");
+      if (t && (t.includes(cible) || cible.includes(t))) return a;
+    }
   }
   return null;
 }
