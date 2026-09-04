@@ -60,6 +60,16 @@ export interface ReglePourcentage extends RegleCitee {
    * commune et à supprimer la rente d'un couple qui y a droit.
    */
   dureeViecommuneAns?: number | null;
+  /**
+   * Le règlement dispense-t-il de la durée quand le couple a des enfants
+   * communs à charge ?
+   *
+   * Aevum, art. 57 : « communauté de vie ininterrompue d'au moins cinq ans
+   * OU le partenaire survivant doit subvenir à l'entretien d'un ou de
+   * plusieurs enfants communs ». Ignorer ce « ou » refuserait la rente à un
+   * couple de deux ans avec enfants, qui y a pourtant droit.
+   */
+  enfantsCommunsRemplacentDuree?: boolean | null;
 }
 
 export interface BlocRegles {

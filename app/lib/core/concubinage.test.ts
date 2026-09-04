@@ -113,6 +113,34 @@ describe("droit du partenaire en concubinage", () => {
   });
 });
 
+describe("dispense pour enfants communs (Aevum, art. 57)", () => {
+  /** « … d'au moins cinq ans OU … subvenir à l'entretien d'enfants communs ». */
+  const AVEC_DISPENSE: BlocRegles = {
+    ...REGLE_5_ANS,
+    rentePartenaire: { ...REGLE_5_ANS.rentePartenaire!, enfantsCommunsRemplacentDuree: true },
+  };
+
+  it("ne refuse PAS un couple récent qui élève des enfants communs", () => {
+    // Deux ans de vie commune seulement, mais le « ou » de l'art. 57 s'applique.
+    const r = droitPartenaireConcubinage(
+      CONCUBIN({ concubinageDepuis: 2024, clauseBeneficiaire: "OUI", nombreEnfants: 2 }), AVEC_DISPENSE, ANNEE);
+    expect(r.verdict).toBe("OUI");
+    expect(r.motif).toContain("enfants communs");
+  });
+
+  it("refuse toujours le même couple SANS enfant", () => {
+    const r = droitPartenaireConcubinage(
+      CONCUBIN({ concubinageDepuis: 2024, clauseBeneficiaire: "OUI", nombreEnfants: 0 }), AVEC_DISPENSE, ANNEE);
+    expect(r.verdict).toBe("NON");
+  });
+
+  it("refuse si le règlement ne prévoit PAS cette dispense", () => {
+    const r = droitPartenaireConcubinage(
+      CONCUBIN({ concubinageDepuis: 2024, clauseBeneficiaire: "OUI", nombreEnfants: 2 }), REGLE_5_ANS, ANNEE);
+    expect(r.verdict).toBe("NON");
+  });
+});
+
 describe("faut-il alerter le client", () => {
   it("oui dès que la durée usuelle est atteinte sans désignation confirmée", () => {
     expect(doitAlerterClause(CONCUBIN({ concubinageDepuis: 2018 }), null, ANNEE)).toBe(true);

@@ -39,6 +39,8 @@ export interface SituationConcubinage {
   rappelMasque?: boolean | null;
   partenairePrenom?: string | null;
   partenaireNom?: string | null;
+  /** Enfants à charge : certains règlements les substituent à la durée exigée. */
+  nombreEnfants?: number | null;
 }
 
 const CONCUBINAGE = 4;
@@ -103,11 +105,21 @@ export function droitPartenaireConcubinage(
   const annees = anneesViecommune(situation.concubinageDepuis, anneeCourante);
   const exigee = dureeExigeeParReglement(bloc);
 
-  if (annees != null && exigee != null && annees < exigee) {
+  // Beaucoup de règlements posent la durée OU l'entretien d'enfants communs
+  // (Aevum, art. 57). Ignorer ce « ou » refuserait la rente à un couple récent
+  // avec enfants, qui y a pourtant droit.
+  const dispenseEnfants =
+    bloc?.rentePartenaire?.enfantsCommunsRemplacentDuree === true && (situation.nombreEnfants ?? 0) > 0;
+
+  if (annees != null && exigee != null && annees < exigee && !dispenseEnfants) {
     return {
       verdict: "NON",
       motif: `Vie commune de ${annees} an${annees > 1 ? "s" : ""} : la caisse en exige ${exigee}.`,
     };
+  }
+
+  if (dispenseEnfants && clause === "OUI") {
+    return { verdict: "OUI", motif: "Partenaire désigné ; l'entretien d'enfants communs dispense de la durée de vie commune." };
   }
 
   if (clause === "OUI" && annees != null && exigee != null && annees >= exigee) {

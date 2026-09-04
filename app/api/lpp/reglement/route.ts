@@ -70,6 +70,11 @@ différence d'âge (« plus de 20 ans plus jeune que l'assuré »), un délai de
 carence, une durée de mariage. Si aucune durée de ménage commun n'est exigée
 ou si elle n'est pas indiquée, mets null. Une valeur erronée ici supprime la
 rente de survivant d'un couple qui y a droit.
+"enfantsCommunsRemplacentDuree" = true si le règlement dispense de cette durée
+lorsque le partenaire subvient à l'entretien d'enfants communs (formulation
+typique : « … d'au moins cinq ans OU le partenaire doit subvenir à l'entretien
+d'un ou plusieurs enfants communs »). Ce « ou » est décisif : l'ignorer refuse
+la rente à un couple récent avec enfants.
 
 NOMMER LES ANNEXES
 "nom" doit être le NOM DU PLAN tel qu'il est imprimé dans l'annexe — par exemple
@@ -91,7 +96,7 @@ BLOC = {
    "base":string|null,"limiteHeritiersLegaux":number|null,
    "avantRetraiteUniquement":boolean|null,"article":string|null,"citation":string|null},
  "capitalDecesSupplementaire": {"pourcentageSalaire":number|null,"conditions":string|null,"article":string|null,"citation":string|null},
- "rentePartenaire": {"pourcentage":number|null,"base":string|null,"dureeViecommuneAns":number|null,"conditions":string|null,"article":string|null,"citation":string|null},
+ "rentePartenaire": {"pourcentage":number|null,"base":string|null,"dureeViecommuneAns":number|null,"enfantsCommunsRemplacentDuree":boolean|null,"conditions":string|null,"article":string|null,"citation":string|null},
  "renteInvalidite": {"pourcentage":number|null,"base":string|null,"conditions":string|null,"article":string|null,"citation":string|null},
  "renteOrphelin": {"pourcentage":number|null,"base":string|null,"conditions":string|null,"article":string|null,"citation":string|null}
 }`;
