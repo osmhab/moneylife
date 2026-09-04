@@ -10,6 +10,7 @@ const ANNEE = 2026;
 
 /** Caisse exigeant cinq ans de vie commune, telle que l'IA l'extrait. */
 const REGLE_5_ANS: BlocRegles = {
+  retraite: null,
   capitalDeces: null, capitalDecesSupplementaire: null, renteInvalidite: null, renteOrphelin: null,
   rentePartenaire: {
     pourcentage: 0.65, base: "rente d'invalidité", dureeViecommuneAns: 5,

@@ -21,6 +21,7 @@ import {
   type Reglement, type BlocRegles,
 } from "app/lib/core/reglement";
 import { evaluerPrestationsLPP, type SituationClient } from "app/lib/core/eligibilite";
+import { completerRetraite } from "app/lib/core/retraite";
 import { doitAlerterClause, nomPartenaire, type ClauseBeneficiaire } from "app/lib/core/concubinage";
 import { notifyClient } from "app/lib/server/notify";
 
@@ -152,9 +153,20 @@ export async function qualifierPlans(
     const nomCaisse = String(data.Enter_nomCaisseComplet ?? "").trim() || plan.institutionName;
     if (reglement && !memeCaisse(nomCaisse, reglement.caisse)) continue;
     const bloc = reglement ? blocApplicable(reglement, data.Enter_nomPlan ?? data.Enter_plan ?? null) : null;
-    const { patch, notes, automatique } = bloc
+    const deces = bloc
       ? appliquerCapitalDeces(montantCertificatCapitalDeces(data), bloc, data)
-      : { patch: {}, notes: [], automatique: false };
+      : { patch: {} as Record<string, number | null>, notes: [] as string[], automatique: false };
+
+    // La RETRAITE, que tout assuré touchera : on comble les rentes que le
+    // certificat n'imprime pas, et on signale — sans corriger — les écarts avec
+    // le taux de conversion du règlement.
+    const retraite = completerRetraite(data, bloc);
+
+    const patch: Record<string, number | null> = { ...deces.patch, ...retraite.patch };
+    const notes = [...deces.notes, ...retraite.notes];
+    // Un seul point à confirmer suffit à retenir le « vérifié » : mieux vaut ne
+    // rien annoncer qu'annoncer à tort.
+    const automatique = deces.automatique && retraite.automatique;
     const prestations = evaluerPrestationsLPP(situation, bloc);
     if (bloc) dernierBloc = bloc;
     if (plan.institutionName) caisses.push(String(plan.institutionName));

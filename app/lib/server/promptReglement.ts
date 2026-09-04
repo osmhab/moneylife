@@ -38,6 +38,30 @@ Le même montant peut être dû dans des cas très différents. Distingue :
 Attention : l'article qui fixe le MONTANT et celui qui pose la CONDITION sont
 souvent distincts. Lis les deux avant de conclure.
 
+LA RETRAITE
+"tauxConversion" : le barème qui transforme l'avoir de vieillesse en rente
+annuelle. Rends chaque taux en FRACTION, pas en pourcentage : 6,4 % s'écrit
+0.064. C'est le chiffre le plus structurant du règlement — il décide de la rente
+de tous les assurés de la caisse.
+
+⚠️ Ce barème est SOUVENT À PLUSIEURS ENTRÉES, et il faut toutes les rendre :
+- par ÂGE de départ (58 à 70 ans) ;
+- par ANNÉE de départ à la retraite ("anneeDepart") — beaucoup de caisses
+  baissent leur taux d'année en année. Une mention « à partir de 2029 » se rend
+  avec anneeDepart = 2029 ;
+- par RÉGIME ("regime") — obligatoire, surobligatoire, ou enveloppant quand un
+  seul barème couvre les deux.
+Produis UNE LIGNE PAR COMBINAISON. N'en choisis surtout pas une seule : le taux
+applicable dépend de l'assuré, et retenir le mauvais promettrait une rente qu'il
+ne touchera jamais. Laisse anneeDepart ou regime à null uniquement lorsque le
+règlement ne fait pas la distinction.
+"ageReference" : l'âge de la retraite ordinaire (65, parfois 64).
+"tauxInteretProjection" : le taux servant à projeter l'avoir jusqu'à la retraite,
+souvent le taux minimal LPP. En fraction également (1,25 % → 0.0125).
+"anticipationDesAge" : l'âge à partir duquel une retraite anticipée est possible.
+Si un de ces éléments ne figure pas dans le document, mets null : une valeur
+inventée fausserait la rente projetée de chaque assuré de la caisse.
+
 NE CONFONDS JAMAIS deux capitaux voisins :
 - "capitalDeces" = le capital décès PRINCIPAL, en règle générale égal au capital
   de prévoyance ou à l'avoir de vieillesse ;
@@ -86,6 +110,11 @@ Réponds en JSON strict :
  "annexes": [{"nom":string,"numero":string|null,"sappliqueA":string,"surcharges":BLOC}]
 }
 BLOC = {
+ "retraite": {"ageReference":number|null,
+   "tauxConversion":[{"age":number,"taux":number,"anneeDepart":number|null,
+                      "regime":"obligatoire"|"surobligatoire"|"enveloppant"|null}],
+   "tauxInteretProjection":number|null,"anticipationDesAge":number|null,
+   "article":string|null,"citation":string|null},
  "capitalDeces": {"verse":"TOUJOURS"|"SI_AUCUNE_RENTE_PARTENAIRE"|"REDUIT_DU_FINANCEMENT_RENTE"|"NON_PREVU"|null,
    "base":string|null,"limiteHeritiersLegaux":number|null,
    "avantRetraiteUniquement":boolean|null,"article":string|null,"citation":string|null},
@@ -97,6 +126,7 @@ BLOC = {
 
 /** Bloc vide : une clé absente de la réponse ne doit pas faire tomber la route. */
 export const BLOC_VIDE = {
+  retraite: null,
   capitalDeces: null, capitalDecesSupplementaire: null,
   rentePartenaire: null, renteInvalidite: null, renteOrphelin: null,
 };

@@ -15,6 +15,7 @@ const AEVUM: Reglement = {
   langue: "français",
   plansDetectes: ["Plans cadres", "Plan ex-PAT BVG"],
   general: {
+    retraite: null,
     capitalDeces: {
       verse: "SI_AUCUNE_RENTE_PARTENAIRE",
       base: "capital de prévoyance",

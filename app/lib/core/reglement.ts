@@ -72,7 +72,48 @@ export interface ReglePourcentage extends RegleCitee {
   enfantsCommunsRemplacentDuree?: boolean | null;
 }
 
+/**
+ * Le volet retraite d'un règlement.
+ *
+ * Le taux de conversion est le chiffre le plus structurant du document : il
+ * décide de la rente de tous les assurés de la caisse. Il varie d'une caisse à
+ * l'autre, et par âge au sein d'une même caisse.
+ *
+ * Les taux sont des FRACTIONS (0.064), jamais des pourcentages : mélanger les
+ * deux donnerait une rente cent fois trop élevée.
+ */
+export interface TauxConversion {
+  age: number;
+  /** Fraction (0.063), jamais un pourcentage. */
+  taux: number;
+  /**
+   * Année de départ à la retraite à laquelle ce taux s'applique.
+   *
+   * Beaucoup de caisses baissent leur taux d'année en année : chez AXA, 6,300 %
+   * pour un départ en 2026 contre 5,600 % dès 2029 — onze pour cent d'écart sur
+   * la rente. Appliquer le taux du millésime courant à quelqu'un qui partira
+   * dans dix ans lui promettrait une rente qu'il ne touchera pas.
+   *
+   * `null` quand le règlement ne donne qu'un barème unique.
+   */
+  anneeDepart?: number | null;
+  /**
+   * Régime concerné. Un plan « enveloppant » couvre les deux ; sinon la caisse
+   * distingue la part obligatoire de la surobligatoire, et le taux applicable
+   * dépend de la répartition de l'avoir — que seul le certificat connaît.
+   */
+  regime?: "obligatoire" | "surobligatoire" | "enveloppant" | null;
+}
+
+export interface RegleRetraite extends RegleCitee {
+  ageReference: number | null;
+  tauxConversion: TauxConversion[];
+  tauxInteretProjection: number | null;
+  anticipationDesAge: number | null;
+}
+
 export interface BlocRegles {
+  retraite: RegleRetraite | null;
   capitalDeces: RegleCapitalDeces | null;
   capitalDecesSupplementaire: (RegleCitee & { pourcentageSalaire: number | null; conditions: string | null }) | null;
   rentePartenaire: ReglePourcentage | null;

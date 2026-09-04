@@ -8,6 +8,7 @@ import type { BlocRegles } from "./reglement";
 
 /** Règle réelle du règlement Aevum (art. 63) : capital dû À DÉFAUT de rente. */
 const AEVUM_CONDITIONNEL: BlocRegles = {
+  retraite: null,
   capitalDeces: {
     verse: "SI_AUCUNE_RENTE_PARTENAIRE", base: "capital de prévoyance",
     limiteHeritiersLegaux: 0.5, avantRetraiteUniquement: null,
