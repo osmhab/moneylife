@@ -129,3 +129,59 @@ export async function analyserDocument(
   }
   return { texte: await viaGemini(prompt, fichiers, choix.modele), ...choix, replied: false };
 }
+
+/* =========================================================
+ * Identification préalable — la passe bon marché
+ * =======================================================*/
+
+/**
+ * Quelle caisse, quel millésime ? Rien d'autre.
+ *
+ * POURQUOI UNE PREMIÈRE PASSE
+ * Analyser un règlement de cinquante pages coûte ~40 000 jetons de raisonnement.
+ * Le faire pour découvrir ensuite qu'on possédait déjà ce document, c'est payer
+ * pour rien — et prendre le risque qu'une lecture légèrement différente écrase
+ * une version déjà vérifiée.
+ *
+ * Cette passe ne lit que l'en-tête : on la confie à Gemini Flash, rapide et bon
+ * marché, quel que soit le moteur choisi pour l'analyse de fond. Reconnaître un
+ * nom et une date ne demande pas de raisonnement juridique.
+ */
+export async function identifierReglement(
+  fichiers: FichierIA[],
+): Promise<{ caisse: string | null; enVigueurAu: string | null; estUnReglement: boolean }> {
+  const prompt = `Ce document est-il un RÈGLEMENT DE PRÉVOYANCE d'une caisse de pension suisse
+(2e pilier) ? Ne lis que l'en-tête et la page de titre, rien d'autre.
+
+Un règlement énonce des RÈGLES pour tous les assurés d'une caisse. Un certificat
+de prévoyance, lui, est personnel : il porte un nom, une date de naissance et des
+montants propres à une personne. Ce n'est PAS un règlement.
+
+Réponds en JSON : {"estUnReglement":boolean,"caisse":string|null,"enVigueurAu":string|null}
+"caisse" = le nom de l'institution tel qu'imprimé. "enVigueurAu" = la date
+d'entrée en vigueur, telle qu'écrite.`;
+
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }, ...fichiers.map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.base64 } }))],
+        }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0 },
+      }),
+    },
+  );
+  if (!r.ok) throw new Error(`identification HTTP ${r.status}`);
+  const texte = (await r.json())?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const d = JSON.parse(texte);
+  return {
+    caisse: (d?.caisse ?? null) || null,
+    enVigueurAu: (d?.enVigueurAu ?? null) || null,
+    // Absence de réponse = on N'ÉCARTE PAS le document : mieux vaut une analyse
+    // de trop qu'un règlement valable refusé au client qui vient de le scanner.
+    estUnReglement: d?.estUnReglement !== false,
+  };
+}

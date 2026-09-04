@@ -39,8 +39,8 @@ function cles(nom) {
 }
 
 /** Le prompt RÉEL de production : on note ce qui tourne, pas une variante. */
-const src = fs.readFileSync("app/api/lpp/reglement/route.ts", "utf8");
-const PROMPT = src.slice(src.indexOf("Tu analyses le RÈGLEMENT"), src.indexOf("}`;\n\n/** Bloc vide"));
+const src = fs.readFileSync("app/lib/server/promptReglement.ts", "utf8");
+const PROMPT = src.slice(src.indexOf("Tu analyses le RÈGLEMENT"), src.indexOf("}`;"));
 
 /**
  * JEU D'ÉPREUVE — plusieurs règlements, aux structures volontairement

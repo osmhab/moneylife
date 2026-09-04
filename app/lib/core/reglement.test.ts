@@ -3,6 +3,7 @@ import {
   normaliserCaisse, memeCaisse, cleReglement,
   blocApplicable, trouverAnnexe, caseCapitalDeces, estSourcee,
   appliquerCapitalDeces, montantCertificatCapitalDeces, certificatDistingueDeuxCapitaux,
+  dateEnVigueur, estPlusRecent,
   type Reglement, type BlocRegles,
 } from "./reglement";
 
@@ -279,5 +280,50 @@ describe("retrouver le montant du certificat", () => {
 
   it("rend null quand le certificat ne porte aucun capital", () => {
     expect(montantCertificatCapitalDeces({})).toBeNull();
+  });
+});
+
+describe("millésimes", () => {
+  it("lit les formats numériques", () => {
+    expect(dateEnVigueur("01.01.2026")).toBe(20260101);
+    expect(dateEnVigueur("2026-07-15")).toBe(20260715);
+  });
+
+  it("lit les mois en toutes lettres, dans les trois langues", () => {
+    expect(dateEnVigueur("1er janvier 2026")).toBe(20260101);
+    expect(dateEnVigueur("1. Januar 2026")).toBe(20260101);
+    expect(dateEnVigueur("1° gennaio 2026")).toBe(20260101);
+  });
+
+  it("retombe sur l'année seule quand le mois est illisible", () => {
+    expect(dateEnVigueur("en vigueur en 2026")).toBe(20260101);
+    expect(dateEnVigueur("sans date")).toBeNull();
+  });
+
+  it("compare des formes différentes de la MÊME date", () => {
+    // L'IA rend « 01.01.2026 » un jour, « 1er janvier 2026 » le lendemain :
+    // une comparaison de chaînes conclurait à tort à une nouvelle version.
+    expect(estPlusRecent("1er janvier 2026", "01.01.2026")).toBe(false);
+    expect(estPlusRecent("01.01.2026", "1er janvier 2026")).toBe(false);
+  });
+
+  it("remplace sur une version réellement plus récente", () => {
+    expect(estPlusRecent("01.01.2027", "01.01.2026")).toBe(true);
+    expect(estPlusRecent("01.07.2026", "01.01.2026")).toBe(true);
+  });
+
+  it("garde l'existant à date égale ou antérieure", () => {
+    expect(estPlusRecent("01.01.2025", "01.01.2026")).toBe(false);
+    expect(estPlusRecent("01.01.2026", "01.01.2026")).toBe(false);
+  });
+
+  it("ne remplace JAMAIS sur une date illisible", () => {
+    // Sinon un document mal daté écraserait une version vérifiée.
+    expect(estPlusRecent(null, "01.01.2026")).toBe(false);
+    expect(estPlusRecent("sans date", "01.01.2026")).toBe(false);
+  });
+
+  it("accepte un premier règlement quand rien n'est connu", () => {
+    expect(estPlusRecent("01.01.2026", null)).toBe(true);
   });
 });

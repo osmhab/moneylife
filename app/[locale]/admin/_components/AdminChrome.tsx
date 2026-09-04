@@ -24,8 +24,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
-  UserRound,
-} from "lucide-react";
+  UserRound, BookOpen,} from "lucide-react";
 import { AdminSubnavProvider, useAdminSubnavState } from "./adminSubnav";
 
 type NavItem = {
@@ -41,6 +40,7 @@ const NAV: NavItem[] = [
   { href: "/admin/offres-wizard", label: "Offres-Wizard", icon: LayoutDashboard },
   { href: "/admin/leads", label: "Leads & rappels", icon: PhoneCall },
   { href: "/admin/parrainage", label: "Parrainage", icon: Gift },
+  { href: "/admin/reglements", label: "Règlements de caisse", icon: BookOpen },
   { href: "/admin/3a-simulator", label: "Simulateur 3a", icon: Calculator },
   { href: "/admin/learner-3a", label: "Learner 3a", icon: LineChart },
   { href: "/admin/recrutement", label: "Recrutement", icon: Briefcase },

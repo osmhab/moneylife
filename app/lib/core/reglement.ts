@@ -396,3 +396,66 @@ export function montantCertificatCapitalDeces(data: Record<string, unknown>): nu
   }
   return null;
 }
+
+/* =========================================================
+ * 6. Millésimes : lequel est le plus récent ?
+ * =======================================================*/
+
+const MOIS: Record<string, number> = {
+  janvier: 1, février: 2, fevrier: 2, mars: 3, avril: 4, mai: 5, juin: 6,
+  juillet: 7, août: 8, aout: 8, septembre: 9, octobre: 10, novembre: 11, décembre: 12, decembre: 12,
+  januar: 1, februar: 2, märz: 3, maerz: 3, april: 4, juni: 6, juli: 7, august: 8,
+  oktober: 10, dezember: 12,
+  gennaio: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, giugno: 6, luglio: 7,
+  agosto: 8, settembre: 9, ottobre: 10, novembre_it: 11, dicembre: 12,
+};
+
+/**
+ * Date d'entrée en vigueur, en nombre comparable (AAAAMMJJ).
+ *
+ * L'IA rend la même date sous des formes très différentes d'un passage à
+ * l'autre — « 01.01.2026 », « 1er janvier 2026 », « 2026-01-01 ». Comparer des
+ * chaînes ferait passer « 1er janvier » pour plus ancien que « 01.12 ».
+ *
+ * Faute de mois lisible, on retombe sur le 1er janvier : deux règlements de la
+ * même année sont alors réputés équivalents, ce qui évite de remplacer un
+ * document par un autre sur une différence qu'on n'a pas su lire.
+ */
+export function dateEnVigueur(texte?: string | null): number | null {
+  const t = (texte || "").toLowerCase().trim();
+  if (!t) return null;
+
+  const annee = Number(t.match(/\b((?:19|20)\d{2})\b/)?.[1]);
+  if (!annee) return null;
+
+  // Formats numériques : 01.01.2026, 1/1/2026, 2026-01-01
+  const iso = t.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (iso) return Number(iso[1]) * 10000 + Number(iso[2]) * 100 + Number(iso[3]);
+  const jma = t.match(/\b(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})\b/);
+  if (jma) return Number(jma[3]) * 10000 + Number(jma[2]) * 100 + Number(jma[1]);
+
+  // Formats en toutes lettres : « 1er janvier 2026 », « 1. Januar 2026 »
+  for (const [nom, num] of Object.entries(MOIS)) {
+    const cle = nom.replace(/_it$/, "");
+    if (t.includes(cle)) {
+      const jour = Number(t.match(/\b(\d{1,2})(?:er|\.)?\s+\w*$/)?.[1] ?? t.match(/\b(\d{1,2})\b/)?.[1] ?? 1);
+      return annee * 10000 + num * 100 + (jour >= 1 && jour <= 31 ? jour : 1);
+    }
+  }
+  return annee * 10000 + 101;
+}
+
+/**
+ * Le candidat remplace-t-il le règlement déjà connu ?
+ *
+ * STRICTEMENT plus récent : à date égale, on garde l'existant. Réanalyser un
+ * document identique coûterait une analyse pour rien, et ferait courir le
+ * risque qu'une lecture légèrement différente écrase une version déjà vérifiée.
+ */
+export function estPlusRecent(candidat?: string | null, connu?: string | null): boolean {
+  const a = dateEnVigueur(candidat);
+  const b = dateEnVigueur(connu);
+  if (a == null) return false;      // on ne remplace jamais sur une date illisible
+  if (b == null) return true;
+  return a > b;
+}
