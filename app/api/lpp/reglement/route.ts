@@ -29,6 +29,7 @@ import { MULTILINGUAL_PREAMBLE } from "app/lib/core/multilingual";
 import { cleReglement, type Reglement } from "app/lib/core/reglement";
 import { qualifierPlans } from "app/lib/server/appliquerReglement";
 import { envoyerPush } from "app/lib/server/push";
+import { analyserDocument, type FichierIA } from "app/lib/server/analyseIA";
 
 export const maxDuration = 300;   // 53 pages à analyser : bien au-delà du défaut
 
@@ -61,6 +62,17 @@ Le même montant peut être dû dans des cas très différents. Distingue :
 - "NON_PREVU" : le règlement ne prévoit pas de capital décès
 Attention : l'article qui fixe le MONTANT et celui qui pose la CONDITION sont
 souvent distincts. Lis les deux avant de conclure.
+
+NE CONFONDS JAMAIS deux capitaux voisins :
+- "capitalDeces" = le capital décès PRINCIPAL, en règle générale égal au capital
+  de prévoyance ou à l'avoir de vieillesse ;
+- "capitalDecesSupplementaire" = un capital EN SUS, typiquement exprimé en % du
+  salaire assuré, souvent réservé aux enfants ou barémé par âge.
+Un article intitulé « capital décès supplémentaire » ne va JAMAIS dans
+"capitalDeces", même si c'est le seul capital que l'annexe mentionne. Cherche
+d'abord l'article du capital principal ; s'il n'existe pas dans l'annexe, laisse
+"capitalDeces" à null — la partie générale s'appliquera. Se tromper de case fait
+refuser à un assuré un capital qui lui est dû.
 
 LE PARTENAIRE NON MARIÉ
 "dureeViecommuneAns" = le nombre d'années de MÉNAGE COMMUN exigées d'un
@@ -122,7 +134,7 @@ export async function POST(req: NextRequest) {
     // DEUX FORMES D'ENVOI, parce que les deux appelants diffèrent :
     //  · l'app iOS poste les pages en multipart (comme /api/lpp/parse-image) ;
     //  · l'outil conseiller passe des chemins Storage déjà téléversés.
-    let parts: { inlineData: { mimeType: string; data: string } }[] = [];
+    let fichiers: FichierIA[] = [];
     let clientUid = uid;
     // Adresse du PDF déjà rangé dans le coffre-fort par l'app. Posée sur les
     // plans concernés pour que leur fiche rouvre le règlement directement.
@@ -145,11 +157,9 @@ export async function POST(req: NextRequest) {
       // l'appelant se retrouverait affiché au client, donc jamais n'importe lequel.
       if (/^https:\/\/(firebasestorage\.googleapis\.com|storage\.googleapis\.com)\//.test(url)) pdfUrl = url;
 
-      parts = await Promise.all(files.map(async (f) => ({
-        inlineData: {
-          mimeType: f.type || "application/pdf",
-          data: Buffer.from(await f.arrayBuffer()).toString("base64"),
-        },
+      fichiers = await Promise.all(files.map(async (f) => ({
+        mimeType: f.type || "application/pdf",
+        base64: Buffer.from(await f.arrayBuffer()).toString("base64"),
       })));
     } else {
       const { allPaths } = await req.json().catch(() => ({}));
@@ -163,33 +173,20 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
       }
 
-      parts = await Promise.all(paths.map(async (p) => {
+      fichiers = await Promise.all(paths.map(async (p) => {
         const [buffer] = await bucket.file(p).download();
         const ext = p.split(".").pop()?.toLowerCase();
         const mimeType = ext === "pdf" ? "application/pdf" : `image/${ext === "jpg" ? "jpeg" : ext}`;
-        return { inlineData: { mimeType, data: buffer.toString("base64") } };
+        return { mimeType, base64: buffer.toString("base64") };
       }));
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: "Analyse indisponible" }, { status: 503 });
-
-    const rep = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: PROMPT }, ...parts] }],
-          // temperature 0 : sur un texte juridique, on veut la même lecture à
-          // chaque passage — deux analyses divergentes seraient indéfendables.
-          generationConfig: { responseMimeType: "application/json", temperature: 0 },
-        }),
-      },
-    );
-    if (!rep.ok) return NextResponse.json({ error: "L'analyse a échoué" }, { status: 502 });
-
-    const brut = (await rep.json())?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    // Aiguillage réglable par `REGLEMENT_IA` (cf. analyseIA.ts) : le scan de
+    // certificat reste sur Gemini Flash, mais la LECTURE JURIDIQUE d'un
+    // règlement peut être confiée à un autre moteur sans toucher au code.
+    const reponse = await analyserDocument(PROMPT, fichiers);
+    if (reponse.replied) console.warn("[reglement] repli sur Gemini");
+    const brut = reponse.texte;
     let extrait: {
       caisse?: { nom?: string; enVigueurAu?: string | null; langue?: string | null };
       plansDetectes?: string[];
