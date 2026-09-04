@@ -227,10 +227,14 @@ describe("certificat qui distingue déjà deux capitaux", () => {
     })).toBe(true);
   });
 
-  it("ne le voit pas quand c'est le même montant recopié", () => {
+  it("le détecte AUSSI quand les deux montants sont égaux", () => {
+    // Cas réel du certificat AXA du 30.04.2026 : les deux scénarios valent
+    // 432'000. En n'intervenant que sur des montants divergents, la première
+    // version a laissé mettre à zéro le scénario « aucune rente » — un
+    // célibataire y perdait toute sa couverture décès.
     expect(certificatDistingueDeuxCapitaux({
       Enter_CapitalPlusRenteMal: 432000, Enter_CapitalAucuneRenteMal: 432000,
-    })).toBe(false);
+    })).toBe(true);
   });
 
   it("ne le voit pas quand une seule case est remplie", () => {
@@ -244,7 +248,10 @@ describe("certificat qui distingue déjà deux capitaux", () => {
     const donnees = { Enter_CapitalPlusRenteMal: 100000, Enter_CapitalAucuneRenteMal: 432000 };
     const r = appliquerCapitalDeces(100000, blocApplicable(AEVUM, "Plan B"), donnees);
     expect(r.patch).toEqual({});
-    expect(r.automatique).toBe(false);
+    // Le plan reste VÉRIFIÉ : le règlement a été lu, il n'y avait rien à
+    // reclasser. Le marquer « non vérifié » pousserait le client vers un
+    // Contrôle Expert payant sans objet.
+    expect(r.automatique).toBe(true);
     expect(r.notes[0]).toContain("conservés");
   });
 });

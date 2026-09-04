@@ -260,10 +260,14 @@ export function appliquerCapitalDeces(
   const notes: string[] = [];
 
   if (data && certificatDistingueDeuxCapitaux(data)) {
+    // `automatique: true` et non `false` : le règlement A ÉTÉ lu et appliqué,
+    // il n'y avait simplement rien à reclasser. Rien à corriger n'est pas la
+    // même chose que non vérifié — annoncer « non vérifié » ici pousserait le
+    // client vers un Contrôle Expert payant dont il n'a aucun besoin.
     return {
       patch: {},
-      notes: ["Le certificat distingue déjà deux capitaux décès : montants conservés tels quels."],
-      automatique: false,
+      notes: ["Le certificat renseigne les deux scénarios de capital décès : montants conservés tels quels."],
+      automatique: true,
     };
   }
 
@@ -349,13 +353,23 @@ export const STATUT_REGLEMENT_DEFAUT: StatutReglement = "NON_VERIFIE";
  * conditionnel, et fausserait une parité conseiller/client déjà auditée.
  */
 /**
- * Le certificat distingue-t-il DÉJÀ deux capitaux décès conditionnels ?
+ * Le certificat renseigne-t-il DÉJÀ les deux scénarios de capital décès ?
  *
- * Certains certificats (AXA 2026) portent plusieurs capitaux distincts : un dû
- * en plus de la rente, un autre dû seulement à défaut de rente. Quand les deux
- * sont renseignés et différents, le document a déjà tranché — mieux que nous.
- * Reclasser reviendrait alors à en écraser un, c'est-à-dire à faire disparaître
- * une couverture réelle. Dans ce cas on ne touche à rien.
+ * Un certificat AXA 2026 énonce explicitement les deux cas :
+ *
+ *     Capital au décès en complément de la rente de partenaire   432'000
+ *     Capital au décès si aucune rente de partenaire n'est due    432'000
+ *
+ * Ce ne sont pas deux capitaux cumulables mais deux SCÉNARIOS, et le moteur
+ * choisit lequel s'applique selon la situation de l'assuré. Le document a donc
+ * déjà répondu à la question que le règlement sert à trancher : il n'y a rien
+ * à reclasser.
+ *
+ * ⚠️ La condition porte sur la PRÉSENCE des deux valeurs, pas sur leur
+ * différence. Une première version n'intervenait que si elles divergeaient —
+ * elle a laissé mettre à zéro le scénario « aucune rente » d'un certificat
+ * réel où les deux valaient 432'000. Un célibataire y perdait toute sa
+ * couverture décès dans le seul scénario qui le concerne.
  */
 export function certificatDistingueDeuxCapitaux(data: Record<string, unknown>): boolean {
   const lire = (c: string) => {
@@ -365,7 +379,7 @@ export function certificatDistingueDeuxCapitaux(data: Record<string, unknown>): 
   };
   const plus = lire("Enter_CapitalPlusRenteMal") ?? lire("Enter_CapitalPlusRente");
   const aucune = lire("Enter_CapitalAucuneRenteMal") ?? lire("Enter_CapitalAucuneRente");
-  return plus != null && aucune != null && plus !== aucune;
+  return plus != null && aucune != null;
 }
 
 export function montantCertificatCapitalDeces(data: Record<string, unknown>): number | null {
