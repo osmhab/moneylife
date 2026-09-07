@@ -13,7 +13,7 @@ import {
 } from "./reglement";
 
 const BLOC_VIDE = {
-  retraite: null,
+  retraitCapital: null,
   capitalDeces: null, capitalDecesSupplementaire: null,
   rentePartenaire: null, renteInvalidite: null, renteOrphelin: null,
 };

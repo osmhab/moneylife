@@ -38,29 +38,26 @@ Le même montant peut être dû dans des cas très différents. Distingue :
 Attention : l'article qui fixe le MONTANT et celui qui pose la CONDITION sont
 souvent distincts. Lis les deux avant de conclure.
 
-LA RETRAITE
-"tauxConversion" : le barème qui transforme l'avoir de vieillesse en rente
-annuelle. Rends chaque taux en FRACTION, pas en pourcentage : 6,4 % s'écrit
-0.064. C'est le chiffre le plus structurant du règlement — il décide de la rente
-de tous les assurés de la caisse.
+LE RETRAIT EN CAPITAL À LA RETRAITE
+N'extrais AUCUN montant ni taux de conversion : les chiffres viennent du
+certificat de l'assuré, qui fait foi. Ce que le règlement seul indique, c'est la
+PART de l'avoir qui peut être perçue en CAPITAL plutôt qu'en rente.
 
-⚠️ Ce barème est SOUVENT À PLUSIEURS ENTRÉES, et il faut toutes les rendre :
-- par ÂGE de départ (58 à 70 ans) ;
-- par ANNÉE de départ à la retraite ("anneeDepart") — beaucoup de caisses
-  baissent leur taux d'année en année. Une mention « à partir de 2029 » se rend
-  avec anneeDepart = 2029 ;
-- par RÉGIME ("regime") — obligatoire, surobligatoire, ou enveloppant quand un
-  seul barème couvre les deux.
-Produis UNE LIGNE PAR COMBINAISON. N'en choisis surtout pas une seule : le taux
-applicable dépend de l'assuré, et retenir le mauvais promettrait une rente qu'il
-ne touchera jamais. Laisse anneeDepart ou regime à null uniquement lorsque le
-règlement ne fait pas la distinction.
-"ageReference" : l'âge de la retraite ordinaire (65, parfois 64).
-"tauxInteretProjection" : le taux servant à projeter l'avoir jusqu'à la retraite,
-souvent le taux minimal LPP. En fraction également (1,25 % → 0.0125).
-"anticipationDesAge" : l'âge à partir duquel une retraite anticipée est possible.
-Si un de ces éléments ne figure pas dans le document, mets null : une valeur
-inventée fausserait la rente projetée de chaque assuré de la caisse.
+"partMaxPct" : ce plafond, en pourcents (25, 50, 100). Beaucoup de caisses
+limitent à 25 % ou 50 % ; certaines autorisent la totalité. Si le règlement
+n'énonce aucune limite mais permet explicitement le capital intégral, mets 100.
+S'il ne dit rien du tout, mets null — ne suppose pas.
+"delaiAnnonceMois" : le préavis exigé avant la retraite (souvent 36 mois).
+"consentementConjoint" : true si l'accord écrit du conjoint est requis.
+"anticipationDesAge" : l'âge minimal d'une retraite anticipée.
+"blocageApresRachatAns" : le nombre d'années pendant lesquelles un RACHAT
+interdit de percevoir les prestations correspondantes en capital (art. 79b LPP,
+généralement 3). Cette règle change un conseil : elle doit être connue AVANT le
+rachat, pas découverte au moment de la retraite.
+
+Ce plafond décide de ce qu'un client peut réellement planifier : le déclarer à
+100 % dans une caisse qui limite à 25 % l'amènerait à bâtir un projet sur un
+capital qu'il n'obtiendra jamais.
 
 NE CONFONDS JAMAIS deux capitaux voisins :
 - "capitalDeces" = le capital décès PRINCIPAL, en règle générale égal au capital
@@ -110,10 +107,9 @@ Réponds en JSON strict :
  "annexes": [{"nom":string,"numero":string|null,"sappliqueA":string,"surcharges":BLOC}]
 }
 BLOC = {
- "retraite": {"ageReference":number|null,
-   "tauxConversion":[{"age":number,"taux":number,"anneeDepart":number|null,
-                      "regime":"obligatoire"|"surobligatoire"|"enveloppant"|null}],
-   "tauxInteretProjection":number|null,"anticipationDesAge":number|null,
+ "retraitCapital": {"partMaxPct":number|null,"delaiAnnonceMois":number|null,
+   "consentementConjoint":boolean|null,"anticipationDesAge":number|null,
+   "blocageApresRachatAns":number|null,
    "article":string|null,"citation":string|null},
  "capitalDeces": {"verse":"TOUJOURS"|"SI_AUCUNE_RENTE_PARTENAIRE"|"REDUIT_DU_FINANCEMENT_RENTE"|"NON_PREVU"|null,
    "base":string|null,"limiteHeritiersLegaux":number|null,
@@ -126,7 +122,7 @@ BLOC = {
 
 /** Bloc vide : une clé absente de la réponse ne doit pas faire tomber la route. */
 export const BLOC_VIDE = {
-  retraite: null,
+  retraitCapital: null,
   capitalDeces: null, capitalDecesSupplementaire: null,
   rentePartenaire: null, renteInvalidite: null, renteOrphelin: null,
 };

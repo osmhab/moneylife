@@ -82,38 +82,40 @@ export interface ReglePourcentage extends RegleCitee {
  * Les taux sont des FRACTIONS (0.064), jamais des pourcentages : mélanger les
  * deux donnerait une rente cent fois trop élevée.
  */
-export interface TauxConversion {
-  age: number;
-  /** Fraction (0.063), jamais un pourcentage. */
-  taux: number;
-  /**
-   * Année de départ à la retraite à laquelle ce taux s'applique.
-   *
-   * Beaucoup de caisses baissent leur taux d'année en année : chez AXA, 6,300 %
-   * pour un départ en 2026 contre 5,600 % dès 2029 — onze pour cent d'écart sur
-   * la rente. Appliquer le taux du millésime courant à quelqu'un qui partira
-   * dans dix ans lui promettrait une rente qu'il ne touchera pas.
-   *
-   * `null` quand le règlement ne donne qu'un barème unique.
-   */
-  anneeDepart?: number | null;
-  /**
-   * Régime concerné. Un plan « enveloppant » couvre les deux ; sinon la caisse
-   * distingue la part obligatoire de la surobligatoire, et le taux applicable
-   * dépend de la répartition de l'avoir — que seul le certificat connaît.
-   */
-  regime?: "obligatoire" | "surobligatoire" | "enveloppant" | null;
-}
-
-export interface RegleRetraite extends RegleCitee {
-  ageReference: number | null;
-  tauxConversion: TauxConversion[];
-  tauxInteretProjection: number | null;
+/**
+ * Le RETRAIT EN CAPITAL à la retraite.
+ *
+ * Les montants — capital projeté, rentes — viennent du certificat, qui fait foi.
+ * Le règlement, lui, dit une chose que le certificat n'indique jamais : quelle
+ * PART de l'avoir peut être prise en capital plutôt qu'en rente.
+ *
+ * C'est décisif pour le conseil. L'app laisse le client arbitrer, capital par
+ * capital, la part qu'il destine à la retraite (0 à 100 %). Chez une caisse
+ * plafonnée à 25 %, lui laisser planifier sur 100 % revient à bâtir un projet
+ * sur un capital qu'il n'obtiendra jamais.
+ */
+export interface RegleRetraitCapital extends RegleCitee {
+  /** Part maximale prenable en capital, en POURCENTS (25, 50, 100). */
+  partMaxPct: number | null;
+  /** Préavis exigé avant la retraite, en mois (souvent 36). */
+  delaiAnnonceMois: number | null;
+  /** Le conjoint doit-il consentir par écrit ? */
+  consentementConjoint: boolean | null;
+  /** Âge à partir duquel une retraite anticipée est possible. */
   anticipationDesAge: number | null;
+  /**
+   * Années pendant lesquelles un RACHAT ferme l'accès au capital (art. 79b LPP,
+   * trois ans en règle générale).
+   *
+   * Un client qui rachète pour optimiser sa fiscalité, puis demande son capital
+   * dans la foulée, se le voit refuser. C'est un conseil qu'on doit pouvoir lui
+   * donner AVANT le rachat, pas après.
+   */
+  blocageApresRachatAns: number | null;
 }
 
 export interface BlocRegles {
-  retraite: RegleRetraite | null;
+  retraitCapital: RegleRetraitCapital | null;
   capitalDeces: RegleCapitalDeces | null;
   capitalDecesSupplementaire: (RegleCitee & { pourcentageSalaire: number | null; conditions: string | null }) | null;
   rentePartenaire: ReglePourcentage | null;

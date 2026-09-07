@@ -21,8 +21,8 @@ import {
   type Reglement, type BlocRegles,
 } from "app/lib/core/reglement";
 import { evaluerPrestationsLPP, type SituationClient } from "app/lib/core/eligibilite";
-import { completerRetraite } from "app/lib/core/retraite";
 import { doitAlerterClause, nomPartenaire, type ClauseBeneficiaire } from "app/lib/core/concubinage";
+import { contrainteRetrait } from "app/lib/core/retraitCapital";
 import { notifyClient } from "app/lib/server/notify";
 
 const TYPES_CAISSE = ["LPP_BASE", "LPP_COMPL", "LPP"];
@@ -157,16 +157,14 @@ export async function qualifierPlans(
       ? appliquerCapitalDeces(montantCertificatCapitalDeces(data), bloc, data)
       : { patch: {} as Record<string, number | null>, notes: [] as string[], automatique: false };
 
-    // La RETRAITE, que tout assuré touchera : on comble les rentes que le
-    // certificat n'imprime pas, et on signale — sans corriger — les écarts avec
-    // le taux de conversion du règlement.
-    const retraite = completerRetraite(data, bloc);
+    // Quelle PART de l'avoir peut être prise en capital : le certificat ne le
+    // dit jamais, et c'est ce qui borne le curseur « part utilisée pour la
+    // retraite » de l'app.
+    const retrait = contrainteRetrait(bloc);
 
-    const patch: Record<string, number | null> = { ...deces.patch, ...retraite.patch };
-    const notes = [...deces.notes, ...retraite.notes];
-    // Un seul point à confirmer suffit à retenir le « vérifié » : mieux vaut ne
-    // rien annoncer qu'annoncer à tort.
-    const automatique = deces.automatique && retraite.automatique;
+    const patch: Record<string, number | null> = { ...deces.patch };
+    const notes = [...deces.notes, ...retrait.notes];
+    const automatique = deces.automatique;
     const prestations = evaluerPrestationsLPP(situation, bloc);
     if (bloc) dernierBloc = bloc;
     if (plan.institutionName) caisses.push(String(plan.institutionName));
@@ -184,6 +182,9 @@ export async function qualifierPlans(
       maj["metadata.reglementCaisse"] = reglement.caisse;
       maj["metadata.reglementNotes"] = notes;
     }
+    // Lu par l'app pour borner le curseur d'allocation retraite. `null` =
+    // règlement muet : on ne borne rien plutôt que de restreindre à tort.
+    maj["metadata.retraitCapitalMaxPct"] = retrait.partMaxPct;
     if (options.pdfUrl) maj["metadata.reglementUrl"] = options.pdfUrl;
     for (const [k, v] of Object.entries(patch)) maj[`data.${k}`] = v;
 
