@@ -58,3 +58,63 @@ describe("Détail des rentes (scénarios par enfant, 1er & 2e pilier)", () => {
     console.log("Décès 2 enfants:", JSON.stringify(d.deces[2]));
   });
 });
+
+describe("Plafond de surindemnisation", () => {
+  /**
+   * Caisse GÉNÉREUSE — 60 % du salaire en rente d'invalidité, 20 % par enfant.
+   *
+   * C'est la seule configuration où le plafond mord : avec le plan LPP MINIMUM,
+   * le cumul reste sous 90 % du revenu et la règle ne change rien. Une première
+   * version de ce test utilisait ce plan minimum et passait sans jamais
+   * exercer la réduction — elle ne prouvait rien.
+   */
+  const construireClient = (plafond: number | null) => ({
+    Enter_dateNaissance: "15.06.1985",
+    Enter_salaireAnnuel: 90000,
+    Enter_salaireAssureLPP: 90000,
+    Enter_etatCivil: 1,
+    Enter_Affilie_LPP: true,
+    Enter_spouseSexe: 1,
+    Enter_spouseDateNaissance: "10.10.1987",
+    Enter_enfants: [{ Enter_dateNaissance: "01.01.2016" }, { Enter_dateNaissance: "01.01.2019" }],
+    Enter_renteInvaliditeMaladie: 54000,
+    Enter_renteEnfantInvalideMaladie: 10800,
+    Enter_renteConjointLPP: 54000,
+    Enter_renteOrphelinLPP: 10800,
+    ...(plafond == null ? {} : { Enter_surindemnisationPlafond: plafond }),
+  }) as any;
+
+  const au = new Date("2025-06-01");
+  const PLAFOND_MENSUEL = Math.round((90000 * 0.9) / 12);   // 6'750
+
+  it("ne rabote rien tant qu'aucun règlement n'a posé de plafond", () => {
+    const sans = computeDetailRentes(construireClient(null), legal, echelle44, au);
+    expect(sans.invalidite.every((s) => (s.reductionSurindemnisation ?? 0) === 0)).toBe(true);
+  });
+
+  it("rabote réellement la part LPP au-delà du plafond", () => {
+    const sans = computeDetailRentes(construireClient(null), legal, echelle44, au);
+    const avec = computeDetailRentes(construireClient(0.9), legal, echelle44, au);
+    const iSans = sans.invalidite[sans.invalidite.length - 1];
+    const iAvec = avec.invalidite[avec.invalidite.length - 1];
+
+    // Le cas DOIT dépasser, sinon le test ne prouve rien.
+    expect(iSans.total).toBeGreaterThan(PLAFOND_MENSUEL);
+
+    expect(iAvec.reductionSurindemnisation).toBeGreaterThan(0);
+    expect(iAvec.total).toBeLessThanOrEqual(PLAFOND_MENSUEL);
+    // L'AVS/AI n'est jamais touchée : la caisse ne peut réduire que sa rente.
+    expect(iAvec.adulte.avs).toBe(iSans.adulte.avs);
+    expect(iAvec.parEnfant.avs).toBe(iSans.parEnfant.avs);
+    expect(iAvec.adulte.lpp).toBeLessThan(iSans.adulte.lpp);
+  });
+
+  it("s'applique aussi aux rentes de SURVIVANTS (AXA, chiffre 73.1)", () => {
+    const sans = computeDetailRentes(construireClient(null), legal, echelle44, au);
+    const avec = computeDetailRentes(construireClient(0.9), legal, echelle44, au);
+    const dSans = sans.deces[sans.deces.length - 1];
+    const dAvec = avec.deces[avec.deces.length - 1];
+    expect(dSans.total).toBeGreaterThan(PLAFOND_MENSUEL);
+    expect(dAvec.total).toBeLessThanOrEqual(PLAFOND_MENSUEL);
+  });
+});

@@ -197,8 +197,12 @@ export async function qualifierPlans(
     // Lu par l'app pour borner le curseur d'allocation retraite. `null` =
     // règlement muet : on ne borne rien plutôt que de restreindre à tort.
     maj["metadata.retraitCapitalMaxPct"] = retrait.partMaxPct;
-    // Fraction (0.9), lue par le moteur d'analyse. `null` = règlement muet.
+    // Fraction (0.9). Écrite DANS `data` et non seulement dans `metadata` : le
+    // moteur d'analyse reçoit les champs `data` du plan fusionnés au client,
+    // jamais les métadonnées. Sans cela, la règle serait extraite, stockée, et
+    // sans effet sur le moindre chiffre.
     maj["metadata.surindemnisationPlafond"] = plafondSur;
+    maj["data.Enter_surindemnisationPlafond"] = plafondSur;
     if (options.pdfUrl) maj["metadata.reglementUrl"] = options.pdfUrl;
     for (const [k, v] of Object.entries(patch)) maj[`data.${k}`] = v;
 

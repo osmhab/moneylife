@@ -12,6 +12,7 @@
 
 import { computeDecesMaladie } from "@/lib/calculs/events/decesMaladie";
 import { computeInvaliditeMaladie } from "@/lib/calculs/events/invaliditeMaladie";
+import { reduireScenario } from "@/lib/core/surindemnisation";
 
 const m12 = (annual: any) => Math.round((Number(annual) || 0) / 12);
 
@@ -21,6 +22,8 @@ export type RenteScenario = {
   parEnfant: { avs: number; lpp: number };
   nbEnfants: number;
   total: number;
+  /** Part LPP retranchée par le plafond de surindemnisation (0 si aucune). */
+  reductionSurindemnisation?: number;
 };
 
 export type DetailRentes = {
@@ -50,7 +53,9 @@ function withNChildren(client: any, n: number, currentYear: number) {
   return { ...client, Enter_enfants: kids };
 }
 
-function decesScenario(client: any, legal: any, echelle44: any, now: Date, n: number): RenteScenario {
+function decesScenario(
+  client: any, legal: any, echelle44: any, now: Date, n: number, plafond: number | null,
+): RenteScenario {
   const c = withNChildren(client, n, now.getFullYear());
   const r = computeDecesMaladie(now, c, legal, echelle44, { paymentRef: now });
   const avs = r.meta.breakdown.avs;
@@ -58,10 +63,14 @@ function decesScenario(client: any, legal: any, echelle44: any, now: Date, n: nu
   const adulte = { avs: Math.round(avs.widowMonthly || 0), lpp: m12(lpp.spouseOrPartnerAnnual) };
   const parEnfant = { avs: Math.round(avs.orphanMonthlyPerChild || 0), lpp: m12(lpp.perChildAnnual) };
   const total = adulte.avs + adulte.lpp + n * (parEnfant.avs + parEnfant.lpp);
-  return { adulte, parEnfant, nbEnfants: n, total };
+  // Le règlement rabote les rentes de SURVIVANTS aussi, pas seulement
+  // l'invalidité (AXA, chiffre 73.1).
+  return reduireScenario({ adulte, parEnfant, nbEnfants: n, total }, plafond);
 }
 
-function invaliditeScenario(client: any, legal: any, echelle44: any, now: Date, n: number): RenteScenario {
+function invaliditeScenario(
+  client: any, legal: any, echelle44: any, now: Date, n: number, plafond: number | null,
+): RenteScenario {
   const c = withNChildren(client, n, now.getFullYear());
   const r = computeInvaliditeMaladie(now, c, legal, echelle44);
   const child = r.phaseRente.metaChildren;
@@ -69,7 +78,7 @@ function invaliditeScenario(client: any, legal: any, echelle44: any, now: Date, 
   const adulte = { avs: Math.round(monthly.aiAdult || 0), lpp: Math.round(monthly.lppInvalidite || 0) };
   const parEnfant = { avs: m12(child.perChildAnnual), lpp: m12(child.perChildLppAnnual) };
   const total = adulte.avs + adulte.lpp + n * (parEnfant.avs + parEnfant.lpp);
-  return { adulte, parEnfant, nbEnfants: n, total };
+  return reduireScenario({ adulte, parEnfant, nbEnfants: n, total }, plafond);
 }
 
 export function computeDetailRentes(
@@ -91,11 +100,24 @@ export function computeDetailRentes(
 
   const maxEnfants = childrenEndYears.length;
 
+  // PLAFOND DE SURINDEMNISATION, lu sur le plan LPP (posé par le règlement de
+  // la caisse). Sans lui — règlement inconnu ou muet — rien n'est raboté : on
+  // ne retranche pas une rente sur une supposition.
+  //
+  // La base est le GAIN PRÉSUMÉ PERDU, c'est-à-dire le revenu total, et non le
+  // salaire assuré, plus étroit.
+  const fraction = Number(client.Enter_surindemnisationPlafond);
+  const gain = Number(client.Enter_salaireAnnuel);
+  const plafond =
+    Number.isFinite(fraction) && fraction > 0 && Number.isFinite(gain) && gain > 0
+      ? (gain * fraction) / 12
+      : null;
+
   const deces: RenteScenario[] = [];
   const invalidite: RenteScenario[] = [];
   for (let n = 0; n <= maxEnfants; n++) {
-    deces.push(decesScenario(client, legal, echelle44, now, n));
-    invalidite.push(invaliditeScenario(client, legal, echelle44, now, n));
+    deces.push(decesScenario(client, legal, echelle44, now, n, plafond));
+    invalidite.push(invaliditeScenario(client, legal, echelle44, now, n, plafond));
   }
 
   return { currentYear, retirementYear, maxEnfants, childrenEndYears, deces, invalidite };

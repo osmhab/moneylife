@@ -125,3 +125,66 @@ export function estSurindemnise(
 ): boolean {
   return reduireSiSurindemnise(e, bloc).reduction > 0;
 }
+
+/* =========================================================
+ * Application à un scénario de rentes
+ * =======================================================*/
+
+export interface ScenarioRentes {
+  adulte: { avs: number; lpp: number };
+  parEnfant: { avs: number; lpp: number };
+  nbEnfants: number;
+  total: number;
+}
+
+/**
+ * Rabote un scénario de rentes MENSUELLES du dépassement de plafond.
+ *
+ * La réduction porte sur les seules parts LPP — adulte et enfants — au prorata
+ * de leur poids : la caisse ne peut pas réduire l'AVS/AI, due par la
+ * Confédération. Un scénario dont les rentes de tiers dépassent à elles seules
+ * le plafond voit donc toute sa part LPP tomber à zéro, sans jamais devenir
+ * négative.
+ *
+ * `plafondMensuel` à null ou nul : rien n'est raboté. Un plafond inconnu ne
+ * doit jamais retrancher une rente que le client touchera peut-être en entier.
+ */
+export function reduireScenario<T extends ScenarioRentes>(
+  scenario: T,
+  plafondMensuel: number | null,
+): T & { reductionSurindemnisation: number } {
+  const intact = { ...scenario, reductionSurindemnisation: 0 };
+  if (plafondMensuel == null || !Number.isFinite(plafondMensuel) || plafondMensuel <= 0) return intact;
+
+  const n = Math.max(0, scenario.nbEnfants);
+  const lppTotal = scenario.adulte.lpp + n * scenario.parEnfant.lpp;
+  const exces = scenario.total - plafondMensuel;
+  if (exces <= 0 || lppTotal <= 0) return intact;
+
+  const reduction = Math.min(lppTotal, exces);
+  const garde = 1 - reduction / lppTotal;   // part conservée, entre 0 et 1
+
+  const adulteLpp = Math.round(scenario.adulte.lpp * garde);
+  const enfantLpp = Math.round(scenario.parEnfant.lpp * garde);
+
+  return {
+    ...scenario,
+    adulte: { ...scenario.adulte, lpp: adulteLpp },
+    parEnfant: { ...scenario.parEnfant, lpp: enfantLpp },
+    // Recalculé depuis les parts arrondies : le total affiché doit être la
+    // somme de ce qu'on montre, pas une valeur qui ne s'y raccroche pas.
+    total: scenario.adulte.avs + adulteLpp + n * (scenario.parEnfant.avs + enfantLpp),
+    reductionSurindemnisation: Math.round(reduction),
+  };
+}
+
+/** Plafond MENSUEL applicable, ou null si la règle ou le revenu manquent. */
+export function plafondMensuel(
+  gainPresumeAnnuel: number | null | undefined,
+  bloc: BlocRegles | null | undefined,
+): number | null {
+  const fraction = plafondSurindemnisation(bloc);
+  const gain = Number(gainPresumeAnnuel);
+  if (fraction == null || !Number.isFinite(gain) || gain <= 0) return null;
+  return (gain * fraction) / 12;
+}
