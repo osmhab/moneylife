@@ -8,6 +8,7 @@ const isLibrePassage = (t?: string) => t === "LIBRE_PASSAGE_POLICE" || t === "LI
 
 // Import des moteurs de calcul (Shared)
 import { computeInvaliditeMaladie } from "./events/invaliditeMaladie";
+import { plafondDesPlans, plafondAnnuel, reduireLpp } from "../core/surindemnisation";
 import { computeInvaliditeAccident } from "./events/invaliditeAccident";
 import { computeDecesMaladie } from "./events/decesMaladie";
 import { computeDecesAccident } from "./events/decesAccident";
@@ -128,6 +129,8 @@ export function buildInvaliditeAccidentMatrix(
   const years = Array.from({ length: endY - startY + 1 }, (_, i) => startY + i);
 
   const planTotals = sumFromPlans(plans, 'invalidite', ageActuel);
+  // Plafond de surindemnisation posé par le règlement de la caisse.
+  const plafond = plafondAnnuel(need, plafondDesPlans(plans));
 
   const rows = [
     { label: "AVS/AI", cells: [] as number[] },
@@ -164,6 +167,7 @@ export function buildInvaliditeAccidentMatrix(
 
     const prive = idx === 0 ? (planTotals.priveRente + planTotals.priveCapital) : planTotals.priveRente;
     const capital = idx === 0 ? planTotals.lppCapital : 0;
+    lpp = reduireLpp({ ai, lpp, laa, ij }, plafond).lpp;
     const total = ai + lpp + laa + ij + prive + capital;
 
     rows[0].cells.push(ai);
@@ -197,6 +201,9 @@ export function buildInvaliditeMaladieMatrix(
     const endY = Math.max(startY, (by ?? startY) + legal.Legal_AgeRetraiteAVS);
     const years = Array.from({ length: endY - startY + 1 }, (_, i) => startY + i);
     const planTotals = sumFromPlans(plans, 'invalidite', ageActuel);
+    // Plafond de surindemnisation posé par le règlement de la caisse. `null` =
+    // règlement inconnu, muet, ou caisses en désaccord : on ne rabote rien.
+    const plafond = plafondAnnuel(need, plafondDesPlans(plans));
   
     const rows = [
       { label: "AVS/AI", cells: [] as number[] },
@@ -238,7 +245,11 @@ export function buildInvaliditeMaladieMatrix(
   
       const prive = idx === 0 ? (planTotals.priveRente + planTotals.priveCapital) : planTotals.priveRente;
       const capital = idx === 0 ? planTotals.lppCapital : 0;
-      
+
+      // Les CAPITAUX et le 3e pilier privé sont exclus du décompte (chiffre
+      // 73.3) : seules les rentes de même nature et de même but y entrent.
+      lpp = reduireLpp({ ai, lpp, laa: 0, ij }, plafond).lpp;
+
       const total = ai + lpp + ij + prive + capital;
 
       rows[0].cells.push(ai);
@@ -272,6 +283,8 @@ export function buildDecesAccidentMatrix(
   const endY = Math.max(startY, (by ?? startY) + legal.Legal_AgeRetraiteAVS);
   const years = Array.from({ length: endY - startY + 1 }, (_, i) => startY + i);
   const planTotals = sumFromPlans(plans, 'deces', ageActuel);
+  // Le règlement vise les rentes de survivants AUSSI (AXA, chiffre 73.1).
+  const plafond = plafondAnnuel(need, plafondDesPlans(plans));
 
   const rows = [
     { label: "AVS/AI", cells: [] as number[] },
@@ -305,6 +318,7 @@ export function buildDecesAccidentMatrix(
     const prive = y === startY ? (planTotals.priveRente + planTotals.priveCapital) : planTotals.priveRente;
     const capital = y === startY ? (planTotals.lppCapital + (res.capitals.totalCapitalsAccident ?? 0)) : 0;
     
+    lpp = reduireLpp({ ai, lpp, laa, ij: 0 }, plafond).lpp;
     const total = ai + lpp + laa + prive + capital;
 
     rows[0].cells.push(ai);
@@ -335,6 +349,8 @@ export function buildDecesMaladieMatrix(
   const endY = Math.max(startY, (by ?? startY) + legal.Legal_AgeRetraiteAVS);
   const years = Array.from({ length: endY - startY + 1 }, (_, i) => startY + i);
   const planTotals = sumFromPlans(plans, 'deces', ageActuel);
+  // Le règlement vise les rentes de survivants AUSSI (AXA, chiffre 73.1).
+  const plafond = plafondAnnuel(need, plafondDesPlans(plans));
 
   const rows = [
     { label: "AVS/AI", cells: [] as number[] },
@@ -355,10 +371,11 @@ export function buildDecesMaladieMatrix(
     };
     const res = computeDecesMaladie(new Date(), hybridClient, legal, echelle44, { paymentRef: yearDate(y) });
     const ai = res.annual.avs;
-    const lpp = res.annual.lppRentes; // Incorpore conjoint + orphelins dynamiques
+    let lpp = res.annual.lppRentes; // Incorpore conjoint + orphelins dynamiques
     
     const prive = y === startY ? (planTotals.priveRente + planTotals.priveCapital) : planTotals.priveRente;
     const capital = y === startY ? (planTotals.lppCapital + (res.capitals.totalCapitalsMaladie ?? 0)) : 0;
+    lpp = reduireLpp({ ai, lpp, laa: 0, ij: 0 }, plafond).lpp;
     const total = ai + lpp + prive + capital;
 
     rows[0].cells.push(ai);
