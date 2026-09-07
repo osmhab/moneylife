@@ -28,7 +28,7 @@ import {
 } from "app/lib/core/reglement";
 import { analyserDocument, identifierReglement, type FichierIA } from "app/lib/server/analyseIA";
 import { reglementConnuPour, qualifierPlans, type ResultatQualification } from "app/lib/server/appliquerReglement";
-import { PROMPT_REGLEMENT, BLOC_VIDE } from "app/lib/server/promptReglement";
+import { PROMPT_REGLEMENT, BLOC_VIDE, VERSION_EXTRACTION } from "app/lib/server/promptReglement";
 
 export type StatutIngestion =
   | "PAS_UN_REGLEMENT"
@@ -71,7 +71,11 @@ export async function ingererReglement(
 
   // 2. Le connaît-on déjà, dans une version au moins aussi récente ?
   const connu = await reglementConnuPour(identite.caisse);
-  if (connu && !estPlusRecent(identite.enVigueurAu, connu.enVigueurAu)) {
+  // Un règlement analysé sous un schéma ANTÉRIEUR est incomplet : on le
+  // réanalyse même s'il n'est pas plus récent, sinon les règles ajoutées depuis
+  // ne s'appliqueraient jamais aux caisses déjà connues.
+  const aJour = Number((connu as { schemaVersion?: number } | null)?.schemaVersion ?? 0) >= VERSION_EXTRACTION;
+  if (connu && aJour && !estPlusRecent(identite.enVigueurAu, connu.enVigueurAu)) {
     // On s'arrête AVANT l'analyse coûteuse. Les plans du client sont tout de
     // même qualifiés : c'est le règlement déjà en bibliothèque qui s'applique,
     // et c'est exactement la promesse du savoir mutualisé.
@@ -118,6 +122,7 @@ export async function ingererReglement(
   await db.collection("reglements").doc(cle).set(
     {
       ...reglement,
+      schemaVersion: VERSION_EXTRACTION,
       misAJourLe: admin.firestore.FieldValue.serverTimestamp(),
       // Le compteur d'usage ne vaut que pour un vrai client : un dépôt admin ou
       // un passage de veille ne signifie pas qu'un assuré est concerné.

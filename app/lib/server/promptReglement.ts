@@ -8,6 +8,24 @@
 
 import { MULTILINGUAL_PREAMBLE } from "app/lib/core/multilingual";
 
+/**
+ * VERSION DU SCHÉMA D'EXTRACTION — à incrémenter à chaque champ ajouté.
+ *
+ * Un règlement analysé sous une version antérieure est INCOMPLET : les champs
+ * récents y sont absents. Or le dédoublonnage refuse de réanalyser un document
+ * qui n'est pas plus récent — la bibliothèque resterait donc figée sur l'ancien
+ * schéma, et les règles nouvellement extraites ne s'appliqueraient jamais aux
+ * caisses déjà connues.
+ *
+ * Constaté en production : après l'ajout de la surindemnisation et du retrait en
+ * capital, le règlement AXA déjà en bibliothèque ne portait ni l'un ni l'autre,
+ * et aucun scan ne pouvait le corriger.
+ *
+ * 1 · règles de base   2 · durée de vie commune, dispense enfants
+ * 3 · retrait en capital, blocage après rachat, surindemnisation
+ */
+export const VERSION_EXTRACTION = 3;
+
 export const PROMPT_REGLEMENT = `${MULTILINGUAL_PREAMBLE}
 
 Tu analyses le RÈGLEMENT DE PRÉVOYANCE d'une caisse de pension suisse (2e pilier).
