@@ -34,6 +34,7 @@ import NouveauRendezVousDialog from "./NouveauRendezVousDialog";
 type OverviewPayload = {
   ok: boolean;
   uid: string;
+  concubinage?: Concubinage | null;
   donneesPersonnelles: {
     exists: boolean;
     firstName: string;
@@ -52,6 +53,27 @@ type OverviewPayload = {
     etatCivil?: number | null;
     updatedAt: number | null;
   };
+};
+
+/**
+ * Concubinage — le seul cas où une prestation de survivant dépend d'une
+ * DÉMARCHE du client. Sans désignation écrite auprès de sa caisse, le
+ * partenaire peut ne rien percevoir, et personne ne s'en apercevra avant qu'il
+ * soit trop tard.
+ */
+type Concubinage = {
+  depuis: number | null;
+  annees: number | null;
+  partenaire: string;
+  clause: "OUI" | "NON" | null;
+  rappelMasque: boolean;
+  enfantsCommuns: number;
+  verdict: "OUI" | "NON" | "A_VERIFIER";
+  motif: string;
+  caisse: string | null;
+  dureeExigee: number | null;
+  dispenseEnfants: boolean | null;
+  article: string | null;
 };
 
 type SignedDoc = {
@@ -358,6 +380,7 @@ export default function AdminClientOverviewClient() {
   }, [uid]);
 
   const dp = data?.donneesPersonnelles;
+  const concubinage = data?.concubinage ?? null;
 
   return (
     <div className="space-y-5">
@@ -494,6 +517,81 @@ export default function AdminClientOverviewClient() {
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">État civil</div>
                   <div className="mt-0.5 text-sm font-semibold text-slate-900">{etatCivilLabel(dp?.etatCivil)}</div>
                 </div>
+                {concubinage && (
+                  <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                    <div className="flex items-start gap-2">
+                      <span
+                        className={
+                          "mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full " +
+                          (concubinage.verdict === "OUI"
+                            ? "bg-emerald-500"
+                            : concubinage.verdict === "NON"
+                              ? "bg-rose-500"
+                              : "bg-amber-500")
+                        }
+                      />
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          Rente de partenaire — concubinage
+                        </div>
+                        <div className="mt-0.5 text-sm font-semibold text-slate-900">
+                          {concubinage.verdict === "OUI"
+                            ? "Le partenaire y a droit"
+                            : concubinage.verdict === "NON"
+                              ? "Le partenaire n'y a PAS droit"
+                              : "À vérifier"}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-600">{concubinage.motif}</div>
+
+                        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600">
+                          <div>
+                            <dt className="inline text-slate-400">Partenaire : </dt>
+                            <dd className="inline">{concubinage.partenaire || "non renseigné"}</dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-slate-400">Vie commune : </dt>
+                            <dd className="inline">
+                              {concubinage.annees != null
+                                ? `${concubinage.annees} an${concubinage.annees > 1 ? "s" : ""} (depuis ${concubinage.depuis})`
+                                : "non renseignée"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-slate-400">Clause bénéficiaire : </dt>
+                            <dd className="inline">
+                              {concubinage.clause === "OUI"
+                                ? "désigné"
+                                : concubinage.clause === "NON"
+                                  ? "PAS désigné"
+                                  : "non renseignée"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-slate-400">Enfants communs : </dt>
+                            <dd className="inline">{concubinage.enfantsCommuns}</dd>
+                          </div>
+                        </dl>
+
+                        {concubinage.caisse ? (
+                          <div className="mt-2 text-xs text-slate-500">
+                            {concubinage.caisse} —{" "}
+                            {concubinage.dureeExigee != null
+                              ? `${concubinage.dureeExigee} ans de vie commune exigés`
+                              : "durée exigée non extraite"}
+                            {concubinage.dispenseEnfants
+                              ? ", ou entretien d'enfants communs"
+                              : ""}
+                            {concubinage.article ? ` (${concubinage.article})` : ""}
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-xs text-amber-700">
+                            Règlement de la caisse inconnu : les conditions exactes ne peuvent pas être vérifiées.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="col-span-2">
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">E-mail</div>
                   <div className="mt-0.5 truncate text-sm font-semibold text-slate-900" title={dp?.email || clientEmail || ""}>

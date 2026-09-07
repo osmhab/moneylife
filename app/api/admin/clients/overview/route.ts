@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/firebase/admin";
 import { requireInternal } from "@/lib/server/requireInternal";
+import { droitPartenaireConcubinage, anneesViecommune, dureeExigeeParReglement, estConcubinage } from "app/lib/core/concubinage";
+import { reglementConnuPour } from "app/lib/server/appliquerReglement";
 
 export async function GET(req: Request) {
   try {
@@ -40,10 +42,60 @@ export async function GET(req: Request) {
     
     const dpData = dpDoc.exists ? dpDoc.data() : null;
 
+    // 4bis. CONCUBINAGE — le seul cas où une prestation de survivant dépend
+    // d'une DÉMARCHE que le client doit avoir faite lui-même. Le conseiller doit
+    // le voir : sans désignation écrite auprès de la caisse, le partenaire peut
+    // ne rien percevoir, et personne ne s'en apercevra avant qu'il soit trop tard.
+    let concubinage: Record<string, unknown> | null = null;
+    if (estConcubinage(dpData?.Enter_etatCivil)) {
+      const enfants = Array.isArray(dpData?.Enter_enfants) ? dpData!.Enter_enfants : [];
+      const situation = {
+        etatCivil: dpData?.Enter_etatCivil,
+        concubinageDepuis: typeof dpData?.Enter_concubinageDepuis === "number" ? dpData.Enter_concubinageDepuis : null,
+        clauseBeneficiaire: dpData?.Enter_partenaireClauseBeneficiaire ?? null,
+        rappelMasque: dpData?.Enter_partenaireClauseRappelMasque === true,
+        partenairePrenom: dpData?.Enter_spousePrenom ?? null,
+        partenaireNom: dpData?.Enter_spouseNom ?? null,
+        nombreEnfants: enfants.filter((e: Record<string, unknown>) => !!e?.Enter_dateNaissance).length,
+        nombreEnfantsCommuns: enfants.filter(
+          (e: Record<string, unknown>) => !!e?.Enter_dateNaissance && e?.Enter_enfantCommunConjoint === true,
+        ).length,
+      };
+
+      // Règlement de SA caisse : c'est lui qui fixe la durée exigée et dit si
+      // les enfants communs en dispensent.
+      const plansSnap = await db.collection("clients").doc(uid).collection("plans").get();
+      const planLpp = plansSnap.docs
+        .map((d) => d.data())
+        .find((p) => ["LPP_BASE", "LPP_COMPL", "LPP"].includes(String(p.type ?? "").toUpperCase()));
+      const nomCaisse = String((planLpp?.data ?? {}).Enter_nomCaisseComplet ?? "").trim()
+        || planLpp?.institutionName || null;
+      const reglement = nomCaisse ? await reglementConnuPour(nomCaisse) : null;
+      const bloc = reglement?.general ?? null;
+
+      const verdict = droitPartenaireConcubinage(situation, bloc);
+      concubinage = {
+        depuis: situation.concubinageDepuis,
+        annees: anneesViecommune(situation.concubinageDepuis),
+        partenaire: [situation.partenairePrenom, situation.partenaireNom]
+          .map((x) => (x ?? "").trim()).filter(Boolean).join(" "),
+        clause: situation.clauseBeneficiaire,
+        rappelMasque: situation.rappelMasque,
+        enfantsCommuns: situation.nombreEnfantsCommuns,
+        verdict: verdict.verdict,
+        motif: verdict.motif,
+        caisse: reglement?.caisse ?? null,
+        dureeExigee: dureeExigeeParReglement(bloc),
+        dispenseEnfants: bloc?.rentePartenaire?.enfantsCommunsRemplacentDuree ?? null,
+        article: bloc?.rentePartenaire?.article ?? null,
+      };
+    }
+
     // 5. CONSTRUCTION DU PAYLOAD POUR LE FRONTEND
     return NextResponse.json({
       ok: true,
       uid,
+      concubinage,
       donneesPersonnelles: {
         exists: !!dpData,
         // On fusionne les infos pour que le front trouve tout au même endroit

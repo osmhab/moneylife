@@ -203,3 +203,56 @@ describe("nom du partenaire", () => {
     expect(nomPartenaire({})).toBe("");
   });
 });
+
+describe("enfants communs contre enfants d'une union précédente", () => {
+  const AVEC_DISPENSE: BlocRegles = {
+    ...REGLE_5_ANS,
+    rentePartenaire: { ...REGLE_5_ANS.rentePartenaire!, enfantsCommunsRemplacentDuree: true },
+  };
+
+  it("la dispense joue sur les enfants COMMUNS", () => {
+    const r = droitPartenaireConcubinage(
+      CONCUBIN({ concubinageDepuis: 2024, clauseBeneficiaire: "OUI", nombreEnfants: 2, nombreEnfantsCommuns: 1 }),
+      AVEC_DISPENSE, ANNEE);
+    expect(r.verdict).toBe("OUI");
+  });
+
+  it("des enfants d'une union précédente n'ouvrent AUCUN droit", () => {
+    // Le règlement dit « enfants communs » : les compter tous ouvrirait un
+    // droit qui n'existe pas.
+    const r = droitPartenaireConcubinage(
+      CONCUBIN({ concubinageDepuis: 2024, clauseBeneficiaire: "OUI", nombreEnfants: 2, nombreEnfantsCommuns: 0 }),
+      AVEC_DISPENSE, ANNEE);
+    expect(r.verdict).toBe("NON");
+  });
+
+  it("sans information sur le caractère commun, on examine plutôt que de refuser", () => {
+    const r = droitPartenaireConcubinage(
+      CONCUBIN({ concubinageDepuis: 2024, clauseBeneficiaire: "OUI", nombreEnfants: 2 }),
+      AVEC_DISPENSE, ANNEE);
+    expect(r.verdict).toBe("OUI");
+  });
+});
+
+describe("le motif doit désigner ce qui BLOQUE", () => {
+  const AVEC_DISPENSE: BlocRegles = {
+    ...REGLE_5_ANS,
+    rentePartenaire: { ...REGLE_5_ANS.rentePartenaire!, enfantsCommunsRemplacentDuree: true },
+  };
+
+  it("avec enfants communs, ne réclame pas la durée mais la désignation", () => {
+    // Cas réel : un client avec un enfant commun, chez une caisse qui dispense
+    // de la durée. Réclamer l'année de vie commune enverrait le conseiller
+    // poser la mauvaise question.
+    const r = droitPartenaireConcubinage(
+      CONCUBIN({ nombreEnfantsCommuns: 1 }), AVEC_DISPENSE, ANNEE);
+    expect(r.verdict).toBe("A_VERIFIER");
+    expect(r.motif).toContain("clause bénéficiaire");
+    expect(r.motif).not.toContain("pas renseignée");
+  });
+
+  it("sans enfant commun, la durée redevient la question", () => {
+    const r = droitPartenaireConcubinage(CONCUBIN({}), AVEC_DISPENSE, ANNEE);
+    expect(r.motif).toContain("durée de vie commune");
+  });
+});

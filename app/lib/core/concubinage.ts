@@ -41,6 +41,14 @@ export interface SituationConcubinage {
   partenaireNom?: string | null;
   /** Enfants à charge : certains règlements les substituent à la durée exigée. */
   nombreEnfants?: number | null;
+  /**
+   * Enfants COMMUNS au couple.
+   *
+   * Le règlement dispense de la durée quand le partenaire subvient à
+   * l'entretien d'enfants COMMUNS — pas des enfants d'une union précédente.
+   * Compter ces derniers ouvrirait un droit qui n'existe pas.
+   */
+  nombreEnfantsCommuns?: number | null;
 }
 
 const CONCUBINAGE = 4;
@@ -108,8 +116,11 @@ export function droitPartenaireConcubinage(
   // Beaucoup de règlements posent la durée OU l'entretien d'enfants communs
   // (Aevum, art. 57). Ignorer ce « ou » refuserait la rente à un couple récent
   // avec enfants, qui y a pourtant droit.
+  // À défaut d'information sur le caractère commun, on retombe sur le nombre
+  // d'enfants : mieux vaut examiner un dossier de trop que refuser une rente due.
+  const enfantsCommuns = situation.nombreEnfantsCommuns ?? situation.nombreEnfants ?? 0;
   const dispenseEnfants =
-    bloc?.rentePartenaire?.enfantsCommunsRemplacentDuree === true && (situation.nombreEnfants ?? 0) > 0;
+    bloc?.rentePartenaire?.enfantsCommunsRemplacentDuree === true && enfantsCommuns > 0;
 
   if (annees != null && exigee != null && annees < exigee && !dispenseEnfants) {
     return {
@@ -133,6 +144,16 @@ export function droitPartenaireConcubinage(
     return { verdict: "A_VERIFIER", motif: "Partenaire désigné ; la durée de vie commune exigée reste à confirmer." };
   }
 
+  // Le motif doit désigner CE QUI BLOQUE, pas la première donnée manquante.
+  // Avec des enfants communs et un règlement qui en dispense, la durée ne
+  // compte plus : envoyer un conseiller demander depuis quand ils vivent
+  // ensemble lui ferait poser la mauvaise question.
+  if (dispenseEnfants) {
+    return {
+      verdict: "A_VERIFIER",
+      motif: "Enfants communs : la durée de vie commune n'est pas exigée. Reste à confirmer que le partenaire est désigné dans la clause bénéficiaire.",
+    };
+  }
   return {
     verdict: "A_VERIFIER",
     motif: annees == null
