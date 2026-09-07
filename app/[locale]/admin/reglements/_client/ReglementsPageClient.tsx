@@ -132,7 +132,7 @@ export default function ReglementsPageClient() {
         <CardContent className="p-4 space-y-3">
           <div className="flex gap-2">
             <Input
-              placeholder="https://… page d'où vient le document"
+              placeholder="https://… lien du PDF, ou page où il se trouve"
               value={urlDepot}
               onChange={(e) => setUrlDepot(e.target.value)}
               className="flex-1"
@@ -147,9 +147,11 @@ export default function ReglementsPageClient() {
             </Button>
           </div>
           <p className="text-xs text-slate-500">
-            Notez la page d&apos;où vous avez téléchargé le PDF : c&apos;est elle que l&apos;agent
-            reviendra consulter pour voir si une nouvelle version paraît. Sans elle, le
-            règlement est enregistré mais jamais surveillé.
+            Collez de préférence le <strong>lien direct du PDF</strong> (clic droit sur le lien
+            de téléchargement → copier l&apos;adresse) : l&apos;agent surveillera exactement ce
+            document. À défaut, l&apos;adresse de la page convient — mais certains sites de
+            caisses chargent leurs documents en JavaScript, et l&apos;agent n&apos;y voit alors
+            aucun lien. Sans adresse, le règlement est enregistré mais jamais surveillé.
           </p>
           {envoi && (
             <p className="text-sm text-amber-700 flex items-center gap-2">
@@ -312,7 +314,7 @@ function FicheReglement({
           <Input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="AXA Fondation LPP Suisse romande" />
         </label>
         <label className="text-xs text-slate-500 space-y-1 md:col-span-2">
-          <span>Page où se trouve le document</span>
+          <span>Lien du PDF, ou page où il se trouve</span>
           <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
         </label>
       </div>
@@ -329,8 +331,10 @@ function FicheReglement({
         </div>
       </div>
       <p className="text-xs text-slate-400">
-        Renseigner la page suffit à rendre ce règlement surveillé : l&apos;agent y reviendra
-        périodiquement voir si une version plus récente est parue.
+        Un lien direct vers le PDF est préférable : l&apos;agent vérifie alors l&apos;empreinte
+        du fichier sans même le télécharger, et repère une nouvelle version dès qu&apos;elle
+        paraît. Une adresse de page fonctionne aussi, sauf sur les sites qui chargent leurs
+        documents en JavaScript.
       </p>
     </div>
   );

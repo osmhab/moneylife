@@ -137,3 +137,43 @@ export function aRevisiter(
   if (!dernierPassage) return true;
   return maintenant - dernierPassage >= joursEntreDeuxPassages * 24 * 3600 * 1000;
 }
+
+/* =========================================================
+ * Lien direct vers le PDF
+ * =======================================================*/
+
+/**
+ * L'adresse enregistrée pointe-t-elle DIRECTEMENT sur le document ?
+ *
+ * Beaucoup de sites de caisses sont des applications rendues par le navigateur
+ * (Aevum est en SvelteKit) : la page servie ne contient AUCUN lien, et aucun
+ * agent sans navigateur ne peut y trouver le règlement.
+ *
+ * Plutôt que d'embarquer un navigateur sans tête — lourd, lent et fragile — on
+ * accepte que le collaborateur colle le lien du PDF lui-même. C'est même
+ * préférable : plus rien à deviner, et l'agent surveille exactement le document
+ * qui a été validé, pas un lien voisin qui lui ressemble.
+ */
+export function estLienDirectPdf(url: string): boolean {
+  return /^https?:\/\//i.test(url) && /\.pdf(\?|#|$)/i.test(url);
+}
+
+/**
+ * Empreinte d'un fichier distant, telle que le serveur la donne.
+ *
+ * Comparée d'un passage à l'autre, elle dit si le document a changé SANS le
+ * télécharger ni le réanalyser. Un règlement change au plus une fois l'an :
+ * l'immense majorité des passages doit être gratuite.
+ */
+export function empreinteFichier(entetes: {
+  get(nom: string): string | null;
+}): string | null {
+  const etag = entetes.get("etag");
+  if (etag) return `etag:${etag.trim()}`;
+  const modifie = entetes.get("last-modified");
+  const taille = entetes.get("content-length");
+  if (modifie || taille) return `lm:${modifie ?? ""}|len:${taille ?? ""}`;
+  // Aucun en-tête exploitable : on ne prétend pas savoir, et le document sera
+  // téléchargé comme avant.
+  return null;
+}

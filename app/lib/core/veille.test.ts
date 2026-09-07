@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { estLienDeReglement, extraireLiensPdf, reglementsCandidats, aRevisiter, normaliser } from "./veille";
+import {
+  estLienDeReglement, extraireLiensPdf, reglementsCandidats, aRevisiter, normaliser,
+  estLienDirectPdf, empreinteFichier,
+} from "./veille";
 
 describe("reconnaître un règlement de prévoyance", () => {
   it("accepte les intitulés des trois langues", () => {
@@ -103,5 +106,39 @@ describe("documents de gouvernance", () => {
     expect(estLienDeReglement("Règlement actualisé", "/26-05-01-Reglement-AD_VF.pdf")).toBe(true);
     expect(estLienDeReglement("Règlement de l'assemblée des délégués", "/x.pdf")).toBe(false);
     expect(estLienDeReglement("Reglement du conseil de fondation", "/y.pdf")).toBe(false);
+  });
+});
+
+describe("lien direct vers le PDF", () => {
+  it("reconnaît une adresse de document", () => {
+    expect(estLienDirectPdf("https://caisse.ch/docs/reglement-2026.pdf")).toBe(true);
+    expect(estLienDirectPdf("https://caisse.ch/r.pdf?v=2")).toBe(true);
+  });
+
+  it("distingue une page d'un document", () => {
+    // Une page rendue par le navigateur ne contient aucun lien exploitable :
+    // c'est précisément pour ces sites que le lien direct existe.
+    expect(estLienDirectPdf("https://www.aevum-fondation.ch/fr/informations/reglements")).toBe(false);
+    expect(estLienDirectPdf("pas-une-url.pdf")).toBe(false);
+  });
+});
+
+describe("empreinte d'un fichier distant", () => {
+  const entetes = (h: Record<string, string>) => ({ get: (n: string) => h[n.toLowerCase()] ?? null });
+
+  it("préfère l'ETag, le plus fiable", () => {
+    expect(empreinteFichier(entetes({ etag: '"abc123"', "last-modified": "Mon, 01 Jan 2026" })))
+      .toBe('etag:"abc123"');
+  });
+
+  it("retombe sur la date et la taille", () => {
+    expect(empreinteFichier(entetes({ "last-modified": "Mon, 01 Jan 2026", "content-length": "749605" })))
+      .toBe("lm:Mon, 01 Jan 2026|len:749605");
+  });
+
+  it("ne prétend pas savoir sans en-tête exploitable", () => {
+    // Le document sera alors téléchargé comme avant : mieux vaut un passage de
+    // trop qu'une mise à jour manquée.
+    expect(empreinteFichier(entetes({}))).toBeNull();
   });
 });

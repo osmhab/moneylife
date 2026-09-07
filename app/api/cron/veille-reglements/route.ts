@@ -21,7 +21,7 @@
 import { NextResponse } from "next/server";
 import { db } from "app/lib/firebase/admin";
 import admin from "firebase-admin";
-import { reglementsCandidats, aRevisiter } from "app/lib/core/veille";
+import { reglementsCandidats, aRevisiter, estLienDirectPdf, empreinteFichier } from "app/lib/core/veille";
 import { ingererReglement } from "app/lib/server/ingererReglement";
 
 export const maxDuration = 300;
@@ -57,17 +57,48 @@ export async function GET(req: Request) {
   const rapport: Record<string, unknown>[] = [];
 
   for (const doc of aFaire) {
-    const r = doc.data() as { caisse?: string; pageUrl?: string };
+    const r = doc.data() as { caisse?: string; pageUrl?: string; empreinte?: string };
+    let nouvelleEmpreinte: string | null = null;
     const ligne: Record<string, unknown> = { cle: doc.id, caisse: r.caisse ?? "", trouves: 0, resultats: [] };
 
     try {
-      const page = await fetch(r.pageUrl!, {
-        headers: { "User-Agent": UA },
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!page.ok) throw new Error(`page HTTP ${page.status}`);
+      let candidats: { url: string; texte: string }[];
 
-      const candidats = reglementsCandidats(await page.text(), r.pageUrl!).slice(0, CANDIDATS_PAR_PAGE);
+      if (estLienDirectPdf(r.pageUrl!)) {
+        // LIEN DIRECT. Le seul chemin qui fonctionne sur les sites rendus par
+        // le navigateur — Aevum est en SvelteKit, sa page servie ne contient
+        // aucun lien. Le collaborateur colle l'adresse du document lui-même.
+        //
+        // On demande d'abord les seuls en-têtes : si l'empreinte du fichier n'a
+        // pas bougé, il n'y a rien à télécharger ni à réanalyser. Un règlement
+        // change au plus une fois l'an, la plupart des passages doivent être
+        // gratuits.
+        const tete = await fetch(r.pageUrl!, {
+          method: "HEAD", headers: { "User-Agent": UA }, signal: AbortSignal.timeout(20_000),
+        }).catch(() => null);
+
+        const empreinte = tete?.ok ? empreinteFichier(tete.headers) : null;
+        if (empreinte && empreinte === r.empreinte) {
+          ligne.trouves = 0;
+          (ligne as Record<string, unknown>).inchange = true;
+          await doc.ref.update({
+            dernierPassage: admin.firestore.FieldValue.serverTimestamp(),
+            derniereErreur: admin.firestore.FieldValue.delete(),
+          });
+          rapport.push(ligne);
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        if (empreinte) nouvelleEmpreinte = empreinte;
+        candidats = [{ url: r.pageUrl!, texte: "lien direct" }];
+      } else {
+        const page = await fetch(r.pageUrl!, {
+          headers: { "User-Agent": UA },
+          signal: AbortSignal.timeout(20_000),
+        });
+        if (!page.ok) throw new Error(`page HTTP ${page.status}`);
+        candidats = reglementsCandidats(await page.text(), r.pageUrl!).slice(0, CANDIDATS_PAR_PAGE);
+      }
       ligne.trouves = candidats.length;
 
       for (const c of candidats) {
@@ -90,6 +121,7 @@ export async function GET(req: Request) {
       await doc.ref.update({
         dernierPassage: admin.firestore.FieldValue.serverTimestamp(),
         derniereErreur: admin.firestore.FieldValue.delete(),
+        ...(nouvelleEmpreinte ? { empreinte: nouvelleEmpreinte } : {}),
       });
     } catch (e) {
       ligne.erreur = (e as Error).message;
