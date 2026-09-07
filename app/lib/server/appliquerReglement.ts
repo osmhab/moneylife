@@ -206,7 +206,14 @@ export async function qualifierPlans(
     if (options.pdfUrl) maj["metadata.reglementUrl"] = options.pdfUrl;
     for (const [k, v] of Object.entries(patch)) maj[`data.${k}`] = v;
 
-    await doc.ref.update(maj);
+    // N'ÉCRIRE QUE SI QUELQUE CHOSE CHANGE.
+    //
+    // Chaque écriture de plan déclenche le recalcul complet de l'analyse du
+    // client (Cloud Function). Redéposer un règlement déjà connu réécrivait
+    // donc les mêmes valeurs et relançait un calcul pour rien — sur chaque
+    // assuré de la caisse.
+    if (aChange(plan, maj)) await doc.ref.update(maj);
+
     (automatique ? verifies : aVerifier).push({
       id: doc.id, institution: String(plan.institutionName ?? ""), notes,
     });
@@ -319,4 +326,37 @@ export async function qualifierTousLesPlansConcernes(
     }
   }
   return { clients: parClient.size, plans };
+}
+
+/* =========================================================
+ * Écriture seulement si nécessaire
+ * =======================================================*/
+
+/** Valeur d'un chemin pointé (« data.Enter_x », « metadata.y ») dans un document. */
+function valeurA(doc: Record<string, unknown>, chemin: string): unknown {
+  return chemin.split(".").reduce<unknown>(
+    (o, cle) => (o && typeof o === "object" ? (o as Record<string, unknown>)[cle] : undefined),
+    doc,
+  );
+}
+
+/**
+ * La mise à jour apporte-t-elle quoi que ce soit de nouveau ?
+ *
+ * L'horodatage est ignoré : c'est une trace, jamais un motif d'écrire. Les
+ * valeurs composées (notes, verdicts de prestations) sont comparées sur leur
+ * forme sérialisée — elles sont produites de façon déterministe, donc deux
+ * lectures identiques du même règlement donnent exactement le même JSON.
+ */
+export function aChange(plan: Record<string, unknown>, maj: Record<string, unknown>): boolean {
+  for (const [chemin, valeur] of Object.entries(maj)) {
+    if (chemin === "metadata.reglementApplique") continue;
+    const actuel = valeurA(plan, chemin);
+    if (actuel === valeur) continue;
+    // `null` et absent sont équivalents ici : un champ jamais écrit et un champ
+    // remis à null décrivent le même état.
+    if ((actuel ?? null) === null && (valeur ?? null) === null) continue;
+    if (JSON.stringify(actuel ?? null) !== JSON.stringify(valeur ?? null)) return true;
+  }
+  return false;
 }
