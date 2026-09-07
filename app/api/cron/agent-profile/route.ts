@@ -4,19 +4,34 @@ import * as admin from 'firebase-admin';
 import { sendCreditXAgentEmail } from 'lib/mail/creditx-mailer';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.GOOGLE_SA_JSON as string)),
-  });
+/**
+ * Initialisation PARESSEUSE — au premier appel, jamais au chargement du module.
+ *
+ * `JSON.parse(process.env.GOOGLE_SA_JSON)` s'exécutait à l'import. Or le build
+ * de production évalue les modules de route pour collecter leurs métadonnées,
+ * dans un conteneur qui n'a aucun secret : le parse recevait « undefined » et
+ * faisait échouer TOUT le build, sur une route sans rapport avec ce qu'on
+ * venait de modifier.
+ *
+ * Latent depuis longtemps, révélé le jour où un import a changé l'ordre
+ * d'évaluation. Un secret ne doit jamais être exigé pour compiler.
+ */
+function firestore() {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(JSON.parse(process.env.GOOGLE_SA_JSON as string)),
+    });
+  }
+  return admin.firestore();
 }
-const db = admin.firestore();
-const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
+
+  const db = firestore();
 
   try {
     const clientsSnap = await db.collection("clients").get();
