@@ -900,6 +900,23 @@ const handleScanFile = async (file: File) => {
   // arrays
   const enfants = ensureArray(draft.Enter_enfants);
   const isMarried = [1, 3].includes(asNumber(draft.Enter_etatCivil, 0)); // marié / partenariat
+  const isConcubinage = asNumber(draft.Enter_etatCivil, 0) === 4;
+
+  // ⚠️ L'AFFICHAGE SUIT LA DONNÉE, pas l'inverse.
+  //
+  // L'app iOS écrit `Enter_enfants` sans toujours poser `Enter_hasEnfants` : le
+  // formulaire montrait alors « aucun enfant » à un conseiller dont le client
+  // en avait deux, enregistrés et comptés dans l'analyse. Il fallait basculer
+  // l'interrupteur pour les découvrir — et cette bascule ÉCRIVAIT la donnée
+  // manquante, ce qui masquait le défaut au passage suivant.
+  const enfantsSaisis = ensureArray(draft.Enter_enfants)
+    .some((k: any) => String(k?.Enter_dateNaissance ?? "").trim());
+  const aDesEnfants = asBool(draft.Enter_hasEnfants) || enfantsSaisis;
+
+  // Même règle pour les lacunes AVS : des années enregistrées doivent se voir,
+  // qu'un indicateur les accompagne ou non.
+  const aDesAnneesManquantes =
+    asBool(draft.Enter_hasAnnesManquantesAVS) || ensureArray(draft.Enter_anneesManquantesAVS).length > 0;
   const anneesManquantes = ensureArray<number>(draft.Enter_anneesManquantesAVS);
   const decesCapitaux = ensureArray(draft.DecesCapitaux);
 
@@ -1309,12 +1326,19 @@ const handleScanFile = async (file: File) => {
         <Section id="sec-enfants" title="Enfants" subtitle="Enfant(s) à charge">
           <Row label="A des enfants à charge ?">
             <Switch
-              checked={asBool(draft.Enter_hasEnfants)}
+              checked={aDesEnfants}
               onCheckedChange={(v) => setField("Enter_hasEnfants", v)}
             />
           </Row>
 
-          {asBool(draft.Enter_hasEnfants) ? (
+          {enfantsSaisis && !asBool(draft.Enter_hasEnfants) ? (
+            <p className="text-xs text-amber-700">
+              Ces enfants étaient déjà enregistrés sans que l&apos;indicateur soit coché — ils sont
+              affichés et comptés dans l&apos;analyse.
+            </p>
+          ) : null}
+
+          {aDesEnfants ? (
             <div className="space-y-3">
               {enfants.length === 0 ? (
                 <div className="text-sm text-muted-foreground">Aucun enfant ajouté.</div>
@@ -1350,8 +1374,11 @@ const handleScanFile = async (file: File) => {
                     />
                   </Row>
 
-                  {isMarried && (
-                    <Row label="Enfant commun avec le conjoint">
+                  {(isMarried || isConcubinage) && (
+                    <Row label={isConcubinage ? "Enfant commun avec le partenaire" : "Enfant commun avec le conjoint"}
+                         helper={isConcubinage
+                           ? "Décisif : beaucoup de caisses dispensent alors de la durée de vie commune."
+                           : undefined}>
                       <Switch
                         checked={kid?.Enter_enfantCommunConjoint !== false}
                         onCheckedChange={(v) => {
@@ -1419,12 +1446,12 @@ const handleScanFile = async (file: File) => {
 
           <Row label="Périodes sans cotisations ?">
             <Switch
-              checked={asBool(draft.Enter_hasAnnesManquantesAVS)}
+              checked={aDesAnneesManquantes}
               onCheckedChange={(v) => setField("Enter_hasAnnesManquantesAVS", v)}
             />
           </Row>
 
-          {asBool(draft.Enter_hasAnnesManquantesAVS) ? (
+          {aDesAnneesManquantes ? (
             <div className="space-y-2">
               <div className="text-sm text-muted-foreground">Années manquantes</div>
 
