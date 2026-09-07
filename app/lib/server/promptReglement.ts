@@ -59,6 +59,18 @@ Ce plafond décide de ce qu'un client peut réellement planifier : le déclarer 
 100 % dans une caisse qui limite à 25 % l'amènerait à bâtir un projet sur un
 capital qu'il n'obtiendra jamais.
 
+LA SURINDEMNISATION
+Presque tout règlement prévoit de RÉDUIRE ses rentes d'invalidité et de
+survivants lorsque, cumulées avec l'AI, la LAA et les autres revenus de
+remplacement, elles dépassent un pourcentage du gain que l'assuré aurait perçu
+sans le sinistre. Cherche l'article intitulé « concours de prestations »,
+« surindemnisation » ou « avantage injustifié ».
+"plafondPct" : ce pourcentage (90 le plus souvent, parfois 100).
+"concerneInvalidite" / "concerneSurvivants" : le texte vise-t-il les deux ?
+Souvent oui — ne suppose pas que seule l'invalidité est concernée.
+Si le règlement est muet, mets null : appliquer un plafond supposé retrancherait
+à un client une rente qu'il touchera peut-être en entier.
+
 NE CONFONDS JAMAIS deux capitaux voisins :
 - "capitalDeces" = le capital décès PRINCIPAL, en règle générale égal au capital
   de prévoyance ou à l'avoir de vieillesse ;
@@ -111,6 +123,8 @@ BLOC = {
    "consentementConjoint":boolean|null,"anticipationDesAge":number|null,
    "blocageApresRachatAns":number|null,
    "article":string|null,"citation":string|null},
+ "surindemnisation": {"plafondPct":number|null,"concerneInvalidite":boolean|null,
+   "concerneSurvivants":boolean|null,"article":string|null,"citation":string|null},
  "capitalDeces": {"verse":"TOUJOURS"|"SI_AUCUNE_RENTE_PARTENAIRE"|"REDUIT_DU_FINANCEMENT_RENTE"|"NON_PREVU"|null,
    "base":string|null,"limiteHeritiersLegaux":number|null,
    "avantRetraiteUniquement":boolean|null,"article":string|null,"citation":string|null},
@@ -123,6 +137,7 @@ BLOC = {
 /** Bloc vide : une clé absente de la réponse ne doit pas faire tomber la route. */
 export const BLOC_VIDE = {
   retraitCapital: null,
+  surindemnisation: null,
   capitalDeces: null, capitalDecesSupplementaire: null,
   rentePartenaire: null, renteInvalidite: null, renteOrphelin: null,
 };

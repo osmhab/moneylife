@@ -8,6 +8,7 @@ const bloc = (r: Partial<NonNullable<BlocRegles["retraitCapital"]>> | null): Blo
     anticipationDesAge: null, blocageApresRachatAns: null,
     article: "Chiffre 43", citation: "…", ...r,
   },
+  surindemnisation: null,
   capitalDeces: null, capitalDecesSupplementaire: null,
   rentePartenaire: null, renteInvalidite: null, renteOrphelin: null,
 });

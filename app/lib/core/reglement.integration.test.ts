@@ -14,6 +14,7 @@ import {
 
 const BLOC_VIDE = {
   retraitCapital: null,
+  surindemnisation: null,
   capitalDeces: null, capitalDecesSupplementaire: null,
   rentePartenaire: null, renteInvalidite: null, renteOrphelin: null,
 };

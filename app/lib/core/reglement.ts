@@ -114,8 +114,24 @@ export interface RegleRetraitCapital extends RegleCitee {
   blocageApresRachatAns: number | null;
 }
 
+/**
+ * Réduction pour SURINDEMNISATION.
+ *
+ * La caisse rabote ses propres rentes d'invalidité et de survivants dès que,
+ * cumulées avec l'AI et les autres revenus de remplacement, elles dépassent un
+ * pourcentage du gain présumé perdu. Le certificat imprime la rente BRUTE : sans
+ * cette règle, on annonce au client une couverture qu'il ne touchera jamais.
+ */
+export interface RegleSurindemnisationReglement extends RegleCitee {
+  /** Plafond en POURCENTS du gain présumé perdu (90 le plus souvent). */
+  plafondPct: number | null;
+  concerneInvalidite: boolean | null;
+  concerneSurvivants: boolean | null;
+}
+
 export interface BlocRegles {
   retraitCapital: RegleRetraitCapital | null;
+  surindemnisation: RegleSurindemnisationReglement | null;
   capitalDeces: RegleCapitalDeces | null;
   capitalDecesSupplementaire: (RegleCitee & { pourcentageSalaire: number | null; conditions: string | null }) | null;
   rentePartenaire: ReglePourcentage | null;

@@ -23,6 +23,7 @@ import {
 import { evaluerPrestationsLPP, type SituationClient } from "app/lib/core/eligibilite";
 import { doitAlerterClause, nomPartenaire, type ClauseBeneficiaire } from "app/lib/core/concubinage";
 import { contrainteRetrait } from "app/lib/core/retraitCapital";
+import { plafondSurindemnisation } from "app/lib/core/surindemnisation";
 import { notifyClient } from "app/lib/server/notify";
 
 const TYPES_CAISSE = ["LPP_BASE", "LPP_COMPL", "LPP"];
@@ -162,8 +163,19 @@ export async function qualifierPlans(
     // retraite » de l'app.
     const retrait = contrainteRetrait(bloc);
 
+    // SURINDEMNISATION. Le certificat imprime la rente BRUTE de la caisse ;
+    // cumulée avec l'AI, elle sera rabotée dès qu'elle dépasse ce plafond. Sans
+    // cette règle, l'analyse annonce une couverture que le client ne touchera
+    // jamais. On pose le plafond ici ; c'est le moteur qui l'applique, seul
+    // endroit où l'AI est connue.
+    const plafondSur = plafondSurindemnisation(bloc);
+    const notesSur = plafondSur == null ? [] : [
+      `Rentes d'invalidité et de survivants plafonnées à ${(plafondSur * 100).toFixed(0)} % ` +
+      `du gain présumé perdu, AI comprise (${bloc!.surindemnisation!.article ?? ""}).`,
+    ];
+
     const patch: Record<string, number | null> = { ...deces.patch };
-    const notes = [...deces.notes, ...retrait.notes];
+    const notes = [...deces.notes, ...retrait.notes, ...notesSur];
     const automatique = deces.automatique;
     const prestations = evaluerPrestationsLPP(situation, bloc);
     if (bloc) dernierBloc = bloc;
@@ -185,6 +197,8 @@ export async function qualifierPlans(
     // Lu par l'app pour borner le curseur d'allocation retraite. `null` =
     // règlement muet : on ne borne rien plutôt que de restreindre à tort.
     maj["metadata.retraitCapitalMaxPct"] = retrait.partMaxPct;
+    // Fraction (0.9), lue par le moteur d'analyse. `null` = règlement muet.
+    maj["metadata.surindemnisationPlafond"] = plafondSur;
     if (options.pdfUrl) maj["metadata.reglementUrl"] = options.pdfUrl;
     for (const [k, v] of Object.entries(patch)) maj[`data.${k}`] = v;
 
