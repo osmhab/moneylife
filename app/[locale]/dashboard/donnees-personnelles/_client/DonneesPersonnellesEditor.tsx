@@ -833,6 +833,9 @@ const handleScanFile = async (file: File) => {
             { id: "sec-adresse", label: "Adresse" },
             { id: "sec-pro", label: "Situation professionnelle" },
             ...(dpMarried ? [{ id: "sec-conjoint", label: "Conjoint" }] : []),
+            ...(asNumber(draft.Enter_etatCivil, 0) === 4
+              ? [{ id: "sec-partenaire", label: "Partenaire" }]
+              : []),
             { id: "sec-enfants", label: "Enfants" },
             { id: "sec-avs", label: "AVS" },
             { id: "sec-ij", label: "Indemnités journalières" },
@@ -1209,6 +1212,96 @@ const handleScanFile = async (file: File) => {
                 commit={(n) => setField("Enter_spouseSalaireAnnuel", n)}
               />
             </Row>
+          </Section>
+        )}
+
+        {/* Partenaire — concubinage.
+            Le seul état civil où une prestation de survivant dépend d'une
+            DÉMARCHE du client : sans désignation écrite auprès de la caisse, le
+            partenaire peut ne rien percevoir, et personne ne s'en aperçoit avant
+            qu'il soit trop tard. Ces champs n'existent nulle part ailleurs. */}
+        {asNumber(draft.Enter_etatCivil, 0) === 4 && (
+          <Section
+            id="sec-partenaire"
+            title="Partenaire"
+            subtitle="Concubinage — conditions de la rente de survivant"
+          >
+            <Row label="Prénom">
+              <BufferedText
+                id="dp-Enter_spousePrenom"
+                value={asString(draft.Enter_spousePrenom)}
+                placeholder="Ex. Marie"
+                commit={(v) => setField("Enter_spousePrenom", v)}
+              />
+            </Row>
+
+            <Row label="Nom">
+              <BufferedText
+                id="dp-Enter_spouseNom"
+                value={asString(draft.Enter_spouseNom)}
+                placeholder="Ex. Dupont"
+                commit={(v) => setField("Enter_spouseNom", v)}
+              />
+            </Row>
+
+            <Row label="Date de naissance" helper="Format jj.mm.aaaa">
+              <BufferedText
+                id="dp-Enter_spouseDateNaissance"
+                value={asString(draft.Enter_spouseDateNaissance)}
+                placeholder="01.01.1990"
+                commit={(v) => setField("Enter_spouseDateNaissance", v)}
+              />
+            </Row>
+
+            <Row
+              label="Vie commune depuis (année)"
+              helper="La plupart des caisses exigent cinq ans de ménage commun."
+            >
+              <BufferedText
+                id="dp-Enter_concubinageDepuis"
+                value={
+                  asNumber(draft.Enter_concubinageDepuis, 0) > 0
+                    ? String(asNumber(draft.Enter_concubinageDepuis, 0))
+                    : ""
+                }
+                placeholder="2018"
+                commit={(v) => {
+                  const n = Number(String(v).replace(/\D/g, ""));
+                  // Une année aberrante fausserait le calcul de durée : mieux
+                  // vaut ne rien enregistrer que d'enregistrer n'importe quoi.
+                  setField(
+                    "Enter_concubinageDepuis",
+                    Number.isFinite(n) && n >= 1900 && n <= new Date().getFullYear() ? n : null,
+                  );
+                }}
+              />
+            </Row>
+
+            <Row
+              label="Désigné dans la clause bénéficiaire"
+              helper="Sans désignation écrite auprès de la caisse, le partenaire ne perçoit rien."
+            >
+              <Select
+                value={asString(draft.Enter_partenaireClauseBeneficiaire) || "INCONNU"}
+                onValueChange={(v) =>
+                  setField("Enter_partenaireClauseBeneficiaire", v === "INCONNU" ? null : v)
+                }
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INCONNU">Non renseigné</SelectItem>
+                  <SelectItem value="OUI">Oui</SelectItem>
+                  <SelectItem value="NON">Non</SelectItem>
+                </SelectContent>
+              </Select>
+            </Row>
+
+            {!asString(draft.Enter_partenaireClauseBeneficiaire) && (
+              <p className="px-1 pt-1 text-xs text-amber-700">
+                Information manquante : impossible de savoir si le partenaire est reconnu par la
+                caisse. C&apos;est la seule question à poser au client.
+              </p>
+            )}
           </Section>
         )}
 
