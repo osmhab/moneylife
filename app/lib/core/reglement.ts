@@ -151,6 +151,14 @@ export interface AnnexeRegles {
 
 export interface Reglement {
   cle: string;
+  /**
+   * Forme normalisée du nom de caisse, langue neutralisée.
+   *
+   * Stockée pour pouvoir FILTRER côté base plutôt que de comparer tous les
+   * plans en mémoire — et pour que la comparaison ne dépende plus d'un champ
+   * que le client peut renommer.
+   */
+  caisseCle?: string;
   caisse: string;
   enVigueurAu: string | null;
   langue: string | null;

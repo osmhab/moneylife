@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aChange } from "./appliquerReglement";
+import { aChange, nomDeCaisse } from "./appliquerReglement";
 
 describe("n'écrire que si quelque chose change", () => {
   const plan = {
@@ -49,5 +49,32 @@ describe("n'écrire que si quelque chose change", () => {
     // Un champ jamais écrit et un champ remis à null décrivent la même chose :
     // les distinguer provoquerait une écriture à chaque passage.
     expect(aChange(plan, { "data.Enter_CapitalPlusRente": null })).toBe(false);
+  });
+});
+
+describe("d'où vient le nom de la caisse", () => {
+  it("les métadonnées gelées priment sur tout", () => {
+    // `institutionName` est éditable par le client dans l'app : un plan
+    // rebaptisé « Mon 2e pilier » ne doit pas perdre son règlement.
+    expect(nomDeCaisse({
+      metadata: { caissePension: "AXA Fondation LPP Suisse romande" },
+      data: { Enter_nomCaisseComplet: "AXA" },
+      institutionName: "Mon 2e pilier",
+    })).toBe("AXA Fondation LPP Suisse romande");
+  });
+
+  it("à défaut, l'intitulé relevé sur le certificat", () => {
+    expect(nomDeCaisse({
+      data: { Enter_nomCaisseComplet: "Pensionskasse MOBIL" },
+      institutionName: "Mon 2e pilier",
+    })).toBe("Pensionskasse MOBIL");
+  });
+
+  it("en dernier recours seulement, le nom modifiable", () => {
+    expect(nomDeCaisse({ institutionName: "PK Mobil" })).toBe("PK Mobil");
+  });
+
+  it("ne rend rien plutôt qu'une valeur douteuse", () => {
+    expect(nomDeCaisse({})).toBe("");
   });
 });

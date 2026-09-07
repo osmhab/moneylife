@@ -17,8 +17,8 @@
 import { db } from "app/lib/firebase/admin";
 import admin from "firebase-admin";
 import {
-  memeCaisse, blocApplicable, appliquerCapitalDeces, montantCertificatCapitalDeces,
-  type Reglement, type BlocRegles,
+  memeCaisse, normaliserPourComparaison, blocApplicable, appliquerCapitalDeces,
+  montantCertificatCapitalDeces, type Reglement, type BlocRegles,
 } from "app/lib/core/reglement";
 import { evaluerPrestationsLPP, type SituationClient } from "app/lib/core/eligibilite";
 import { doitAlerterClause, nomPartenaire, type ClauseBeneficiaire } from "app/lib/core/concubinage";
@@ -147,11 +147,7 @@ export async function qualifierPlans(
     const plan = doc.data() as Record<string, any>;
     if (!TYPES_CAISSE.includes(String(plan.type ?? "").toUpperCase())) continue;
     const data = (plan.data ?? {}) as Record<string, any>;
-    // Le scan ramène `institutionName` à une liste fermée (« CPVAL »), ce qui
-    // perd les fondations gérant PLUSIEURS caisses — CPVAL en a deux, ouverte
-    // et fermée, aux règlements différents. Le nom tel qu'imprimé, quand le
-    // scan l'a relevé, désigne la bonne ; il passe donc en premier.
-    const nomCaisse = String(data.Enter_nomCaisseComplet ?? "").trim() || plan.institutionName;
+    const nomCaisse = nomDeCaisse(plan);
     if (reglement && !memeCaisse(nomCaisse, reglement.caisse)) continue;
     const bloc = reglement ? blocApplicable(reglement, data.Enter_nomPlan ?? data.Enter_plan ?? null) : null;
     const deces = bloc
@@ -182,6 +178,11 @@ export async function qualifierPlans(
     if (plan.institutionName) caisses.push(String(plan.institutionName));
 
     const maj: Record<string, unknown> = {
+      // On GÈLE ici l'identité de la caisse, hors de portée d'une édition
+      // client : `institutionName` est modifiable dans l'app, et un plan
+      // renommé « Mon 2e pilier » ne se rattacherait plus à aucun règlement.
+      "metadata.caissePension": nomCaisse,
+      "metadata.caisseCle": normaliserPourComparaison(nomCaisse ?? ""),
       "metadata.reglementApplique": admin.firestore.FieldValue.serverTimestamp(),
       // ⚠️ Distinct de `reviewStatus` (Contrôle Expert PAYANT par un conseiller).
       "metadata.reglementStatut": automatique ? "VERIFIE" : "NON_VERIFIE",
@@ -278,8 +279,7 @@ export async function qualifierDepuisBibliotheque(
   // Même sans règlement connu, on évalue le droit aux prestations : c'est la
   // situation du client, pas le règlement, qui écarte une rente d'orphelin chez
   // quelqu'un sans enfant.
-  const nomImprime = String((plan.data ?? {}).Enter_nomCaisseComplet ?? "").trim();
-  const reglement = await reglementConnuPour(nomImprime || plan.institutionName);
+  const reglement = await reglementConnuPour(nomDeCaisse(plan));
   const r = await qualifierPlans(clientUid, reglement, { planId });
   return { ...r, reglement };
 }
@@ -304,10 +304,7 @@ export async function qualifierTousLesPlansConcernes(
   for (const d of tous.docs) {
     const p = d.data();
     if (!TYPES_CAISSE.includes(String(p.type ?? "").toUpperCase())) continue;
-    // Le nom IMPRIMÉ prime : une fondation gérant plusieurs caisses ne se
-    // distingue que par lui.
-    const nom = String((p.data ?? {}).Enter_nomCaisseComplet ?? "").trim() || p.institutionName;
-    if (!memeCaisse(nom, reglement.caisse)) continue;
+    if (!memeCaisse(nomDeCaisse(p), reglement.caisse)) continue;
 
     const uid = d.ref.parent.parent?.id;
     if (!uid) continue;
@@ -359,4 +356,20 @@ export function aChange(plan: Record<string, unknown>, maj: Record<string, unkno
     if (JSON.stringify(actuel ?? null) !== JSON.stringify(valeur ?? null)) return true;
   }
   return false;
+}
+
+/**
+ * Nom de la caisse d'un plan, par ordre de fiabilité DÉCROISSANTE.
+ *
+ * 1. `metadata.caissePension` — figé lors d'une qualification, hors de portée
+ *    d'une édition client ;
+ * 2. `data.Enter_nomCaisseComplet` — l'intitulé relevé sur le certificat ;
+ * 3. `institutionName` — dernier recours : c'est un champ que le client peut
+ *    renommer, et un plan rebaptisé « Mon 2e pilier » ne désigne plus rien.
+ */
+export function nomDeCaisse(plan: Record<string, any>): string {
+  const meta = String(plan?.metadata?.caissePension ?? "").trim();
+  if (meta) return meta;
+  const imprime = String((plan?.data ?? {}).Enter_nomCaisseComplet ?? "").trim();
+  return imprime || String(plan?.institutionName ?? "").trim();
 }
