@@ -27,7 +27,10 @@ import {
   cleReglement, estPlusRecent, type Reglement,
 } from "app/lib/core/reglement";
 import { analyserDocument, identifierReglement, type FichierIA } from "app/lib/server/analyseIA";
-import { reglementConnuPour, qualifierPlans, type ResultatQualification } from "app/lib/server/appliquerReglement";
+import {
+  reglementConnuPour, qualifierPlans, qualifierTousLesPlansConcernes,
+  type ResultatQualification,
+} from "app/lib/server/appliquerReglement";
 import { PROMPT_REGLEMENT, BLOC_VIDE, VERSION_EXTRACTION } from "app/lib/server/promptReglement";
 
 export type StatutIngestion =
@@ -133,7 +136,11 @@ export async function ingererReglement(
 
   const qualification = options.clientUid
     ? await qualifierPlans(options.clientUid, reglement, { pdfUrl: options.pdfUrl })
-    : undefined;
+    // Dépôt back-office ou passage de veille : personne n'est « le » client, et
+    // pourtant tous les assurés de cette caisse sont concernés. On les
+    // requalifie, sinon la règle nouvellement apprise ne servirait qu'aux
+    // scans à venir.
+    : (await qualifierTousLesPlansConcernes(reglement), undefined);
 
   const statut: StatutIngestion = connu ? "REMPLACE" : "AJOUTE";
   await tracer(cle, options, statut);

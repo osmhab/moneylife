@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  normaliserCaisse, memeCaisse, cleReglement,
+  normaliserCaisse, normaliserPourComparaison, memeCaisse, cleReglement,
   blocApplicable, trouverAnnexe, caseCapitalDeces, estSourcee,
   appliquerCapitalDeces, montantCertificatCapitalDeces, certificatDistingueDeuxCapitaux,
   dateEnVigueur, estPlusRecent,
@@ -355,5 +355,31 @@ describe("fondations à plusieurs caisses", () => {
 
   it("ne rapproche pas deux caisses par leurs mots banals", () => {
     expect(memeCaisse("Caisse de prévoyance suisse", CPO)).toBe(false);
+  });
+});
+
+describe("une caisse, plusieurs langues", () => {
+  const MOBIL = "Caisse de pensions MOBIL";
+
+  it("rapproche le nom allemand du règlement français", () => {
+    // Cas réel : le règlement est publié en français, le certificat de
+    // l'assuré en allemand. Sans neutralisation de la langue, le client reste
+    // sans règlement alors que nous l'avons en bibliothèque.
+    expect(memeCaisse("Pensionskasse MOBIL", MOBIL)).toBe(true);
+    expect(memeCaisse("PK Mobil", MOBIL)).toBe(true);
+  });
+
+  it("rapproche aussi l'italien", () => {
+    expect(memeCaisse("Cassa pensioni MOBIL", MOBIL)).toBe(true);
+  });
+
+  it("ne confond pas deux caisses parce qu'elles sont toutes deux des caisses", () => {
+    expect(memeCaisse("Pensionskasse Nestlé", MOBIL)).toBe(false);
+    expect(memeCaisse("Caisse de pensions", MOBIL)).toBe(false);
+  });
+
+  it("laisse les clés de bibliothèque inchangées", () => {
+    // Changer la clé orphelinerait les règlements déjà enregistrés.
+    expect(cleReglement("Aevum Fondation de Prévoyance", "2026")).toBe("aevum-prevoyance-2026");
   });
 });

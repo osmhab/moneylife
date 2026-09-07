@@ -276,3 +276,47 @@ export async function qualifierDepuisBibliotheque(
   const r = await qualifierPlans(clientUid, reglement, { planId });
   return { ...r, reglement };
 }
+
+/**
+ * Requalifie TOUS les plans concernés par un règlement, chez tous les clients.
+ *
+ * Sans cela, déposer un règlement au back-office n'aurait aucun effet sur les
+ * assurés déjà enregistrés : leur plan resterait « non vérifié » jusqu'à ce
+ * qu'ils rescannent quelque chose. C'est l'inverse de la promesse — la
+ * bibliothèque doit profiter à ceux qui sont DÉJÀ là, pas seulement aux
+ * suivants.
+ *
+ * Best-effort par client : l'échec de l'un ne doit pas priver les autres.
+ */
+export async function qualifierTousLesPlansConcernes(
+  reglement: Reglement,
+): Promise<{ clients: number; plans: number }> {
+  const tous = await db.collectionGroup("plans").get();
+
+  const parClient = new Map<string, string[]>();
+  for (const d of tous.docs) {
+    const p = d.data();
+    if (!TYPES_CAISSE.includes(String(p.type ?? "").toUpperCase())) continue;
+    // Le nom IMPRIMÉ prime : une fondation gérant plusieurs caisses ne se
+    // distingue que par lui.
+    const nom = String((p.data ?? {}).Enter_nomCaisseComplet ?? "").trim() || p.institutionName;
+    if (!memeCaisse(nom, reglement.caisse)) continue;
+
+    const uid = d.ref.parent.parent?.id;
+    if (!uid) continue;
+    parClient.set(uid, [...(parClient.get(uid) ?? []), d.id]);
+  }
+
+  let plans = 0;
+  for (const [uid, ids] of parClient) {
+    for (const planId of ids) {
+      try {
+        await qualifierPlans(uid, reglement, { planId });
+        plans++;
+      } catch (e) {
+        console.error(`[reglement] requalification impossible ${uid}/${planId}`, e);
+      }
+    }
+  }
+  return { clients: parClient.size, plans };
+}

@@ -181,10 +181,40 @@ export function normaliserCaisse(nom: string): string {
     .trim();
 }
 
+/**
+ * Mots qui disent « caisse de pension » dans les quatre langues — et leurs
+ * abréviations d'usage.
+ *
+ * Une caisse publie son règlement dans une langue et ses certificats dans une
+ * autre : « Caisse de pensions MOBIL » d'un côté, « Pensionskasse MOBIL » et
+ * « PK Mobil » de l'autre. Ce sont trois écritures du même nom, et sans ce
+ * nettoyage aucune ne se rapproche des autres — l'assuré reste sans règlement
+ * alors que nous l'avons.
+ *
+ * On ne les retire QUE pour comparer : les clés de la bibliothèque conservent
+ * leur normalisation d'origine, sinon les règlements déjà enregistrés seraient
+ * orphelins de leur propre identifiant.
+ */
+const MOTS_GENERIQUES_CAISSE = new Set([
+  "caisse", "caisses", "pension", "pensions", "prevoyance", "professionnelle",
+  "pensionskasse", "vorsorgestiftung", "vorsorgeeinrichtung", "personalvorsorge",
+  "sammelstiftung", "pk", "pf",
+  "cassa", "pensioni", "previdenza",
+  "fund", "foundation",
+]);
+
+/** Forme retenue pour COMPARER deux noms de caisse, langue neutralisée. */
+export function normaliserPourComparaison(nom: string): string {
+  return normaliserCaisse(nom)
+    .split(" ")
+    .filter((m) => m && !MOTS_GENERIQUES_CAISSE.has(m))
+    .join(" ");
+}
+
 /** Deux noms désignent-ils la même caisse ? */
 export function memeCaisse(a?: string | null, b?: string | null): boolean {
-  const na = normaliserCaisse(a || "");
-  const nb = normaliserCaisse(b || "");
+  const na = normaliserPourComparaison(a || "");
+  const nb = normaliserPourComparaison(b || "");
   if (!na || !nb) return false;
   if (na === nb) return true;
   // Un certificat abrège souvent : « AXA » pour « AXA Fondation LPP Suisse
